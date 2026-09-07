@@ -1,0 +1,1074 @@
+<Window x:Class="BarcodePrint.WpfView.WpfMainWindow"
+        x:Name="RootWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:BarcodePrint.ViewModel"
+        mc:Ignorable="d"
+        Title="LabelMaster_Basic_v2 - 간편한 엑셀 연동 라벨 출력 시스템" 
+        Height="920" Width="1420"
+        MinHeight="700" MinWidth="1080"
+        WindowStartupLocation="CenterScreen"
+        Background="#F1F5F9"
+        AllowDrop="True"
+        Drop="Window_Drop"
+        DragOver="Window_DragOver">
+
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
+        <!-- Modern Color Palette -->
+        <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#0F172A"/>
+        <SolidColorBrush x:Key="HeaderSecondaryBrush" Color="#1E293B"/>
+        <SolidColorBrush x:Key="PrimaryAccentBrush" Color="#2563EB"/>
+        <SolidColorBrush x:Key="PrimaryAccentHoverBrush" Color="#1D4ED8"/>
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#E2E8F0"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1E293B"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#64748B"/>
+        <SolidColorBrush x:Key="ExcelButtonBrush" Color="#059669"/>
+        <SolidColorBrush x:Key="ExcelButtonHoverBrush" Color="#047857"/>
+
+        <!-- Modern Rounded Button Style -->
+        <Style x:Key="ModernButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="btnBorder" Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="btnBorder" Property="Background" Value="{StaticResource PrimaryAccentHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="btnBorder" Property="Background" Value="#94A3B8"/>
+                                <Setter Property="Foreground" Value="#F1F5F9"/>
+                                <Setter Property="Opacity" Value="0.65"/>
+                                <Setter Property="Cursor" Value="No"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Utility Button Style (Slate Grey) -->
+        <Style x:Key="ActionUtilityButtonStyle" TargetType="Button" BasedOn="{StaticResource ModernButtonStyle}">
+            <Setter Property="Background" Value="#475569"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#334155"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Excel Button Style -->
+        <Style x:Key="ExcelButtonStyle" TargetType="Button" BasedOn="{StaticResource ModernButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource ExcelButtonBrush}"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource ExcelButtonHoverBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Mini Step & Navigation Button Style (큼직하고 터치하기 좋은 둥근 버튼) -->
+        <Style x:Key="MiniStepBtnStyle" TargetType="Button">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="Foreground" Value="#1E293B"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#E2E8F0"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#2563EB"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#CBD5E1"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Connection Type Filter RadioButton Style (세그먼트 칩 형태) -->
+        <Style x:Key="ConnectionFilterRadioStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="#334155"/>
+            <Setter Property="Foreground" Value="#CBD5E1"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="7,4"/>
+            <Setter Property="Margin" Value="0,0,3,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#2563EB"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsChecked" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="border" Property="Background" Value="#475569"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern ToggleButton Style (for Bold, Italic) -->
+        <Style x:Key="ModernToggleBtnStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#F8FAFC"/>
+            <Setter Property="Foreground" Value="#475569"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="Padding" Value="2,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#2563EB"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#1D4ED8"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#2563EB"/>
+                                <Setter TargetName="border" Property="Background" Value="#EFF6FF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Mobile-Style CheckBox -->
+        <Style x:Key="ModernCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="6,0,0,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Grid Width="18" Height="18" VerticalAlignment="Center">
+                                <Border x:Name="chkBorder" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1.5" CornerRadius="4">
+                                    <Path x:Name="chkCheckMark" Data="M 3 8 L 7 12 L 13 4" Stroke="White" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </Grid>
+                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="chkBorder" Property="Background" Value="#2563EB"/>
+                                <Setter TargetName="chkBorder" Property="BorderBrush" Value="#1D4ED8"/>
+                                <Setter TargetName="chkCheckMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="chkBorder" Property="BorderBrush" Value="#2563EB"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Input TextBox Style -->
+        <Style x:Key="ModernTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="8,0"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="#F8FAFC"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5">
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="false" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PrimaryAccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="1.5"/>
+                                <Setter Property="Background" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Splitter Style -->
+        <Style x:Key="ModernSplitterStyle" TargetType="GridSplitter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="ShowsPreview" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border Background="Transparent">
+                            <Border x:Name="Grip" Background="#CBD5E1" CornerRadius="2" Margin="1"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Grip" Property="Background" Value="{StaticResource PrimaryAccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern ComboBox Style -->
+        <ControlTemplate x:Key="ModernComboBoxToggleButtonTemplate" TargetType="ToggleButton">
+            <Border x:Name="templateRoot" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" SnapsToDevicePixels="true">
+                <Border x:Name="splitBorder" Width="20" HorizontalAlignment="Right" SnapsToDevicePixels="true">
+                    <Path x:Name="arrow" Data="M 0 0 L 4 4 L 8 0" HorizontalAlignment="Center" VerticalAlignment="Center" Stroke="#64748B" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                </Border>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="true">
+                    <Setter TargetName="templateRoot" Property="BorderBrush" Value="#2563EB"/>
+                    <Setter TargetName="templateRoot" Property="Background" Value="#F8FAFC"/>
+                    <Setter TargetName="arrow" Property="Stroke" Value="#2563EB"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="true">
+                    <Setter TargetName="templateRoot" Property="BorderBrush" Value="#2563EB"/>
+                    <Setter TargetName="arrow" Property="Stroke" Value="#2563EB"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="false">
+                    <Setter TargetName="templateRoot" Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="itemBorder" Background="Transparent" CornerRadius="4" Margin="2,1" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="itemBorder" Property="Background" Value="#EFF6FF"/>
+                                <Setter Property="Foreground" Value="#1E40AF"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="itemBorder" Property="Background" Value="#DBEAFE"/>
+                                <Setter Property="Foreground" Value="#1D4ED8"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Padding" Value="7,3,20,3"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid x:Name="templateRoot" SnapsToDevicePixels="true">
+                            <Popup x:Name="PART_Popup" AllowsTransparency="true" Grid.ColumnSpan="2" IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Margin="1" Placement="Bottom" PopupAnimation="Slide">
+                                <Border x:Name="dropDownBorder" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1.2" CornerRadius="6" MaxHeight="{TemplateBinding MaxDropDownHeight}" MinWidth="{Binding ActualWidth, ElementName=templateRoot}" Padding="2" Margin="0,3,0,0">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="8" Color="#000000" Direction="270" Opacity="0.18" RenderingBias="Performance" ShadowDepth="3"/>
+                                    </Border.Effect>
+                                    <ScrollViewer x:Name="DropDownScrollViewer">
+                                        <Grid x:Name="grid" RenderOptions.ClearTypeHint="Enabled">
+                                            <Canvas x:Name="canvas" HorizontalAlignment="Left" Height="0" VerticalAlignment="Top" Width="0">
+                                                <Rectangle x:Name="opaqueRect" Fill="{Binding Background, ElementName=dropDownBorder}" Height="{Binding ActualHeight, ElementName=dropDownBorder}" Width="{Binding ActualWidth, ElementName=dropDownBorder}"/>
+                                            </Canvas>
+                                            <ItemsPresenter x:Name="ItemsPresenter" KeyboardNavigation.DirectionalNavigation="Contained" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                        </Grid>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                            <ToggleButton x:Name="toggleButton" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Grid.ColumnSpan="2" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Template="{StaticResource ModernComboBoxToggleButtonTemplate}"/>
+                            <ContentPresenter x:Name="contentPresenter" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" Content="{TemplateBinding SelectionBoxItem}" ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" IsHitTestVisible="false" Margin="{TemplateBinding Padding}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="false">
+                                <Setter TargetName="dropDownBorder" Property="Height" Value="95"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="true">
+                                <Setter Property="BorderBrush" Value="#2563EB"/>
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="true">
+                                <Setter Property="BorderBrush" Value="#2563EB"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="false">
+                                <Setter TargetName="templateRoot" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- DataGrid Styles -->
+        <Style x:Key="CenterAlignTextCellStyle" TargetType="TextBlock">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+
+        <Style x:Key="CenterAlignEditingTextBoxStyle" TargetType="TextBox">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="2,0"/>
+        </Style>
+
+        <Style x:Key="CustomDataGridColumnHeaderStyle" TargetType="DataGridColumnHeader">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="Foreground" Value="#1E293B"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ToolTip" Value="더블클릭: 헤더명 변경 | 우클릭: 메뉴 열기"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <!-- 0. Header Bar -->
+            <RowDefinition Height="Auto"/>
+            <!-- 1. Smart 3-Mode Work Tabs -->
+            <RowDefinition Height="*"/>
+            <!-- 2. Status Bar -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 0. Header Bar (Slate Dark Gradient with Realtime USB Printer Badge) -->
+        <Border Grid.Row="0" Background="{StaticResource HeaderBackgroundBrush}" CornerRadius="8" Padding="16,10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="🏷️ LabelMaster Basic v2" Foreground="White" FontSize="19" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <TextBlock Text=" | 간편한 엑셀 연동 라벨 출력 시스템" Foreground="#94A3B8" FontSize="13" VerticalAlignment="Center" Margin="10,2,0,0"/>
+                </StackPanel>
+
+                <!-- Realtime Printer Monitoring & Selector & Dedicated Action Buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#20FFFFFF" CornerRadius="5" Padding="10,4" Margin="0,0,10,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="프린터 상태: " Foreground="#CBD5E1" FontSize="12.5" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding PrinterStatusBadge}" Foreground="{Binding PrinterStatusColor}" FontWeight="Bold" FontSize="12.5" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="프린터:" Foreground="White" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="13" FontWeight="SemiBold"/>
+                    <ComboBox Width="190" Height="32" ItemsSource="{Binding AvailablePrinters}" SelectedItem="{Binding SelectedPrinterName}" VerticalContentAlignment="Center" FontSize="12.5"/>
+                    <Button Content="🔄" Command="{Binding RefreshPrintersCommand}" Margin="4,0,10,0" Padding="10,0" Height="32" Background="#475569" ToolTip="프린터 목록 새로고침" Style="{StaticResource ModernButtonStyle}"/>
+
+                    <!-- 디자인 서식 편집 팝업 버튼 & 팝업 프린터 설정 버튼 & 프로그램 정보 버튼 -->
+                    <Button Content="🎨 서식 편집" Command="{Binding OpenDesignEditorCommand}" Margin="0,0,6,0" Padding="14,0" Height="34" Background="#2563EB" Foreground="White" FontWeight="Bold" FontSize="13" Style="{StaticResource ModernButtonStyle}" ToolTip="라벨 디자인 및 항목별 서식 편집 창을 엽니다."/>
+                    <Button Content="⚙️ 프린터 설정" Command="{Binding OpenPrinterSettingsCommand}" Margin="0,0,6,0" Padding="12,0" Height="34" Background="#0D9488" Foreground="White" FontWeight="Bold" FontSize="13" Style="{StaticResource ModernButtonStyle}" ToolTip="프린터 하드웨어 파라미터 및 유틸리티 설정창 열기"/>
+                    <Button Content="ℹ️ 정보" Command="{Binding OpenAboutCommand}" Padding="10,0" Height="34" Background="#475569" Foreground="White" FontWeight="Bold" FontSize="12.5" Style="{StaticResource ModernButtonStyle}" ToolTip="프로그램 버전, 업체 정보, 개발 및 기술 지원 문의, 라이선스 안내"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 1. Main Workspace Grid (Left: Preview Canvas, Right: 4 Top Work Tabs) -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <!-- LEFT: Realtime Interactive Preview Canvas (5:5 초기 분할) -->
+                <ColumnDefinition Width="1*" MinWidth="340"/>
+                <!-- Splitter -->
+                <ColumnDefinition Width="6"/>
+                <!-- RIGHT: Work Tabs (5:5 초기 분할) -->
+                <ColumnDefinition Width="1*" MinWidth="380"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ========================================================== -->
+            <!-- [LEFT COLUMN] 1:1 Realtime Interactive WYSIWYG Preview     -->
+            <!-- ========================================================== -->
+            <Border Grid.Column="0" Background="{StaticResource CardBackgroundBrush}" CornerRadius="8" Padding="12" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 0. Paper Size Setup Toolbar -->
+                    <Border Grid.Row="0" Background="#EFF6FF" CornerRadius="8" Padding="10,8" Margin="0,0,0,8" BorderBrush="#BFDBFE" BorderThickness="1.2">
+                        <DockPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="📄 용지 너비:" VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <Button Content="-" Command="{Binding DecreasePaperWidthCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="28" FontSize="14" FontWeight="Bold" Margin="6,0,0,0"/>
+                                <TextBox Text="{Binding PaperWidthStr, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" Width="44" Height="28" Margin="2,0" FontSize="13" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
+                                <Button Content="+" Command="{Binding IncreasePaperWidthCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="28" FontSize="14" FontWeight="Bold" Margin="0,0,8,0"/>
+
+                                <TextBlock Text="높이:" VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Margin="4,0,0,0" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <Button Content="-" Command="{Binding DecreasePaperHeightCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="28" FontSize="14" FontWeight="Bold" Margin="6,0,0,0"/>
+                                <TextBox Text="{Binding PaperHeightStr, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" Width="44" Height="28" Margin="2,0" FontSize="13" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
+                                <Button Content="+" Command="{Binding IncreasePaperHeightCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="28" FontSize="14" FontWeight="Bold" Margin="0,0,4,0"/>
+
+                                <TextBlock Text="mm" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Margin="0,0,10,0" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Content="{Binding LabelRotationText}" Command="{Binding Rotate90Command}" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="28" Padding="12,0" FontSize="12.5" FontWeight="Bold" ToolTip="라벨을 90도씩 회전하여 편집 및 인쇄합니다 (0° / 90° / 180° / 270°)"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- 1. Realtime Preview Header -->
+                    <DockPanel Grid.Row="1" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🔍 실시간 라벨 미리보기" FontWeight="Bold" FontSize="13.5" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="[마우스로 위치/선 조절]" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                        <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="4" Padding="8,2" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="{Binding IsExcelFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="{Binding LoadedExcelFileName, StringFormat='📂 연동 엑셀: {0}'}" FontSize="11.5" FontWeight="Bold" Foreground="#1E40AF"/>
+                        </Border>
+                    </DockPanel>
+
+                    <!-- 2. Alignment Toolbar (Modern Icons & Horizontal/Vertical Distribute) -->
+                    <Border Grid.Row="2" Background="#F8FAFC" CornerRadius="7" Padding="8,5" Margin="0,0,0,8" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2">
+                        <DockPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="라벨 정렬:" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="4,0,8,0"/>
+                                
+                                <!-- 1. 초기화 -->
+                                <Button Command="{Binding ResetLayoutCommand}" ToolTip="기본 위치로 초기화" Style="{StaticResource ModernButtonStyle}" Background="#64748B" Height="28" Padding="10,0" Margin="2,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path Data="M 13.5 8 A 5.5 5.5 0 1 1 11.5 3.5 L 13.5 3.5 L 13.5 7 L 10 7 L 10 5.5" Stroke="White" StrokeThickness="1.6" Fill="Transparent" Width="13" Height="13" Stretch="Uniform" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="초기화" FontSize="11.5" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- 2. 좌측 정렬 -->
+                                <Button Command="{Binding AlignLeftCommand}" ToolTip="선택 항목 또는 전체 좌측 정렬" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="28" Padding="10,0" Margin="2,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path Data="M 2,2 H 4 V 14 H 2 Z M 6,4 H 14 V 6 H 6 Z M 6,7 H 11 V 9 H 6 Z M 6,10 H 13 V 12 H 6 Z" Fill="White" Width="13" Height="13" Stretch="Uniform" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="좌측" FontSize="11.5" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- 3. 중앙 정렬 -->
+                                <Button Command="{Binding AlignCenterCommand}" ToolTip="선택 항목 또는 전체 가로 중앙 정렬" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="28" Padding="10,0" Margin="2,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path Data="M 7,2 H 9 V 14 H 7 Z M 2,4 H 14 V 6 H 2 Z M 4,7 H 12 V 9 H 4 Z M 3,10 H 13 V 12 H 3 Z" Fill="White" Width="13" Height="13" Stretch="Uniform" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="중앙" FontSize="11.5" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- 4. 우측 정렬 -->
+                                <Button Command="{Binding AlignRightCommand}" ToolTip="선택 항목 또는 전체 우측 정렬" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="28" Padding="10,0" Margin="2,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path Data="M 12,2 H 14 V 14 H 12 Z M 2,4 H 10 V 6 H 2 Z M 5,7 H 10 V 9 H 5 Z M 3,10 H 10 V 12 H 3 Z" Fill="White" Width="13" Height="13" Stretch="Uniform" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="우측" FontSize="11.5" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- 5. 세로 균등 정렬 -->
+                                <Button Command="{Binding DistributeVerticalCommand}" ToolTip="세로 높이 등간격 균등 분할" Style="{StaticResource ModernButtonStyle}" Background="#0D9488" Height="28" Padding="10,0" Margin="2,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path Data="M 2,2 H 14 V 4 H 2 Z M 2,7 H 14 V 9 H 2 Z M 2,12 H 14 V 14 H 2 Z" Fill="White" Width="13" Height="13" Stretch="Uniform" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="세로균등" FontSize="11.5" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- 6. 가로 균등 정렬 -->
+                                <Button Command="{Binding DistributeHorizontalCommand}" ToolTip="가로 폭 등간격 균등 분할" Style="{StaticResource ModernButtonStyle}" Background="#0D9488" Height="28" Padding="10,0" Margin="2,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path Data="M 2,2 H 4 V 14 H 2 Z M 7,2 H 9 V 14 H 7 Z M 12,2 H 14 V 14 H 12 Z" Fill="White" Width="13" Height="13" Stretch="Uniform" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="가로균등" FontSize="11.5" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- 3. WYSIWYG Canvas with Vertical Zoom Controller -->
+                    <Grid Grid.Row="3">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Canvas ScrollViewer -->
+                        <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <Border BorderBrush="#CBD5E1" BorderThickness="1" Background="#F8FAFC" Padding="10" CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Canvas x:Name="GlobalPreviewCanvas" Width="380" Height="200" Background="White" ClipToBounds="False"
+                                        MouseLeftButtonDown="OnGlobalCanvasMouseLeftButtonDown"
+                                        MouseMove="OnGlobalCanvasMouseMove"
+                                        MouseLeftButtonUp="OnGlobalCanvasMouseLeftButtonUp"
+                                        MouseWheel="OnGlobalCanvasMouseWheel">
+                                </Canvas>
+                            </Border>
+                        </ScrollViewer>
+
+                        <!-- 세로형 줌 컨트롤 바 -->
+                        <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="5" Padding="3,6" Margin="6,0,0,0" VerticalAlignment="Center">
+                            <StackPanel HorizontalAlignment="Center">
+                                <Button Content="➕" Command="{Binding ZoomInCommand}" ToolTip="확대" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="22" Margin="0,0,0,4" Padding="0"/>
+                                <Slider Orientation="Vertical" Height="130" Minimum="0.5" Maximum="3.0" Value="{Binding ZoomRatio}" HorizontalAlignment="Center" Margin="0,2"/>
+                                <Button Content="➖" Command="{Binding ZoomOutCommand}" ToolTip="축소" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="22" Margin="0,4,0,4" Padding="0"/>
+                                <Button Content="1:1" Command="{Binding ResetZoomCommand}" ToolTip="100% 배율" Style="{StaticResource MiniStepBtnStyle}" Width="26" Height="20" Margin="0,0,0,2" Padding="0" FontSize="10"/>
+                                <TextBlock Text="{Binding ZoomPercentageText}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource PrimaryAccentBrush}" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- 4. Bottom Page Navigator & Drag Notice -->
+                    <StackPanel Grid.Row="4" Margin="0,8,0,0">
+                        <!-- 엑셀 모드 페이지 이동 컨트롤 (미리보기 화면 편집 영역 아래) -->
+                        <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1.2" CornerRadius="6" Padding="8,4" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding IsExcelFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="◀ 이전" Command="{Binding PreviewPreviousPageCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="52" Height="26" FontSize="11.5" FontWeight="Bold" ToolTip="이전 라벨 (이전 행)"/>
+                                <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="12,2" Margin="8,0">
+                                    <TextBlock Text="{Binding PreviewPageText}" FontSize="13" FontWeight="Bold" Foreground="#1E40AF" VerticalAlignment="Center"/>
+                                </Border>
+                                <Button Content="다음 ▶" Command="{Binding PreviewNextPageCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="52" Height="26" FontSize="11.5" FontWeight="Bold" ToolTip="다음 라벨 (다음 행)"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock x:Name="TxtGlobalDragInfo" Text="💡 마우스로 라벨 항목이나 표의 선을 잡아 드래그하여 이동/크기 조절이 가능합니다." Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Column Splitter -->
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Style="{StaticResource ModernSplitterStyle}"/>
+
+            <!-- ========================================================== -->
+            <!-- [RIGHT COLUMN] Print Workspace (Tabs)                      -->
+            <!-- ========================================================== -->
+            <Grid Grid.Column="2">
+                <!-- [인쇄 모드] 단건 인쇄 & 엑셀 연동 인쇄 탭 컨트롤 -->
+                <TabControl SelectedIndex="{Binding SelectedWorkMode}" Background="Transparent" BorderThickness="0">
+                
+                <!-- ========================================================== -->
+                <!-- TAB 1: 📝 1. 단건 직접 입력                                -->
+                <!-- ========================================================== -->
+                <TabItem Header=" 📝 1. 단건 직접 입력 " FontSize="13" FontWeight="SemiBold" Padding="14,6">
+                    <Grid Margin="0,6,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Top Management Bar: 컬럼 관리, 줄바꿈 안내 뱃지 및 입력창 비우기 -->
+                        <Border Grid.Row="0" Background="#F8FAFC" CornerRadius="6" Padding="8,5" Margin="0,0,0,6" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                            <DockPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="컬럼 관리: " FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding ActiveColumnCount, StringFormat='{}{0}개'}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <Button Content="➕ 컬럼 추가" Command="{Binding AddColumnCommand}" ToolTip="새 컬럼 추가 (최대 8개)" Style="{StaticResource ModernButtonStyle}" Height="24" Padding="7,0" FontSize="11.5" Margin="0,0,8,0"/>
+                                    
+                                    <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="4" Padding="6,2" VerticalAlignment="Center" ToolTip="텍스트 입력 중 Shift 키를 누른 채 Enter를 누르면 줄바꿈(개행)이 삽입됩니다.">
+                                        <TextBlock Text="💡 줄바꿈: Shift + Enter" FontSize="11" FontWeight="SemiBold" Foreground="#1D4ED8" VerticalAlignment="Center"/>
+                                    </Border>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button Content="🧹 비우기" Command="{Binding ClearInputsCommand}" ToolTip="모든 입력창 내용 초기화" Style="{StaticResource MiniStepBtnStyle}" Height="24" Padding="8,0" FontSize="11.5"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- 1 ~ 8 Direct Text Inputs List -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Orientation="Vertical" Margin="0,0,4,0">
+                                <!-- Row 1 -->
+                                <Border Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2" CornerRadius="7" Padding="10,8" Visibility="{Binding IsCol1Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <Border Background="#2563EB" CornerRadius="3" Padding="5,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="1열" FontWeight="Bold" FontSize="11" Foreground="White" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBox Text="{Binding Column1Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Background="White" BorderBrush="#94A3B8" BorderThickness="1" Padding="4,1" Width="105" ToolTip="항목 제목명 직접 수정"/>
+                                                <TextBlock Text=" (₩)" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn1PriceFormat, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                <TextBlock Text=" [바코드]" Foreground="#EA580C" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn1Barcode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <CheckBox Content="제목출력" IsChecked="{Binding IsColumn1IncludeHeader}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="라벨에 항목 제목명 함께 출력" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <CheckBox Content="고정" IsChecked="{Binding IsCol1Keep}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="인쇄 후 내용 유지" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <Button Content="❌" Command="{Binding RemoveSpecificColumnCommand}" CommandParameter="1" ToolTip="1번 컬럼 삭제" Background="Transparent" BorderThickness="0" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBox Grid.Row="1" x:Name="TxtCol1" Text="{Binding InputCol1, UpdateSourceTrigger=PropertyChanged}" Tag="0" MinHeight="32" Height="Auto" FontSize="13.5" FontWeight="Normal" Padding="8,4" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1" Style="{StaticResource ModernTextBoxStyle}" TextWrapping="Wrap" AcceptsReturn="False" PreviewKeyDown="OnInputPreviewKeyDown" ToolTip="내용 입력 (Shift+Enter: 줄바꿈, Enter: 다음 칸 이동)"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Row 2 -->
+                                <Border Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2" CornerRadius="7" Padding="10,8" Visibility="{Binding IsCol2Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <Border Background="#2563EB" CornerRadius="3" Padding="5,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="2열" FontWeight="Bold" FontSize="11" Foreground="White" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBox Text="{Binding Column2Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Background="White" BorderBrush="#94A3B8" BorderThickness="1" Padding="4,1" Width="105" ToolTip="항목 제목명 직접 수정"/>
+                                                <TextBlock Text=" (₩)" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn2PriceFormat, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                <TextBlock Text=" [바코드]" Foreground="#EA580C" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn2Barcode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <CheckBox Content="제목출력" IsChecked="{Binding IsColumn2IncludeHeader}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="라벨에 항목 제목명 함께 출력" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <CheckBox Content="고정" IsChecked="{Binding IsCol2Keep}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="인쇄 후 내용 유지" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <Button Content="❌" Command="{Binding RemoveSpecificColumnCommand}" CommandParameter="2" ToolTip="2번 컬럼 삭제" Background="Transparent" BorderThickness="0" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBox Grid.Row="1" x:Name="TxtCol2" Text="{Binding InputCol2, UpdateSourceTrigger=PropertyChanged}" Tag="1" MinHeight="32" Height="Auto" FontSize="13.5" FontWeight="Normal" Padding="8,4" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1" Style="{StaticResource ModernTextBoxStyle}" TextWrapping="Wrap" AcceptsReturn="False" PreviewKeyDown="OnInputPreviewKeyDown" ToolTip="내용 입력 (Shift+Enter: 줄바꿈, Enter: 다음 칸 이동)"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Row 3 -->
+                                <Border Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2" CornerRadius="7" Padding="10,8" Visibility="{Binding IsCol3Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <Border Background="#2563EB" CornerRadius="3" Padding="5,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="3열" FontWeight="Bold" FontSize="11" Foreground="White" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBox Text="{Binding Column3Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Background="White" BorderBrush="#94A3B8" BorderThickness="1" Padding="4,1" Width="105" ToolTip="항목 제목명 직접 수정"/>
+                                                <TextBlock Text=" (₩)" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn3PriceFormat, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                <TextBlock Text=" [바코드]" Foreground="#EA580C" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn3Barcode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <CheckBox Content="제목출력" IsChecked="{Binding IsColumn3IncludeHeader}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="라벨에 항목 제목명 함께 출력" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <CheckBox Content="고정" IsChecked="{Binding IsCol3Keep}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="인쇄 후 내용 유지" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <Button Content="❌" Command="{Binding RemoveSpecificColumnCommand}" CommandParameter="3" ToolTip="3번 컬럼 삭제" Background="Transparent" BorderThickness="0" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBox Grid.Row="1" x:Name="TxtCol3" Text="{Binding InputCol3, UpdateSourceTrigger=PropertyChanged}" Tag="2" MinHeight="32" Height="Auto" FontSize="13.5" FontWeight="Normal" Padding="8,4" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1" Style="{StaticResource ModernTextBoxStyle}" TextWrapping="Wrap" AcceptsReturn="False" PreviewKeyDown="OnInputPreviewKeyDown" ToolTip="내용 입력 (Shift+Enter: 줄바꿈, Enter: 다음 칸 이동)"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Row 4 -->
+                                <Border Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2" CornerRadius="7" Padding="10,8" Visibility="{Binding IsCol4Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <Border Background="#2563EB" CornerRadius="3" Padding="5,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="4열" FontWeight="Bold" FontSize="11" Foreground="White" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBox Text="{Binding Column4Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Background="White" BorderBrush="#94A3B8" BorderThickness="1" Padding="4,1" Width="105" ToolTip="항목 제목명 직접 수정"/>
+                                                <TextBlock Text=" (₩)" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn4PriceFormat, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                <TextBlock Text=" [바코드]" Foreground="#EA580C" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn4Barcode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <CheckBox Content="제목출력" IsChecked="{Binding IsColumn4IncludeHeader}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="라벨에 항목 제목명 함께 출력" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <CheckBox Content="고정" IsChecked="{Binding IsCol4Keep}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="인쇄 후 내용 유지" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <Button Content="❌" Command="{Binding RemoveSpecificColumnCommand}" CommandParameter="4" ToolTip="4번 컬럼 삭제" Background="Transparent" BorderThickness="0" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBox Grid.Row="1" x:Name="TxtCol4" Text="{Binding InputCol4, UpdateSourceTrigger=PropertyChanged}" Tag="3" MinHeight="32" Height="Auto" FontSize="13.5" FontWeight="Normal" Padding="8,4" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1" Style="{StaticResource ModernTextBoxStyle}" TextWrapping="Wrap" AcceptsReturn="False" PreviewKeyDown="OnInputPreviewKeyDown" ToolTip="내용 입력 (Shift+Enter: 줄바꿈, Enter: 다음 칸 이동)"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Row 5 -->
+                                <Border Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2" CornerRadius="7" Padding="10,8" Visibility="{Binding IsCol5Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <Border Background="#2563EB" CornerRadius="3" Padding="5,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="5열" FontWeight="Bold" FontSize="11" Foreground="White" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBox Text="{Binding Column5Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Background="White" BorderBrush="#94A3B8" BorderThickness="1" Padding="4,1" Width="105" ToolTip="항목 제목명 직접 수정"/>
+                                                <TextBlock Text=" (₩)" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn5PriceFormat, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                <TextBlock Text=" [바코드]" Foreground="#EA580C" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn5Barcode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <CheckBox Content="제목출력" IsChecked="{Binding IsColumn5IncludeHeader}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="라벨에 항목 제목명 함께 출력" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <CheckBox Content="고정" IsChecked="{Binding IsCol5Keep}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="인쇄 후 내용 유지" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <Button Content="❌" Command="{Binding RemoveSpecificColumnCommand}" CommandParameter="5" ToolTip="5번 컬럼 삭제" Background="Transparent" BorderThickness="0" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBox Grid.Row="1" x:Name="TxtCol5" Text="{Binding InputCol5, UpdateSourceTrigger=PropertyChanged}" Tag="4" MinHeight="32" Height="Auto" FontSize="13.5" FontWeight="Normal" Padding="8,4" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1" Style="{StaticResource ModernTextBoxStyle}" TextWrapping="Wrap" AcceptsReturn="False" PreviewKeyDown="OnInputPreviewKeyDown" ToolTip="내용 입력 (Shift+Enter: 줄바꿈, Enter: 다음 칸 이동)"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Row 6 -->
+                                <Border Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2" CornerRadius="7" Padding="10,8" Visibility="{Binding IsCol6Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <Border Background="#2563EB" CornerRadius="3" Padding="5,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="6열" FontWeight="Bold" FontSize="11" Foreground="White" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBox Text="{Binding Column6Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Background="White" BorderBrush="#94A3B8" BorderThickness="1" Padding="4,1" Width="105" ToolTip="항목 제목명 직접 수정"/>
+                                                <TextBlock Text=" (₩)" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn6PriceFormat, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                <TextBlock Text=" [바코드]" Foreground="#EA580C" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn6Barcode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <CheckBox Content="제목출력" IsChecked="{Binding IsColumn6IncludeHeader}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="라벨에 항목 제목명 함께 출력" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <CheckBox Content="고정" IsChecked="{Binding IsCol6Keep}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="인쇄 후 내용 유지" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <Button Content="❌" Command="{Binding RemoveSpecificColumnCommand}" CommandParameter="6" ToolTip="6번 컬럼 삭제" Background="Transparent" BorderThickness="0" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBox Grid.Row="1" x:Name="TxtCol6" Text="{Binding InputCol6, UpdateSourceTrigger=PropertyChanged}" Tag="5" MinHeight="32" Height="Auto" FontSize="13.5" FontWeight="Normal" Padding="8,4" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1" Style="{StaticResource ModernTextBoxStyle}" TextWrapping="Wrap" AcceptsReturn="False" PreviewKeyDown="OnInputPreviewKeyDown" ToolTip="내용 입력 (Shift+Enter: 줄바꿈, Enter: 다음 칸 이동)"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Row 7 -->
+                                <Border Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2" CornerRadius="7" Padding="10,8" Visibility="{Binding IsCol7Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <Border Background="#2563EB" CornerRadius="3" Padding="5,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="7열" FontWeight="Bold" FontSize="11" Foreground="White" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBox Text="{Binding Column7Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Background="White" BorderBrush="#94A3B8" BorderThickness="1" Padding="4,1" Width="105" ToolTip="항목 제목명 직접 수정"/>
+                                                <TextBlock Text=" (₩)" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn7PriceFormat, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                <TextBlock Text=" [바코드]" Foreground="#EA580C" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn7Barcode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <CheckBox Content="제목출력" IsChecked="{Binding IsColumn7IncludeHeader}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="라벨에 항목 제목명 함께 출력" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <CheckBox Content="고정" IsChecked="{Binding IsCol7Keep}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="인쇄 후 내용 유지" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <Button Content="❌" Command="{Binding RemoveSpecificColumnCommand}" CommandParameter="7" ToolTip="7번 컬럼 삭제" Background="Transparent" BorderThickness="0" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBox Grid.Row="1" x:Name="TxtCol7" Text="{Binding InputCol7, UpdateSourceTrigger=PropertyChanged}" Tag="6" MinHeight="32" Height="Auto" FontSize="13.5" FontWeight="Normal" Padding="8,4" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1" Style="{StaticResource ModernTextBoxStyle}" TextWrapping="Wrap" AcceptsReturn="False" PreviewKeyDown="OnInputPreviewKeyDown" ToolTip="내용 입력 (Shift+Enter: 줄바꿈, Enter: 다음 칸 이동)"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Row 8 -->
+                                <Border Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2" CornerRadius="7" Padding="10,8" Visibility="{Binding IsCol8Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <Border Background="#2563EB" CornerRadius="3" Padding="5,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="8열" FontWeight="Bold" FontSize="11" Foreground="White" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBox Text="{Binding Column8Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" Background="White" BorderBrush="#94A3B8" BorderThickness="1" Padding="4,1" Width="105" ToolTip="항목 제목명 직접 수정"/>
+                                                <TextBlock Text=" (₩)" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn8PriceFormat, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                <TextBlock Text=" [바코드]" Foreground="#EA580C" FontSize="11" FontWeight="Bold" Margin="4,0,0,0" Visibility="{Binding IsColumn8Barcode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <CheckBox Content="제목출력" IsChecked="{Binding IsColumn8IncludeHeader}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="라벨에 항목 제목명 함께 출력" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <CheckBox Content="고정" IsChecked="{Binding IsCol8Keep}" Style="{StaticResource ModernCheckBoxStyle}" ToolTip="인쇄 후 내용 유지" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <Button Content="❌" Command="{Binding RemoveSpecificColumnCommand}" CommandParameter="8" ToolTip="8번 컬럼 삭제" Background="Transparent" BorderThickness="0" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBox Grid.Row="1" x:Name="TxtCol8" Text="{Binding InputCol8, UpdateSourceTrigger=PropertyChanged}" Tag="7" MinHeight="32" Height="Auto" FontSize="13.5" FontWeight="Normal" Padding="8,4" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1" Style="{StaticResource ModernTextBoxStyle}" TextWrapping="Wrap" AcceptsReturn="False" PreviewKeyDown="OnInputPreviewKeyDown" ToolTip="내용 입력 (Shift+Enter: 줄바꿈, Enter: 다음 칸 이동)"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <!-- Bottom Action Bar (단건 인쇄 매수 컨트롤 및 출력 버튼) -->
+                        <Border Grid.Row="2" Background="#F1F5F9" CornerRadius="8" Padding="12,8" Margin="0,8,0,0" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2">
+                            <DockPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Background="White" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10,4">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="인쇄 매수:" VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,8,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseSinglePrintCopiesCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="26" Height="28" FontSize="14" FontWeight="Bold"/>
+                                            <TextBox Text="{Binding SinglePrintCopies, UpdateSourceTrigger=PropertyChanged}" Width="44" Height="28" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontSize="13.5" FontWeight="Bold" BorderThickness="0" Background="Transparent" Margin="2,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseSinglePrintCopiesCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="26" Height="28" FontSize="14" FontWeight="Bold" Margin="0,0,6,0"/>
+                                            <TextBlock Text="매" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button Content="🖨️ 단건 인쇄 (Enter)" Command="{Binding SinglePrintCommand}" IsEnabled="{Binding IsCurrentPrinterAuthorized}" Background="{StaticResource PrimaryAccentBrush}" Foreground="White" FontWeight="Bold" FontSize="14.5" Height="40" Padding="24,0" Style="{StaticResource ModernButtonStyle}" ToolTip="현재 입력된 데이터를 인쇄합니다 (미인증 프린터인 경우 인쇄가 제한됩니다)."/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                </TabItem>
+
+                <!-- ========================================================== -->
+                <!-- TAB 2: 📊 2. 엑셀 데이터 관리 & 인쇄                       -->
+                <!-- ========================================================== -->
+                <TabItem Header=" 📊 2. 엑셀 데이터 관리 &amp; 인쇄 " FontSize="13" FontWeight="SemiBold" Padding="14,6">
+                    <Grid Margin="0,6,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- 1. 깔끔한 상단 툴바: 엑셀 열기/저장 + 선택 삭제 + 컬럼 추가/삭제 -->
+                        <Border Grid.Row="0" Background="#F8FAFC" CornerRadius="8" Padding="10,6" Margin="0,0,0,6" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2">
+                            <DockPanel LastChildFill="False">
+                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="📁 엑셀 열기" Command="{Binding ImportFromExcelCommand}" Style="{StaticResource ModernButtonStyle}" Background="#059669" Height="30" Padding="10,0" FontSize="12" FontWeight="Bold" Margin="0,0,5,0" ToolTip="엑셀 파일(*.xlsx)을 열거나, 파일 탐색기에서 마우스로 끌어다 놓아도(드래그&amp;드롭) 바로 열립니다."/>
+                                    <Button Content="💾 엑셀 저장" Command="{Binding ExportToExcelCommand}" Style="{StaticResource ModernButtonStyle}" Background="#059669" Height="30" Padding="10,0" FontSize="12" FontWeight="Bold" Margin="0,0,6,0" ToolTip="현재 목록 데이터를 엑셀 파일(*.xlsx)로 저장합니다."/>
+                                    
+                                    <Border Background="#CBD5E1" Width="1" Height="18" Margin="0,0,6,0"/>
+
+                                    <Button Content="🗑️ 선택 삭제" Command="{Binding DeleteSelectedRecordCommand}" CommandParameter="{Binding ElementName=MainDataGrid, Path=SelectedItems}" Style="{StaticResource ModernButtonStyle}" Background="#DC2626" Height="30" Padding="10,0" FontSize="12" FontWeight="Bold" Margin="0,0,5,0" ToolTip="선택한 행 또는 체크된 항목을 삭제합니다."/>
+                                    <Button Content="🧹 전체 비우기" Command="{Binding ClearRecordsCommand}" Style="{StaticResource MiniStepBtnStyle}" Height="30" Padding="10,0" FontSize="12" Margin="0,0,6,0" ToolTip="목록의 모든 데이터를 깨끗하게 비웁니다."/>
+
+                                    <Border Background="#CBD5E1" Width="1" Height="18" Margin="0,0,6,0"/>
+                                    
+                                    <TextBlock Text="컬럼: " FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding ActiveColumnCount, StringFormat='{}{0}개'}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Content="➕" Command="{Binding AddColumnCommand}" ToolTip="새 컬럼 추가 (최대 8개)" Style="{StaticResource ModernButtonStyle}" Height="28" Width="28" Padding="0" FontSize="12" Margin="0,0,3,0"/>
+                                    <Button Content="➖" Command="{Binding RemoveColumnCommand}" ToolTip="마지막 컬럼 삭제" Style="{StaticResource ModernButtonStyle}" Background="#DC2626" Height="28" Width="28" Padding="0" FontSize="12"/>
+                                </StackPanel>
+                                
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="4" Padding="6,3" Visibility="{Binding IsExcelFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding LoadedExcelFileName, StringFormat='📄 {0}'}" FontSize="11.5" FontWeight="SemiBold" Foreground="#1E40AF" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                                    </Border>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- 2. DataGrid Table with Double Click & Context Menu on Headers -->
+                        <Border Grid.Row="1" Background="White" CornerRadius="6" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                            <DataGrid x:Name="MainDataGrid" ItemsSource="{Binding Records}" SelectedItem="{Binding SelectedRecord}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="FullRow" HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E2E8F0" Background="Transparent" BorderThickness="0" RowHeight="30" FontSize="12.5" ColumnHeaderStyle="{StaticResource CustomDataGridColumnHeaderStyle}" PreviewMouseDoubleClick="MainDataGrid_PreviewMouseDoubleClick" PreviewMouseRightButtonUp="MainDataGrid_PreviewMouseRightButtonUp">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="🖨️ 선택 항목 출력" Command="{Binding ReprintSelectedRecordsCommand}" CommandParameter="{Binding ElementName=MainDataGrid, Path=SelectedItems}"/>
+                                        <Separator/>
+                                        <MenuItem Header="🗑️ 선택 항목 삭제" Command="{Binding DeleteSelectedRecordCommand}" CommandParameter="{Binding ElementName=MainDataGrid, Path=SelectedItems}"/>
+                                        <MenuItem Header="🧹 전체 목록 비우기" Command="{Binding ClearAllRecordsCommand}"/>
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
+
+                                <DataGrid.Columns>
+                                    <!-- 체크박스 컬럼 -->
+                                    <DataGridCheckBoxColumn Binding="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}" Width="44">
+                                        <DataGridCheckBoxColumn.HeaderStyle>
+                                            <Style TargetType="DataGridColumnHeader">
+                                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                                <Setter Property="Content" Value="선택"/>
+                                                <Setter Property="FontWeight" Value="Bold"/>
+                                                <Setter Property="FontSize" Value="12.5"/>
+                                                <Setter Property="Background" Value="#F1F5F9"/>
+                                                <Setter Property="Foreground" Value="#1E293B"/>
+                                                <Setter Property="Padding" Value="4,5"/>
+                                                <Setter Property="BorderBrush" Value="#CBD5E1"/>
+                                                <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                            </Style>
+                                        </DataGridCheckBoxColumn.HeaderStyle>
+                                    </DataGridCheckBoxColumn>
+                                    
+                                    <!-- 순번 (No.) 컬럼 -->
+                                    <DataGridTextColumn Header="순번" Binding="{Binding Index}" Width="50" IsReadOnly="True">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                                <Setter Property="Foreground" Value="#64748B"/>
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                                <Setter Property="FontSize" Value="12"/>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                        <DataGridTextColumn.HeaderStyle>
+                                            <Style TargetType="DataGridColumnHeader">
+                                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                                <Setter Property="FontWeight" Value="Bold"/>
+                                                <Setter Property="FontSize" Value="12.5"/>
+                                                <Setter Property="Background" Value="#F1F5F9"/>
+                                                <Setter Property="Foreground" Value="#1E293B"/>
+                                                <Setter Property="Padding" Value="4,5"/>
+                                                <Setter Property="BorderBrush" Value="#CBD5E1"/>
+                                                <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                            </Style>
+                                        </DataGridTextColumn.HeaderStyle>
+                                    </DataGridTextColumn>
+
+                                    <!-- 데이터 컬럼 1 ~ 8 -->
+                                    <DataGridTextColumn x:Name="GridCol1" Header="{Binding DataContext.Column1Header, RelativeSource={RelativeSource AncestorType=Window}}" Binding="{Binding Col1, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                    <DataGridTextColumn x:Name="GridCol2" Header="{Binding DataContext.Column2Header, RelativeSource={RelativeSource AncestorType=Window}}" Binding="{Binding Col2, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                    <DataGridTextColumn x:Name="GridCol3" Header="{Binding DataContext.Column3Header, RelativeSource={RelativeSource AncestorType=Window}}" Binding="{Binding Col3, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                    <DataGridTextColumn x:Name="GridCol4" Header="{Binding DataContext.Column4Header, RelativeSource={RelativeSource AncestorType=Window}}" Binding="{Binding Col4, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                    <DataGridTextColumn x:Name="GridCol5" Header="{Binding DataContext.Column5Header, RelativeSource={RelativeSource AncestorType=Window}}" Binding="{Binding Col5, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                    <DataGridTextColumn x:Name="GridCol6" Header="{Binding DataContext.Column6Header, RelativeSource={RelativeSource AncestorType=Window}}" Binding="{Binding Col6, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                    <DataGridTextColumn x:Name="GridCol7" Header="{Binding DataContext.Column7Header, RelativeSource={RelativeSource AncestorType=Window}}" Binding="{Binding Col7, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                    <DataGridTextColumn x:Name="GridCol8" Header="{Binding DataContext.Column8Header, RelativeSource={RelativeSource AncestorType=Window}}" Binding="{Binding Col8, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+
+                        <!-- 3. 완벽 반응형 2단 하단 인쇄 툴바: (상단) 옵션 설정 & 건수 / (하단) 3대 인쇄 버튼 균등 배치 -->
+                        <Border Grid.Row="2" Background="#F1F5F9" CornerRadius="8" Padding="10,8" Margin="0,6,0,0" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1.2">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- 1단: 인쇄 옵션 (매수 + 구간) & 총 건수 -->
+                                <DockPanel Grid.Row="0" Margin="0,0,0,8">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <!-- 인쇄 매수 설정 -->
+                                        <Border Background="White" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="5" Padding="6,3" Margin="0,0,8,0">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="매수:" VerticalAlignment="Center" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,4,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseExcelPrintCopiesCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="24" FontSize="13" FontWeight="Bold"/>
+                                                <TextBox Text="{Binding ExcelPrintCopies, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="24" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontSize="12.5" FontWeight="Bold" BorderThickness="0" Background="Transparent" Margin="2,0"/>
+                                                <Button Content="+" Command="{Binding IncreaseExcelPrintCopiesCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="24" FontSize="13" FontWeight="Bold" Margin="0,0,4,0"/>
+                                                <TextBlock Text="매" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- 출력 구간 설정 -->
+                                        <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="5" Padding="6,3">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="구간:" VerticalAlignment="Center" FontSize="12.5" FontWeight="Bold" Foreground="#1E40AF" Margin="0,0,4,0"/>
+                                                <Button Content="-" Command="{Binding DecreasePrintRangeStartCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="24" FontSize="13" FontWeight="Bold"/>
+                                                <TextBox Text="{Binding PrintRangeStart, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="24" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontSize="12.5" FontWeight="Bold" BorderThickness="0" Background="Transparent" Margin="2,0"/>
+                                                <Button Content="+" Command="{Binding IncreasePrintRangeStartCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="24" FontSize="13" FontWeight="Bold" Margin="0,0,4,0"/>
+
+                                                <TextBlock Text="~" VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="#1E40AF" Margin="2,0"/>
+
+                                                <Button Content="-" Command="{Binding DecreasePrintRangeEndCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="24" FontSize="13" FontWeight="Bold" Margin="4,0,0,0"/>
+                                                <TextBox Text="{Binding PrintRangeEnd, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="24" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontSize="12.5" FontWeight="Bold" BorderThickness="0" Background="Transparent" Margin="2,0"/>
+                                                <Button Content="+" Command="{Binding IncreasePrintRangeEndCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="24" FontSize="13" FontWeight="Bold"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- 총 데이터 건수 표시 (우측) -->
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="6,2">
+                                            <TextBlock Text="{Binding Records.Count, StringFormat='총 {0}건'}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </StackPanel>
+                                </DockPanel>
+
+                                <!-- 2단: 3대 인쇄 실행 버튼 (균등 분할 1:1:1 배치로 절대 가려지지 않음) -->
+                                <UniformGrid Grid.Row="1" Columns="3">
+                                    <Button Content="🖨️ 선택 출력" Command="{Binding ReprintSelectedRecordsCommand}" CommandParameter="{Binding ElementName=MainDataGrid, Path=SelectedItems}" IsEnabled="{Binding IsCurrentPrinterAuthorized}" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="36" FontSize="13" FontWeight="Bold" Margin="0,0,4,0" ToolTip="선택한 행 또는 체크된 항목만 인쇄합니다 (미인증 시 비활성화)."/>
+                                    <Button Content="📑 구간 출력" Command="{Binding PrintRangeCommand}" IsEnabled="{Binding IsCurrentPrinterAuthorized}" Style="{StaticResource ModernButtonStyle}" Background="#4F46E5" Height="36" FontSize="13" FontWeight="Bold" Margin="2,0,2,0" ToolTip="지정한 시작~끝 번호 범위의 데이터를 인쇄합니다 (미인증 시 비활성화)."/>
+                                    <Button Content="🚀 전체 출력" Command="{Binding PrintAllRecordsCommand}" IsEnabled="{Binding IsCurrentPrinterAuthorized}" Style="{StaticResource ModernButtonStyle}" Background="#059669" Height="36" FontSize="13" FontWeight="Bold" Margin="4,0,0,0" ToolTip="목록의 전체 데이터를 일괄 인쇄합니다 (미인증 시 비활성화)."/>
+                                </UniformGrid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+            </Grid>
+        </Grid>
+
+        <!-- 2. Status Bar -->
+        <StatusBar Grid.Row="2" Background="White" Margin="0,6,0,0" Padding="8,4">
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem Grid.Column="0">
+                <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" FontWeight="SemiBold"/>
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="1">
+                <TextBlock Text="{Binding ConnectionInfo}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

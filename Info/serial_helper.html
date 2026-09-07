@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X-Quick Serial Encryptor (Google Drive)</title>
+    <!-- Google Fonts Inter & Outfit -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- CryptoJS CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <!-- Google Identity Services & GAPI -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <style>
+        :root {
+            --bg-color: #0d0f14;
+            --panel-bg: rgba(22, 28, 38, 0.6);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary-glow: #00f2fe;
+            --secondary-glow: #4facfe;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --btn-bg-dark: rgba(255, 255, 255, 0.04);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Background animated gradient glow */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--primary-glow) 0%, transparent 70%);
+            top: 10%;
+            left: 10%;
+            opacity: 0.12;
+            z-index: 0;
+            pointer-events: none;
+            filter: blur(60px);
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, var(--secondary-glow) 0%, transparent 70%);
+            bottom: 10%;
+            right: 10%;
+            opacity: 0.1;
+            z-index: 0;
+            pointer-events: none;
+            filter: blur(70px);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 680px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 2.5rem;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            z-index: 10;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .container:hover {
+            box-shadow: 0 25px 50px rgba(0, 242, 254, 0.05);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary-glow) 0%, var(--secondary-glow) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.03em;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 400;
+        }
+
+        /* Settings Toggle Panel */
+        .config-toggle-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0 auto 1.5rem auto;
+            transition: all 0.25s ease;
+        }
+
+        .config-toggle-btn:hover {
+            color: var(--primary-glow);
+            border-color: rgba(0, 242, 254, 0.3);
+            background: rgba(0, 242, 254, 0.02);
+        }
+
+        .config-panel {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            display: none;
+            animation: fadeIn 0.3s ease forwards;
+        }
+
+        .config-group {
+            margin-bottom: 1rem;
+        }
+
+        .config-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .config-group label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .config-group input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.65rem 0.8rem;
+            color: #ffffff;
+            font-size: 0.85rem;
+            font-family: monospace;
+            outline: none;
+            transition: border-color 0.25s ease;
+        }
+
+        .config-group input:focus {
+            border-color: var(--primary-glow);
+        }
+
+        /* Google Drive Account Status Panel */
+        .gdrive-panel {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .gdrive-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .gdrive-status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--text-muted);
+            border-radius: 50%;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .gdrive-status-dot.connected {
+            background-color: var(--success-color);
+            color: var(--success-color);
+        }
+
+        .gdrive-text {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        .gdrive-text-sub {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.15rem;
+        }
+
+        .btn-gdrive-connect {
+            background: var(--btn-bg-dark);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.6rem 1.1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.25s ease;
+        }
+
+        .btn-gdrive-connect:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-gdrive-connect.disconnect {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: rgba(239, 68, 68, 0.2);
+            color: var(--error-color);
+        }
+
+        .btn-gdrive-connect.disconnect:hover {
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        /* Dual Import Area */
+        .dropzone-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+        }
+
+        .file-input-label, .btn-cloud-import {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1.5px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            color: var(--text-main);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .btn-cloud-import {
+            border-style: solid;
+            border-width: 1px;
+            background: rgba(0, 242, 254, 0.03);
+            border-color: rgba(0, 242, 254, 0.2);
+            color: var(--primary-glow);
+        }
+
+        .file-input-label:hover {
+            border-color: var(--text-main);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .btn-cloud-import:hover {
+            background: rgba(0, 242, 254, 0.08);
+            border-color: var(--primary-glow);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.1);
+        }
+
+        .file-input-label svg, .btn-cloud-import svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        /* Editor Section */
+        .editor-container {
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .counter-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            background: rgba(0, 242, 254, 0.1);
+            color: var(--primary-glow);
+            padding: 0.25rem 0.6rem;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 242, 254, 0.2);
+        }
+
+        textarea {
+            width: 100%;
+            height: 230px;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1rem;
+            color: #ffffff;
+            font-family: 'Consolas', 'Fira Code', monospace;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        textarea:focus {
+            border-color: rgba(0, 242, 254, 0.4);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.1);
+            background: rgba(0, 0, 0, 0.35);
+        }
+
+        /* Dual Action Button Area */
+        .action-button-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn-action {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            width: 100%;
+            padding: 1rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .btn-action-local {
+            background: var(--btn-bg-dark);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+
+        .btn-action-local:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-action-cloud {
+            background: linear-gradient(135deg, var(--secondary-glow) 0%, var(--primary-glow) 100%);
+            border: none;
+            color: #0d0f14;
+            box-shadow: 0 4px 15px rgba(0, 242, 254, 0.2);
+        }
+
+        .btn-action-cloud:hover {
+            box-shadow: 0 8px 25px rgba(0, 242, 254, 0.35);
+            filter: brightness(1.05);
+            transform: translateY(-1px);
+        }
+
+        .btn-action-cloud:active {
+            transform: translateY(0);
+        }
+
+        /* Status and message styling */
+        .status-message {
+            margin-top: 1rem;
+            padding: 0.85rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            animation: fadeIn 0.3s ease forwards;
+        }
+
+        .status-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            color: var(--success-color);
+        }
+
+        .status-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: var(--error-color);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .guide-section {
+            margin-top: 1.5rem;
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.25rem;
+        }
+
+        .guide-title {
+            font-size: 0.83rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .guide-list {
+            list-style-type: none;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .guide-list li {
+            position: relative;
+            padding-left: 1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .guide-list li::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: var(--primary-glow);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>X-Quick License Encryptor</h1>
+            <p class="subtitle">프린터 매칭용 시리얼 암호화 파일(serials.dat) 생성기</p>
+        </header>
+
+        <!-- Config Toggle Button -->
+        <button class="config-toggle-btn" onclick="toggleConfigPanel()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            Google API 및 자격증명 설정
+        </button>
+
+        <!-- Config Panel -->
+        <div class="config-panel" id="config-panel">
+            <div class="config-group">
+                <label>OAuth 2.0 클라이언트 ID (Client ID)</label>
+                <input type="text" id="cfg-client-id" placeholder="Google OAuth Client ID 입력..." oninput="saveConfigToLocalStorage()">
+            </div>
+            <div class="config-group">
+                <label>구글 API 키 (API Key)</label>
+                <input type="text" id="cfg-api-key" placeholder="API Key 입력 (Drive API 활성화 필수)..." oninput="saveConfigToLocalStorage()">
+            </div>
+            <div class="config-group">
+                <label>임시 액세스 토큰 (Access Token 수동 주입)</label>
+                <input type="text" id="cfg-access-token" placeholder="OAuth Playground 등에서 발급받은 임시 토큰 주입..." oninput="saveConfigToLocalStorage()">
+            </div>
+        </div>
+
+        <!-- Google Drive Authorization Status Panel -->
+        <div class="gdrive-panel">
+            <div class="gdrive-info">
+                <div class="gdrive-status-dot" id="gdrive-status-dot"></div>
+                <div class="gdrive-text">
+                    <span id="gdrive-connection-status">구글 드라이브 미연동</span>
+                    <span class="gdrive-text-sub" id="gdrive-account-detail">구글 API 설정을 완료하고 로그인하세요.</span>
+                </div>
+            </div>
+            <button class="btn-gdrive-connect" id="btn-gdrive-auth" onclick="handleAuthClick()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+                </svg>
+                <span>구글 계정 연결</span>
+            </button>
+        </div>
+
+        <!-- Dual Import Area -->
+        <div class="dropzone-container">
+            <div class="file-input-wrapper">
+                <label class="file-input-label" for="file-upload">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                    </svg>
+                    <span>로컬 dat 가져오기</span>
+                </label>
+                <input type="file" id="file-upload" accept=".dat" onchange="importLocalFile(event)">
+            </div>
+            <button class="btn-cloud-import" onclick="importFromGoogleDrive()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zm-7.35 6.96L7 12h3V9h4v3h3l-5 5z"/>
+                </svg>
+                <span>드라이브에서 조회</span>
+            </button>
+        </div>
+
+        <!-- Textarea Editor -->
+        <div class="editor-container">
+            <div class="editor-header">
+                <span class="label">시리얼 넘버 목록 (한 줄에 하나씩 입력)</span>
+                <span class="counter-badge" id="serial-count">등록된 개수: 0개</span>
+            </div>
+            <textarea id="serial-input" placeholder="여기에 시리얼 번호를 한 줄에 하나씩 입력하거나 파일/구글드라이브에서 데이터를 로드하세요." oninput="updateCount()"></textarea>
+        </div>
+
+        <!-- Dual Export Action Buttons -->
+        <div class="action-button-grid">
+            <button class="btn-action btn-action-local" onclick="saveToLocalFile()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                PC에 파일로 저장
+            </button>
+            <button class="btn-action btn-action-cloud" onclick="uploadToGoogleDrive()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                드라이브에 저장/업로드
+            </button>
+        </div>
+
+        <!-- Status Message -->
+        <div class="status-message" id="status-box"></div>
+
+        <!-- User Guide -->
+        <div class="guide-section">
+            <h3 class="guide-title">구글 드라이브 연동 가이드</h3>
+            <ul class="guide-list">
+                <li><strong>최초 설정</strong>: <code>Google API 및 자격증명 설정</code>을 클릭하여 Client ID와 API Key를 입력하세요.</li>
+                <li><strong>연동(OAuth)</strong>: <code>구글 계정 연결</code>을 클릭하면 팝업 로그인 창을 통해 구글 계정과 연결됩니다.</li>
+                <li><strong>수동 연결</strong>: 로컬 샌드박스 보안상 자동 로그인이 원활치 않을 경우, OAuth Playground 등에서 발급받은 <code>임시 액세스 토큰</code>을 수동 주입하여 즉시 드라이브에 접근할 수 있습니다.</li>
+                <li><strong>덮어쓰기</strong>: 드라이브에서 가져오기를 수행하면 해당 파일 ID가 자동 기억되어, 드라이브 저장 시 기존 드라이브 파일에 그대로 덮어쓰기됩니다.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // C# SerialCryptoManager와 100% 일치
+        const CRYPTO_KEY = CryptoJS.enc.Utf8.parse("XQuick_License_Secret_Key_2026!#");
+        const CRYPTO_IV  = CryptoJS.enc.Utf8.parse("XQuick_InitVecto");
+
+        // 구글 드라이브 연동 상태 정보
+        let gdriveFileId = null; 
+        let accessToken = null;
+        let tokenClient = null;
+
+        // UI 토글
+        function toggleConfigPanel() {
+            const panel = document.getElementById('config-panel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        }
+
+        // 설정 로컬스토리지 저장
+        function saveConfigToLocalStorage() {
+            localStorage.setItem('cfg_client_id', document.getElementById('cfg-client-id').value.trim());
+            localStorage.setItem('cfg_api_key', document.getElementById('cfg-api-key').value.trim());
+            localStorage.setItem('cfg_access_token', document.getElementById('cfg-access-token').value.trim());
+            
+            // 수동 액세스 토큰 갱신 체크
+            const manualToken = document.getElementById('cfg-access-token').value.trim();
+            if (manualToken) {
+                accessToken = manualToken;
+                updateGoogleStatus(true, "수동 주입된 토큰으로 연결됨", "API 수동 호출 모드 활성화");
+            }
+        }
+
+        // 설정 로드
+        function loadConfig() {
+            document.getElementById('cfg-client-id').value = localStorage.getItem('cfg_client_id') || '';
+            document.getElementById('cfg-api-key').value = localStorage.getItem('cfg_api_key') || '';
+            document.getElementById('cfg-access-token').value = localStorage.getItem('cfg_access_token') || '';
+            
+            const manualToken = document.getElementById('cfg-access-token').value.trim();
+            if (manualToken) {
+                accessToken = manualToken;
+                updateGoogleStatus(true, "수동 주입된 토큰으로 연결됨", "API 수동 호출 모드 활성화");
+            }
+        }
+
+        // 구글 연동 UI 상태 갱신
+        function updateGoogleStatus(isConnected, statusText, subText) {
+            const dot = document.getElementById('gdrive-status-dot');
+            const statusLabel = document.getElementById('gdrive-connection-status');
+            const subLabel = document.getElementById('gdrive-account-detail');
+            const authBtn = document.getElementById('btn-gdrive-auth');
+
+            if (isConnected) {
+                dot.className = "gdrive-status-dot connected";
+                statusLabel.textContent = statusText;
+                subLabel.textContent = subText;
+                authBtn.className = "btn-gdrive-connect disconnect";
+                authBtn.querySelector('span').textContent = "연결 해제";
+            } else {
+                dot.className = "gdrive-status-dot";
+                statusLabel.textContent = "구글 드라이브 미연동";
+                subLabel.textContent = "구글 API 설정을 완료하고 로그인하세요.";
+                authBtn.className = "btn-gdrive-connect";
+                authBtn.querySelector('span').textContent = "구글 계정 연결";
+            }
+        }
+
+        // GIS 초기화
+        window.onload = function() {
+            loadConfig();
+            try {
+                // GIS Token Client 초기화 대기 (async 로드 대응)
+                setTimeout(initGisClient, 1000);
+            } catch(e) {
+                console.error("GIS 로드 대기 실패: ", e);
+            }
+        };
+
+        function initGisClient() {
+            const clientId = document.getElementById('cfg-client-id').value.trim();
+            if (!clientId) return;
+
+            try {
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: clientId,
+                    scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install',
+                    callback: (tokenResponse) => {
+                        if (tokenResponse.error !== undefined) {
+                            showStatus(`로그인 에러: ${tokenResponse.error}`, false);
+                            return;
+                        }
+                        accessToken = tokenResponse.access_token;
+                        localStorage.setItem('cfg_access_token_temp', accessToken);
+                        updateGoogleStatus(true, "구글 드라이브 연결됨", "성공적으로 로그온되었으며 API 권한을 획득했습니다.");
+                        showStatus("구글 계정이 성공적으로 연동되었습니다.", true);
+                    },
+                });
+            } catch (err) {
+                console.error("GIS 초기화 에러: ", err);
+            }
+        }
+
+        // 로그인 / 로그아웃 버튼 처리
+        function handleAuthClick() {
+            const authBtn = document.getElementById('btn-gdrive-auth');
+            if (authBtn.className.includes("disconnect")) {
+                // 연결 해제
+                accessToken = null;
+                gdriveFileId = null;
+                document.getElementById('cfg-access-token').value = '';
+                localStorage.removeItem('cfg_access_token');
+                localStorage.removeItem('cfg_access_token_temp');
+                updateGoogleStatus(false);
+                showStatus("구글 드라이브 연동이 해제되었습니다.", true);
+            } else {
+                // 연결 시도
+                const clientId = document.getElementById('cfg-client-id').value.trim();
+                const apiKey = document.getElementById('cfg-api-key').value.trim();
+                
+                if (!clientId || !apiKey) {
+                    showStatus("먼저 API 설정 패널을 열어 Client ID와 API Key를 등록해 주세요.", false);
+                    toggleConfigPanel();
+                    return;
+                }
+
+                if (!tokenClient) {
+                    initGisClient();
+                }
+
+                if (tokenClient) {
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                } else {
+                    showStatus("구글 GIS 클라이언트가 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.", false);
+                }
+            }
+        }
+
+        // 시리얼 갯수 계산
+        function updateCount() {
+            const text = document.getElementById('serial-input').value;
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            document.getElementById('serial-count').textContent = `등록된 개수: ${lines.length}개`;
+        }
+
+        // 상태 메시지 출력
+        function showStatus(message, isSuccess) {
+            const statusBox = document.getElementById('status-box');
+            statusBox.style.display = 'flex';
+            statusBox.className = `status-message ${isSuccess ? 'status-success' : 'status-error'}`;
+            
+            const icon = isSuccess 
+                ? `<svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>`
+                : `<svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8 4a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 4zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>`;
+            
+            statusBox.innerHTML = `${icon} <span>${message}</span>`;
+            
+            setTimeout(() => {
+                statusBox.style.opacity = '0';
+                statusBox.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => {
+                    statusBox.style.display = 'none';
+                    statusBox.style.opacity = '1';
+                }, 500);
+            }, 5000);
+        }
+
+        // 로컬 dat 파일 복호화 로딩
+        function importLocalFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const encryptedText = e.target.result.trim();
+                    if (!encryptedText) throw new Error("파일 내용이 비어 있습니다.");
+
+                    const decrypted = CryptoJS.AES.decrypt(encryptedText, CRYPTO_KEY, {
+                        iv: CRYPTO_IV,
+                        mode: CryptoJS.mode.CBC,
+                        padding: CryptoJS.pad.Pkcs7
+                    });
+
+                    const plainText = decrypted.toString(CryptoJS.enc.Utf8);
+                    if (!plainText) throw new Error("올바르지 않은 암호화 키이거나 손상된 파일입니다.");
+
+                    document.getElementById('serial-input').value = plainText;
+                    updateCount();
+                    showStatus("로컬 암호화 시리얼 파일을 정상적으로 해독하여 가져왔습니다.", true);
+                } catch (error) {
+                    showStatus(`로컬 파일 로드 실패: ${error.message}`, false);
+                    document.getElementById('file-upload').value = ""; 
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // PC 로컬 다운로드 저장
+        function saveToLocalFile() {
+            const inputVal = document.getElementById('serial-input').value;
+            const lines = inputVal.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+            if (lines.length === 0) {
+                showStatus("내보낼 시리얼 번호를 최소 하나 이상 입력해 주세요.", false);
+                return;
+            }
+
+            try {
+                const joinedText = lines.join('\r\n');
+                const encrypted = CryptoJS.AES.encrypt(joinedText, CRYPTO_KEY, {
+                    iv: CRYPTO_IV,
+                    mode: CryptoJS.mode.CBC,
+                    padding: CryptoJS.pad.Pkcs7
+                });
+                const base64Cipher = encrypted.toString();
+
+                const blob = new Blob([base64Cipher], { type: "text/plain;charset=utf-8" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "serials.dat";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                showStatus("로컬 PC에 serials.dat 다운로드가 완료되었습니다.", true);
+            } catch (error) {
+                showStatus(`암호화 중 오류 발생: ${error.message}`, false);
+            }
+        }
+
+        // 구글 드라이브에서 가져오기 (조회)
+        async function importFromGoogleDrive() {
+            if (!accessToken) {
+                showStatus("구글 드라이브 연동 또는 액세스 토큰 연결이 필요합니다.", false);
+                return;
+            }
+
+            showStatus("구글 드라이브에서 serials.dat 조회 중...", true);
+
+            try {
+                // 1. 드라이브에서 'serials.dat' 파일명 검색
+                const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='serials.dat' and trashed=false`;
+                const searchResponse = await fetch(searchUrl, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+
+                if (!searchResponse.ok) {
+                    throw new Error(`파일 조회 API 오류 (${searchResponse.status})`);
+                }
+
+                const searchData = await searchResponse.json();
+                if (!searchData.files || searchData.files.length === 0) {
+                    throw new Error("구글 드라이브에 serials.dat 파일이 존재하지 않습니다.");
+                }
+
+                const file = searchData.files[0];
+                gdriveFileId = file.id; // 파일 ID 보관
+                System.Diagnostics?.Debug?.WriteLine(`구글드라이브 파일 발견 ID: ${gdriveFileId}`);
+
+                // 2. 파일 원본 콘텐츠 가져오기 (alt=media)
+                const contentUrl = `https://www.googleapis.com/drive/v3/files/${gdriveFileId}?alt=media`;
+                const contentResponse = await fetch(contentUrl, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+
+                if (!contentResponse.ok) {
+                    throw new Error("파일 콘텐츠 다운로드 실패");
+                }
+
+                const encryptedText = (await contentResponse.text()).trim();
+                
+                // 3. 복호화 수행
+                const decrypted = CryptoJS.AES.decrypt(encryptedText, CRYPTO_KEY, {
+                    iv: CRYPTO_IV,
+                    mode: CryptoJS.mode.CBC,
+                    padding: CryptoJS.pad.Pkcs7
+                });
+
+                const plainText = decrypted.toString(CryptoJS.enc.Utf8);
+                if (!plainText) throw new Error("복호화에 실패했습니다. 암호화 포맷 오류.");
+
+                document.getElementById('serial-input').value = plainText;
+                updateCount();
+                showStatus("구글 드라이브의 serials.dat을 성공적으로 동기화하여 해독했습니다.", true);
+            } catch (error) {
+                showStatus(`구글 드라이브 조회 실패: ${error.message}`, false);
+            }
+        }
+
+        // 구글 드라이브에 저장/업로드
+        async function uploadToGoogleDrive() {
+            if (!accessToken) {
+                showStatus("구글 드라이브 연동 또는 액세스 토큰 연결이 필요합니다.", false);
+                return;
+            }
+
+            const inputVal = document.getElementById('serial-input').value;
+            const lines = inputVal.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+            if (lines.length === 0) {
+                showStatus("업로드할 시리얼 번호를 한 개 이상 적어주세요.", false);
+                return;
+            }
+
+            showStatus("구글 드라이브 업로드 준비 중...", true);
+
+            try {
+                // 1. 암호화 처리
+                const joinedText = lines.join('\r\n');
+                const encrypted = CryptoJS.AES.encrypt(joinedText, CRYPTO_KEY, {
+                    iv: CRYPTO_IV,
+                    mode: CryptoJS.mode.CBC,
+                    padding: CryptoJS.pad.Pkcs7
+                });
+                const base64Cipher = encrypted.toString();
+
+                // 2. 구글 드라이브에 기존 파일이 존재하는지 최종 체크 (ID가 없는 경우를 대비한 동적 검색)
+                if (!gdriveFileId) {
+                    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='serials.dat' and trashed=false`;
+                    const searchResponse = await fetch(searchUrl, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    if (searchResponse.ok) {
+                        const searchData = await searchResponse.json();
+                        if (searchData.files && searchData.files.length > 0) {
+                            gdriveFileId = searchData.files[0].id;
+                        }
+                    }
+                }
+
+                let uploadResponse;
+
+                if (gdriveFileId) {
+                    // [기존 파일이 있는 경우: PATCH 덮어쓰기]
+                    const uploadUrl = `https://www.googleapis.com/upload/drive/v3/files/${gdriveFileId}?uploadType=media`;
+                    uploadResponse = await fetch(uploadUrl, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'text/plain'
+                        },
+                        body: base64Cipher
+                    });
+                } else {
+                    // [신규 파일 생성: 2-Step 처리 (메타데이터 생성 -> PATCH 콘텐츠 업로드)]
+                    // 1단계: 빈 serials.dat 파일 껍데기 생성
+                    const metaResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            name: 'serials.dat',
+                            mimeType: 'text/plain'
+                        })
+                    });
+
+                    if (!metaResponse.ok) {
+                        throw new Error("구글 드라이브 새 파일 껍데기 생성 실패");
+                    }
+
+                    const metaData = await metaResponse.json();
+                    gdriveFileId = metaData.id;
+
+                    // 2단계: 실제 암호화 텍스트 업로드
+                    const uploadUrl = `https://www.googleapis.com/upload/drive/v3/files/${gdriveFileId}?uploadType=media`;
+                    uploadResponse = await fetch(uploadUrl, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'text/plain'
+                        },
+                        body: base64Cipher
+                    });
+                }
+
+                if (!uploadResponse.ok) {
+                    throw new Error(`구글 드라이브 파일 쓰기 오류 (${uploadResponse.status})`);
+                }
+
+                showStatus("구글 드라이브의 serials.dat 파일이 안전하게 업로드/갱신되었습니다.", true);
+            } catch (error) {
+                showStatus(`구글 드라이브 업로드 실패: ${error.message}`, false);
+            }
+        }
+
+        // 카운트 초기화
+        updateCount();
+    </script>
+</body>
+</html>

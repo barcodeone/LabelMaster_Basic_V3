@@ -1,0 +1,812 @@
+<Window x:Class="BarcodePrint.WpfView.DesignEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BarcodePrint.WpfView"
+        mc:Ignorable="d"
+        Title="🎨 라벨 디자인 &amp; 항목 서식 편집기 - LabelMaster"
+        Width="980" Height="740" MinWidth="920" MinHeight="600"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Malgun Gothic"
+        Background="#F8FAFC">
+
+    <Window.Resources>
+        <!-- Modern Color Palette -->
+        <SolidColorBrush x:Key="PrimaryAccentBrush" Color="#2563EB"/>
+        <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#1D4ED8"/>
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#E2E8F0"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1E293B"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#64748B"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
+        <!-- Button Styles -->
+        <Style x:Key="ModernButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource PrimaryHoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MiniStepBtnStyle" TargetType="Button">
+            <Setter Property="Background" Value="#E2E8F0"/>
+            <Setter Property="Foreground" Value="#334155"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="btnBorder" Background="{TemplateBinding Background}" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="btnBorder" Property="Background" Value="#CBD5E1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernToggleBtnStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="Foreground" Value="#475569"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="tgBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="tgBorder" Property="Background" Value="#2563EB"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernSplitterStyle" TargetType="GridSplitter">
+            <Setter Property="Background" Value="#E2E8F0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="ShowsPreview" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border Background="Transparent">
+                            <Border Width="2" Background="#CBD5E1" CornerRadius="1" HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern High-Touch Rounded CheckBox Style -->
+        <Style x:Key="ModernCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border x:Name="chkBoxBorder" Width="19" Height="19" CornerRadius="5" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1.5" Margin="0,0,6,0" VerticalAlignment="Center">
+                                <Path x:Name="chkCheckMark" Data="M 3.5,9.5 L 7.5,13.5 L 14.5,5.5" Stroke="White" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="chkBoxBorder" Property="Background" Value="#2563EB"/>
+                                <Setter TargetName="chkBoxBorder" Property="BorderBrush" Value="#2563EB"/>
+                                <Setter TargetName="chkCheckMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="chkBoxBorder" Property="BorderBrush" Value="#2563EB"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern ComboBox Styles -->
+        <ControlTemplate x:Key="ModernComboBoxToggleButtonTemplate" TargetType="ToggleButton">
+            <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" SnapsToDevicePixels="true">
+                <Border x:Name="buttonBorder" Background="Transparent" HorizontalAlignment="Right" Width="20">
+                    <Path x:Name="arrow" Data="M 0 0 L 4 4 L 8 0 Z" Fill="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,1,4,0"/>
+                </Border>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="true">
+                    <Setter TargetName="border" Property="BorderBrush" Value="#2563EB"/>
+                    <Setter TargetName="arrow" Property="Fill" Value="#2563EB"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="true">
+                    <Setter TargetName="border" Property="BorderBrush" Value="#2563EB"/>
+                    <Setter TargetName="arrow" Property="Fill" Value="#2563EB"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="itemBorder" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}" Margin="2,1">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="itemBorder" Property="Background" Value="#EFF6FF"/>
+                                <Setter Property="Foreground" Value="#2563EB"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="itemBorder" Property="Background" Value="#DBEAFE"/>
+                                <Setter Property="Foreground" Value="#1D4ED8"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Padding" Value="7,3,20,3"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid x:Name="templateRoot" SnapsToDevicePixels="true">
+                            <Popup x:Name="PART_Popup" AllowsTransparency="true" Grid.ColumnSpan="2" IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Margin="1" Placement="Bottom" PopupAnimation="Slide">
+                                <Border x:Name="dropDownBorder" Background="#FFFFFF" BorderBrush="#94A3B8" BorderThickness="1.2" CornerRadius="6" MaxHeight="{TemplateBinding MaxDropDownHeight}" MinWidth="{Binding ActualWidth, ElementName=templateRoot}" Padding="2" Margin="0,3,0,0">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="8" Color="#000000" Direction="270" Opacity="0.18" RenderingBias="Performance" ShadowDepth="3"/>
+                                    </Border.Effect>
+                                    <ScrollViewer x:Name="DropDownScrollViewer">
+                                        <Grid x:Name="grid" RenderOptions.ClearTypeHint="Enabled">
+                                            <Canvas x:Name="canvas" HorizontalAlignment="Left" Height="0" VerticalAlignment="Top" Width="0">
+                                                <Rectangle x:Name="opaqueRect" Fill="{Binding Background, ElementName=dropDownBorder}" Height="{Binding ActualHeight, ElementName=dropDownBorder}" Width="{Binding ActualWidth, ElementName=dropDownBorder}"/>
+                                            </Canvas>
+                                            <ItemsPresenter x:Name="ItemsPresenter" KeyboardNavigation.DirectionalNavigation="Contained" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                        </Grid>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                            <ToggleButton x:Name="toggleButton" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Grid.ColumnSpan="2" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Template="{StaticResource ModernComboBoxToggleButtonTemplate}"/>
+                            <ContentPresenter x:Name="contentPresenter" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" Content="{TemplateBinding SelectionBoxItem}" ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" IsHitTestVisible="false" Margin="{TemplateBinding Padding}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="false">
+                                <Setter TargetName="dropDownBorder" Property="Height" Value="95"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="true">
+                                <Setter Property="BorderBrush" Value="#2563EB"/>
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="true">
+                                <Setter Property="BorderBrush" Value="#2563EB"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Card Expander Style -->
+        <Style x:Key="ModernCardExpanderStyle" TargetType="Expander">
+            <Setter Property="Background" Value="#F8FAFC"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                SnapsToDevicePixels="True">
+                            <DockPanel>
+                                <ToggleButton x:Name="HeaderSite"
+                                              DockPanel.Dock="Top"
+                                              IsChecked="{Binding Path=IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                              Cursor="Hand">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="HeaderBorder" Background="#F1F5F9" CornerRadius="7,7,0,0" Padding="12,9">
+                                                <DockPanel>
+                                                    <Path x:Name="Arrow"
+                                                          DockPanel.Dock="Right"
+                                                          Data="M 0 0 L 5 5 L 10 0 Z"
+                                                          Fill="#475569"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          RenderTransformOrigin="0.5,0.5">
+                                                        <Path.RenderTransform>
+                                                            <RotateTransform Angle="0"/>
+                                                        </Path.RenderTransform>
+                                                    </Path>
+                                                    <ContentPresenter Content="{TemplateBinding Content}"
+                                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                      VerticalAlignment="Center"/>
+                                                </DockPanel>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="HeaderBorder" Property="Background" Value="#E2E8F0"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Arrow" Property="RenderTransform">
+                                                        <Setter.Value>
+                                                            <RotateTransform Angle="180"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                    <ContentPresenter ContentSource="Header"/>
+                                </ToggleButton>
+                                <Border x:Name="ContentSite"
+                                        DockPanel.Dock="Bottom"
+                                        Visibility="Collapsed"
+                                        Padding="12,10"
+                                        Background="White"
+                                        CornerRadius="0,0,7,7">
+                                    <ContentPresenter Content="{TemplateBinding Content}"
+                                                      ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                                </Border>
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsExpanded" Value="False">
+                                <Setter TargetName="HeaderSite" Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="HeaderBorder" Background="#F1F5F9" CornerRadius="7" Padding="12,9">
+                                                <DockPanel>
+                                                    <Path x:Name="Arrow"
+                                                          DockPanel.Dock="Right"
+                                                          Data="M 0 0 L 5 5 L 10 0 Z"
+                                                          Fill="#475569"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          RenderTransformOrigin="0.5,0.5">
+                                                        <Path.RenderTransform>
+                                                            <RotateTransform Angle="0"/>
+                                                        </Path.RenderTransform>
+                                                    </Path>
+                                                    <ContentPresenter Content="{TemplateBinding Content}"
+                                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                      VerticalAlignment="Center"/>
+                                                </DockPanel>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="HeaderBorder" Property="Background" Value="#E2E8F0"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <!-- 0. Header Bar -->
+            <RowDefinition Height="Auto"/>
+            <!-- 1. Main Workspace (Preview + Settings) -->
+            <RowDefinition Height="*"/>
+            <!-- 2. Bottom Action Bar -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 0. Header Bar -->
+        <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="14,10" Margin="0,0,0,10" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+            <DockPanel>
+                <TextBlock Text="🎨 라벨 디자인 &amp; 항목 서식 편집기" FontWeight="Bold" FontSize="15" Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center"/>
+
+                <!-- Template Controls on Header -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button Content="{Binding LabelRotationText}" Command="{Binding Rotate90Command}" Style="{StaticResource ModernButtonStyle}" Background="#3B82F6" Height="28" Padding="12,0" FontSize="12" FontWeight="Bold" Margin="0,0,6,0" ToolTip="라벨을 90도씩 회전합니다 (0° / 90° / 180° / 270°)"/>
+                    <Button Content="📁 템플릿 불러오기" Command="{Binding ImportTemplateCommand}" Style="{StaticResource ModernButtonStyle}" Background="#475569" Height="28" Padding="10,0" FontSize="11.5" Margin="0,0,6,0"/>
+                    <Button Content="💾 템플릿 저장" Command="{Binding ExportTemplateCommand}" Style="{StaticResource ModernButtonStyle}" Background="#0D9488" Height="28" Padding="10,0" FontSize="11.5"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- 1. Main Settings Panel (Full Width) -->
+        <Border Grid.Row="1" Background="{StaticResource CardBackgroundBrush}" CornerRadius="8" Padding="12" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <!-- 1. 항목별 글꼴, 크기 및 바코드/서식 설정 카드 -->
+                    <Border Background="#F8FAFC" CornerRadius="6" Padding="10,8" Margin="0,0,0,8" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,8">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🔤 각 항목별 글꼴, 크기 및 바코드/서식 설정" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                    <Border Background="#EFF6FF" BorderBrush="#DBEAFE" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding ActiveColumnCount, StringFormat='활성 항목: {0}개 / 최대 8개'}" FontSize="11.5" FontWeight="Bold" Foreground="#1E40AF"/>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- 컬럼 추가 / 삭제 버튼 그룹 -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button Content="➕ 컬럼 추가" Command="{Binding AddColumnCommand}" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="26" Padding="10,0" FontSize="11.5" FontWeight="Bold" Margin="0,0,6,0" ToolTip="새로운 항목(열)을 추가합니다 (최대 8개)"/>
+                                    <Button Content="➖ 컬럼 삭제" Command="{Binding RemoveColumnCommand}" Style="{StaticResource ModernButtonStyle}" Background="#EF4444" Height="26" Padding="10,0" FontSize="11.5" FontWeight="Bold" ToolTip="마지막 항목(열)을 삭제합니다 (최소 1개)"/>
+                                </StackPanel>
+                            </DockPanel>
+
+                                <!-- Col 1 Setup Row -->
+                                <Border Background="White" CornerRadius="7" Padding="10,8" Margin="0,0,0,7" BorderBrush="#CBD5E1" BorderThickness="1.2" Visibility="{Binding IsCol1Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                            <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="1열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
+                                            <TextBox Text="{Binding Column1Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="1열 항목명"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col1Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="0" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col1Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="0" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <ToggleButton IsChecked="{Binding Col1Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            <ToggleButton IsChecked="{Binding Col1Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsTableBorderEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Text="행높이:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseColRowHeightCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                                <TextBox Text="{Binding Col1RowHeight, UpdateSourceTrigger=PropertyChanged}" Width="24" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0" ToolTip="0은 자동 균등분할"/>
+                                                <Button Content="+" Command="{Binding IncreaseColRowHeightCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                            </StackPanel>
+
+                                            <CheckBox Content="💰 금액(₩)" IsChecked="{Binding IsColumn1PriceFormat}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,18,0" ToolTip="숫자에 3자리 콤마(,) 및 원화(₩) 기호를 자동 적용합니다."/>
+
+                                            <CheckBox Content="🏷️ 바코드" IsChecked="{Binding IsColumn1Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="#EA580C" Margin="0,0,5,0" ToolTip="해당 항목을 1D/2D 바코드로 출력합니다."/>
+                                            <ComboBox ItemsSource="{Binding AvailableBarcodeTypes}" SelectedItem="{Binding Col1BarcodeType}" IsEnabled="{Binding IsColumn1Barcode}" Width="92" Height="26" FontSize="10.5" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="바코드 포맷 선택"/>
+                                            <CheckBox Content="값 표시" IsChecked="{Binding Col1ShowBarcodeText}" IsEnabled="{Binding IsColumn1Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11" ToolTip="바코드 하단에 읽을 수 있는 텍스트(HRI) 출력 여부"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <!-- Col 2 Setup Row -->
+                                <Border Background="White" CornerRadius="7" Padding="10,8" Margin="0,0,0,7" BorderBrush="#CBD5E1" BorderThickness="1.2" Visibility="{Binding IsCol2Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                            <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="2열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
+                                             <TextBox Text="{Binding Column2Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="2열 항목명"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col2Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col2Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <ToggleButton IsChecked="{Binding Col2Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            <ToggleButton IsChecked="{Binding Col2Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsTableBorderEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Text="행높이:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseColRowHeightCommand}" CommandParameter="2" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                                <TextBox Text="{Binding Col2RowHeight, UpdateSourceTrigger=PropertyChanged}" Width="24" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0" ToolTip="0은 자동 균등분할"/>
+                                                <Button Content="+" Command="{Binding IncreaseColRowHeightCommand}" CommandParameter="2" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                            </StackPanel>
+
+                                            <CheckBox Content="💰 금액(₩)" IsChecked="{Binding IsColumn2PriceFormat}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,18,0" ToolTip="숫자에 3자리 콤마(,) 및 원화(₩) 기호를 자동 적용합니다."/>
+
+                                            <CheckBox Content="🏷️ 바코드" IsChecked="{Binding IsColumn2Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="#EA580C" Margin="0,0,5,0" ToolTip="해당 항목을 1D/2D 바코드로 출력합니다."/>
+                                            <ComboBox ItemsSource="{Binding AvailableBarcodeTypes}" SelectedItem="{Binding Col2BarcodeType}" IsEnabled="{Binding IsColumn2Barcode}" Width="92" Height="26" FontSize="10.5" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="바코드 포맷 선택"/>
+                                            <CheckBox Content="값 표시" IsChecked="{Binding Col2ShowBarcodeText}" IsEnabled="{Binding IsColumn2Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11" ToolTip="바코드 하단에 읽을 수 있는 텍스트(HRI) 출력 여부"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <!-- Col 3 Setup Row -->
+                                <Border Background="White" CornerRadius="7" Padding="10,8" Margin="0,0,0,7" BorderBrush="#CBD5E1" BorderThickness="1.2" Visibility="{Binding IsCol3Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                            <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="3열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
+                                            <TextBox Text="{Binding Column3Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="3열 항목명"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col3Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="2" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col3Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="2" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <ToggleButton IsChecked="{Binding Col3Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            <ToggleButton IsChecked="{Binding Col3Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsTableBorderEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Text="행높이:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseColRowHeightCommand}" CommandParameter="3" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                                <TextBox Text="{Binding Col3RowHeight, UpdateSourceTrigger=PropertyChanged}" Width="24" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0" ToolTip="0은 자동 균등분할"/>
+                                                <Button Content="+" Command="{Binding IncreaseColRowHeightCommand}" CommandParameter="3" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                            </StackPanel>
+
+                                            <CheckBox Content="💰 금액(₩)" IsChecked="{Binding IsColumn3PriceFormat}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,18,0" ToolTip="숫자에 3자리 콤마(,) 및 원화(₩) 기호를 자동 적용합니다."/>
+
+                                            <CheckBox Content="🏷️ 바코드" IsChecked="{Binding IsColumn3Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="#EA580C" Margin="0,0,5,0" ToolTip="해당 항목을 1D/2D 바코드로 출력합니다."/>
+                                            <ComboBox ItemsSource="{Binding AvailableBarcodeTypes}" SelectedItem="{Binding Col3BarcodeType}" IsEnabled="{Binding IsColumn3Barcode}" Width="92" Height="26" FontSize="10.5" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="바코드 포맷 선택"/>
+                                            <CheckBox Content="값 표시" IsChecked="{Binding Col3ShowBarcodeText}" IsEnabled="{Binding IsColumn3Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11" ToolTip="바코드 하단에 읽을 수 있는 텍스트(HRI) 출력 여부"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <!-- Col 4 Setup Row -->
+                                <Border Background="White" CornerRadius="7" Padding="10,8" Margin="0,0,0,7" BorderBrush="#CBD5E1" BorderThickness="1.2" Visibility="{Binding IsCol4Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                            <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="4열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
+                                            <TextBox Text="{Binding Column4Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="4열 항목명"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col4Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="3" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col4Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="3" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <ToggleButton IsChecked="{Binding Col4Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            <ToggleButton IsChecked="{Binding Col4Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsTableBorderEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Text="행높이:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseColRowHeightCommand}" CommandParameter="4" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                                <TextBox Text="{Binding Col4RowHeight, UpdateSourceTrigger=PropertyChanged}" Width="24" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0" ToolTip="0은 자동 균등분할"/>
+                                                <Button Content="+" Command="{Binding IncreaseColRowHeightCommand}" CommandParameter="4" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                            </StackPanel>
+
+                                            <CheckBox Content="💰 금액(₩)" IsChecked="{Binding IsColumn4PriceFormat}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,18,0" ToolTip="숫자에 3자리 콤마(,) 및 원화(₩) 기호를 자동 적용합니다."/>
+
+                                            <CheckBox Content="🏷️ 바코드" IsChecked="{Binding IsColumn4Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="#EA580C" Margin="0,0,5,0" ToolTip="해당 항목을 1D/2D 바코드로 출력합니다."/>
+                                            <ComboBox ItemsSource="{Binding AvailableBarcodeTypes}" SelectedItem="{Binding Col4BarcodeType}" IsEnabled="{Binding IsColumn4Barcode}" Width="92" Height="26" FontSize="10.5" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="바코드 포맷 선택"/>
+                                            <CheckBox Content="값 표시" IsChecked="{Binding Col4ShowBarcodeText}" IsEnabled="{Binding IsColumn4Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11" ToolTip="바코드 하단에 읽을 수 있는 텍스트(HRI) 출력 여부"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <!-- Col 5 Setup Row -->
+                                <Border Background="White" CornerRadius="7" Padding="10,8" Margin="0,0,0,7" BorderBrush="#CBD5E1" BorderThickness="1.2" Visibility="{Binding IsCol5Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                            <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="5열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
+                                            <TextBox Text="{Binding Column5Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="5열 항목명"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col5Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="4" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col5Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="4" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <ToggleButton IsChecked="{Binding Col5Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            <ToggleButton IsChecked="{Binding Col5Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsTableBorderEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Text="행높이:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseColRowHeightCommand}" CommandParameter="5" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                                <TextBox Text="{Binding Col5RowHeight, UpdateSourceTrigger=PropertyChanged}" Width="24" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0" ToolTip="0은 자동 균등분할"/>
+                                                <Button Content="+" Command="{Binding IncreaseColRowHeightCommand}" CommandParameter="5" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                            </StackPanel>
+
+                                            <CheckBox Content="💰 금액(₩)" IsChecked="{Binding IsColumn5PriceFormat}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,18,0" ToolTip="숫자에 3자리 콤마(,) 및 원화(₩) 기호를 자동 적용합니다."/>
+
+                                            <CheckBox Content="🏷️ 바코드" IsChecked="{Binding IsColumn5Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="#EA580C" Margin="0,0,5,0" ToolTip="해당 항목을 1D/2D 바코드로 출력합니다."/>
+                                            <ComboBox ItemsSource="{Binding AvailableBarcodeTypes}" SelectedItem="{Binding Col5BarcodeType}" IsEnabled="{Binding IsColumn5Barcode}" Width="92" Height="26" FontSize="10.5" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="바코드 포맷 선택"/>
+                                            <CheckBox Content="값 표시" IsChecked="{Binding Col5ShowBarcodeText}" IsEnabled="{Binding IsColumn5Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11" ToolTip="바코드 하단에 읽을 수 있는 텍스트(HRI) 출력 여부"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <!-- Col 6 Setup Row -->
+                                <Border Background="White" CornerRadius="7" Padding="10,8" Margin="0,0,0,7" BorderBrush="#CBD5E1" BorderThickness="1.2" Visibility="{Binding IsCol6Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                            <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="6열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
+                                            <TextBox Text="{Binding Column6Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="6열 항목명"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col6Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col6Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <ToggleButton IsChecked="{Binding Col6Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            <ToggleButton IsChecked="{Binding Col6Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsTableBorderEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Text="행높이:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseColRowHeightCommand}" CommandParameter="6" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                                <TextBox Text="{Binding Col6RowHeight, UpdateSourceTrigger=PropertyChanged}" Width="24" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0" ToolTip="0은 자동 균등분할"/>
+                                                <Button Content="+" Command="{Binding IncreaseColRowHeightCommand}" CommandParameter="6" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                            </StackPanel>
+
+                                            <CheckBox Content="💰 금액(₩)" IsChecked="{Binding IsColumn6PriceFormat}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,18,0" ToolTip="숫자에 3자리 콤마(,) 및 원화(₩) 기호를 자동 적용합니다."/>
+
+                                            <CheckBox Content="🏷️ 바코드" IsChecked="{Binding IsColumn6Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="#EA580C" Margin="0,0,5,0" ToolTip="해당 항목을 1D/2D 바코드로 출력합니다."/>
+                                            <ComboBox ItemsSource="{Binding AvailableBarcodeTypes}" SelectedItem="{Binding Col6BarcodeType}" IsEnabled="{Binding IsColumn6Barcode}" Width="92" Height="26" FontSize="10.5" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="바코드 포맷 선택"/>
+                                            <CheckBox Content="값 표시" IsChecked="{Binding Col6ShowBarcodeText}" IsEnabled="{Binding IsColumn6Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11" ToolTip="바코드 하단에 읽을 수 있는 텍스트(HRI) 출력 여부"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <!-- Col 7 Setup Row -->
+                                <Border Background="White" CornerRadius="7" Padding="10,8" Margin="0,0,0,7" BorderBrush="#CBD5E1" BorderThickness="1.2" Visibility="{Binding IsCol7Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                            <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="7열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
+                                            <TextBox Text="{Binding Column7Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="7열 항목명"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col7Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="6" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col7Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="6" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <ToggleButton IsChecked="{Binding Col7Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            <ToggleButton IsChecked="{Binding Col7Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsTableBorderEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Text="행높이:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseColRowHeightCommand}" CommandParameter="7" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                                <TextBox Text="{Binding Col7RowHeight, UpdateSourceTrigger=PropertyChanged}" Width="24" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0" ToolTip="0은 자동 균등분할"/>
+                                                <Button Content="+" Command="{Binding IncreaseColRowHeightCommand}" CommandParameter="7" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                            </StackPanel>
+
+                                            <CheckBox Content="💰 금액(₩)" IsChecked="{Binding IsColumn7PriceFormat}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,18,0" ToolTip="숫자에 3자리 콤마(,) 및 원화(₩) 기호를 자동 적용합니다."/>
+
+                                            <CheckBox Content="🏷️ 바코드" IsChecked="{Binding IsColumn7Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="#EA580C" Margin="0,0,5,0" ToolTip="해당 항목을 1D/2D 바코드로 출력합니다."/>
+                                            <ComboBox ItemsSource="{Binding AvailableBarcodeTypes}" SelectedItem="{Binding Col7BarcodeType}" IsEnabled="{Binding IsColumn7Barcode}" Width="92" Height="26" FontSize="10.5" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="바코드 포맷 선택"/>
+                                            <CheckBox Content="값 표시" IsChecked="{Binding Col7ShowBarcodeText}" IsEnabled="{Binding IsColumn7Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11" ToolTip="바코드 하단에 읽을 수 있는 텍스트(HRI) 출력 여부"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <!-- Col 8 Setup Row -->
+                                <Border Background="White" CornerRadius="7" Padding="10,8" Margin="0,0,0,7" BorderBrush="#CBD5E1" BorderThickness="1.2" Visibility="{Binding IsCol8Visible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                            <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="8열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
+                                            <TextBox Text="{Binding Column8Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="8열 항목명"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col8Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="7" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col8Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="7" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <ToggleButton IsChecked="{Binding Col8Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            <ToggleButton IsChecked="{Binding Col8Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsTableBorderEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Text="행높이:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseColRowHeightCommand}" CommandParameter="8" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                                <TextBox Text="{Binding Col8RowHeight, UpdateSourceTrigger=PropertyChanged}" Width="24" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0" ToolTip="0은 자동 균등분할"/>
+                                                <Button Content="+" Command="{Binding IncreaseColRowHeightCommand}" CommandParameter="8" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26"/>
+                                            </StackPanel>
+
+                                            <CheckBox Content="💰 금액(₩)" IsChecked="{Binding IsColumn8PriceFormat}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,18,0" ToolTip="숫자에 3자리 콤마(,) 및 원화(₩) 기호를 자동 적용합니다."/>
+
+                                            <CheckBox Content="🏷️ 바코드" IsChecked="{Binding IsColumn8Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" Foreground="#EA580C" Margin="0,0,5,0" ToolTip="해당 항목을 1D/2D 바코드로 출력합니다."/>
+                                            <ComboBox ItemsSource="{Binding AvailableBarcodeTypes}" SelectedItem="{Binding Col8BarcodeType}" IsEnabled="{Binding IsColumn8Barcode}" Width="92" Height="26" FontSize="10.5" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="바코드 포맷 선택"/>
+                                            <CheckBox Content="값 표시" IsChecked="{Binding Col8ShowBarcodeText}" IsEnabled="{Binding IsColumn8Barcode}" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11" ToolTip="바코드 하단에 읽을 수 있는 텍스트(HRI) 출력 여부"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 2. 추가 디자인 & 상세 서식 설정 그룹 (표 / 제목 / 순번 / 날짜) 통합 Expander -->
+                        <Expander Style="{StaticResource ModernCardExpanderStyle}" IsExpanded="False" Margin="0,0,0,8">
+                            <Expander.Header>
+                                <DockPanel LastChildFill="False">
+                                    <TextBlock Text="⚙️ 추가 디자인 &amp; 상세 서식 설정" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="(표 적용, 상단 제목, 순번, 날짜/시간 포맷)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </DockPanel>
+                            </Expander.Header>
+                            <StackPanel Margin="0,4,0,0">
+                                <!-- 2-1. 표 적용 및 테두리/격자 설정 카드 -->
+                                <Border Background="#F8FAFC" CornerRadius="7" Padding="12,10" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <StackPanel>
+                                        <DockPanel Margin="0,0,0,8">
+                                            <CheckBox Content="📐 표 적용" IsChecked="{Binding IsTableBorderEnabled}" Style="{StaticResource ModernCheckBoxStyle}" VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="{StaticResource PrimaryAccentBrush}"/>
+                                            <Button Content="⚖️ 표 간격 균등 분할" Command="{Binding MakeRowHeightsEqualCommand}" IsEnabled="{Binding IsTableBorderEnabled}" ToolTip="모든 행의 높이를 동일한 비율로 균등 분할 초기화" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="26" Padding="10,0" FontSize="11.5" HorizontalAlignment="Right"/>
+                                        </DockPanel>
+                                        <WrapPanel VerticalAlignment="Center">
+                                            <TextBlock Text="방향:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
+                                            <ComboBox SelectedIndex="{Binding TableOrientation}" IsEnabled="{Binding IsTableBorderEnabled}" Width="120" Height="26" FontSize="11.5" VerticalContentAlignment="Center" Margin="0,2,10,2">
+                                                <ComboBoxItem Content="세로형 (헤더 좌측)" ToolTip="각 항목이 행으로 아래로 쌓이며 헤더가 왼쪽에 위치"/>
+                                                <ComboBoxItem Content="가로형 (헤더 상단)" ToolTip="각 항목이 열로 나란히 배치되며 헤더가 상단에 위치"/>
+                                            </ComboBox>
+
+                                            <TextBlock Text="형태:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
+                                            <ComboBox SelectedIndex="{Binding TableBorderStyle}" IsEnabled="{Binding IsTableBorderEnabled}" Width="95" Height="26" FontSize="11.5" VerticalContentAlignment="Center" Margin="0,2,10,2">
+                                                <ComboBoxItem Content="전체 격자"/>
+                                                <ComboBoxItem Content="외곽 박스"/>
+                                                <ComboBoxItem Content="가로선만"/>
+                                            </ComboBox>
+
+                                            <TextBlock Text="두께:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
+                                            <ComboBox SelectedIndex="{Binding TableBorderThicknessIndex}" IsEnabled="{Binding IsTableBorderEnabled}" Width="65" Height="26" FontSize="11.5" VerticalContentAlignment="Center" Margin="0,2,10,2">
+                                                <ComboBoxItem Content="1 pt"/>
+                                                <ComboBoxItem Content="2 pt"/>
+                                                <ComboBoxItem Content="3 pt"/>
+                                                <ComboBoxItem Content="4 pt"/>
+                                                <ComboBoxItem Content="5 pt"/>
+                                            </ComboBox>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 2-2. 표 상단 제목 인쇄 설정 카드 -->
+                                <Border Background="#F8FAFC" CornerRadius="7" Padding="12,10" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <StackPanel>
+                                        <DockPanel Margin="0,0,0,6">
+                                            <CheckBox Content="🏷️ 표 상단 제목 인쇄" IsChecked="{Binding IsTableTitleEnabled}" Style="{StaticResource ModernCheckBoxStyle}" VerticalAlignment="Center" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <CheckBox Content="제목 구분선" IsChecked="{Binding IsTableTitleUnderline}" IsEnabled="{Binding IsTableTitleEnabled}" Style="{StaticResource ModernCheckBoxStyle}" VerticalAlignment="Center" FontSize="11.5" Margin="12,0,0,0"/>
+                                        </DockPanel>
+                                        <WrapPanel VerticalAlignment="Center">
+                                            <TextBlock Text="제목명:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
+                                            <TextBox Text="{Binding TableTitleText, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsTableTitleEnabled}" Width="120" Height="26" FontSize="11.5" VerticalContentAlignment="Center" Margin="0,2,8,2"/>
+
+                                            <TextBlock Text="글꼴:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding TableTitleFont}" IsEnabled="{Binding IsTableTitleEnabled}" Width="92" Height="26" FontSize="11.5" VerticalContentAlignment="Center" Margin="0,2,8,2"/>
+
+                                            <TextBlock Text="크기:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
+                                            <TextBox Text="{Binding TableTitleSize, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsTableTitleEnabled}" Width="28" Height="24" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="0,2,8,2"/>
+
+                                            <TextBlock Text="정렬:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
+                                            <ComboBox SelectedValue="{Binding TableTitleAlign}" SelectedValuePath="Tag" IsEnabled="{Binding IsTableTitleEnabled}" Width="65" Height="26" FontSize="11.5" VerticalContentAlignment="Center" Margin="0,2,8,2">
+                                                <ComboBoxItem Content="좌측" Tag="LEFT"/>
+                                                <ComboBoxItem Content="중앙" Tag="CENTER"/>
+                                                <ComboBoxItem Content="우측" Tag="RIGHT"/>
+                                            </ComboBox>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 2-3. 순번(Serial) 및 날짜/시간 인쇄 설정 카드 -->
+                                <Border Background="#F8FAFC" CornerRadius="7" Padding="12,10" Margin="0,0,0,2" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <StackPanel>
+                                        <!-- 순번 설정 1행: 사용 여부 및 양식/방향/시작값 -->
+                                        <DockPanel Margin="0,0,0,6">
+                                            <CheckBox Content="🔢 순번(Serial) 인쇄" IsChecked="{Binding IsSerialEnabled}" Style="{StaticResource ModernCheckBoxStyle}" VerticalAlignment="Center" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <TextBlock Text="양식:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <ComboBox SelectedIndex="{Binding SerialFormatIndex}" IsEnabled="{Binding IsSerialEnabled}" Width="75" Height="26" FontSize="11" Margin="0,0,6,0">
+                                                    <ComboBoxItem Content="1, 2, 3"/>
+                                                    <ComboBoxItem Content="01, 02"/>
+                                                    <ComboBoxItem Content="001"/>
+                                                    <ComboBoxItem Content="0001"/>
+                                                    <ComboBoxItem Content="No.1"/>
+                                                    <ComboBoxItem Content="#01"/>
+                                                    <ComboBoxItem Content="[1]"/>
+                                                    <ComboBoxItem Content="(001)"/>
+                                                </ComboBox>
+
+                                                <TextBlock Text="방향:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <ComboBox SelectedIndex="{Binding SerialDirectionIndex}" IsEnabled="{Binding IsSerialEnabled}" Width="65" Height="26" FontSize="11" Margin="0,0,6,0">
+                                                    <ComboBoxItem Content="증가(+)"/>
+                                                    <ComboBoxItem Content="감소(-)"/>
+                                                </ComboBox>
+
+                                                <TextBlock Text="시작:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <TextBox Text="{Binding SerialStartNumber, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsSerialEnabled}" Width="40" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
+                                            </StackPanel>
+                                        </DockPanel>
+
+                                        <!-- 순번 설정 2행: 글꼴, 크기(-/+), 굵게, 기울임, 실시간 미리보기 -->
+                                        <DockPanel Margin="0,0,0,6" IsEnabled="{Binding IsSerialEnabled}">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="글꼴:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding SerialFont}" Width="92" Height="26" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,6,0"/>
+
+                                                <TextBlock Text="크기:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseSerialSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                                <TextBox Text="{Binding SerialSize, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                                <Button Content="+" Command="{Binding IncreaseSerialSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,6,0"/>
+
+                                                <ToggleButton IsChecked="{Binding SerialBold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                                <ToggleButton IsChecked="{Binding SerialItalic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            </StackPanel>
+                                            <Border Background="#ECFDF5" BorderBrush="#A7F3D0" BorderThickness="1" CornerRadius="4" Padding="6,2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding FormattedSerialPreview, StringFormat='미리보기: {0}'}" FontSize="11" FontWeight="Bold" Foreground="#047857"/>
+                                            </Border>
+                                        </DockPanel>
+
+                                        <Separator Margin="0,4,0,6" Background="#CBD5E1"/>
+
+                                        <!-- 날짜/시간 설정 1행: 사용 여부, 접두사, 양식 -->
+                                        <DockPanel Margin="0,0,0,6">
+                                            <CheckBox Content="🕒 날짜/시간 인쇄" IsChecked="{Binding IsDateTimeEnabled}" Style="{StaticResource ModernCheckBoxStyle}" VerticalAlignment="Center" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <TextBlock Text="접두사:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                                <TextBox Text="{Binding DateTimePrefix, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsDateTimeEnabled}" Width="55" Height="26" FontSize="11" VerticalContentAlignment="Center" Padding="4,1" Margin="0,0,8,0" ToolTip="날짜 앞에 붙을 문구 (예: 일시: , 제조일: , 비워두기 등)"/>
+
+                                                <TextBlock Text="양식:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <ComboBox SelectedIndex="{Binding DateTimeFormatIndex}" IsEnabled="{Binding IsDateTimeEnabled}" Width="165" Height="26" FontSize="11">
+                                                    <ComboBoxItem Content="YYYY-MM-DD (기본)"/>
+                                                    <ComboBoxItem Content="YYYY/MM/DD"/>
+                                                    <ComboBoxItem Content="YYYY.MM.DD"/>
+                                                    <ComboBoxItem Content="YYYY년 MM월 DD일"/>
+                                                    <ComboBoxItem Content="YYYY-MM-DD HH:mm"/>
+                                                    <ComboBoxItem Content="YYYY-MM-DD HH:mm:ss"/>
+                                                    <ComboBoxItem Content="YY.MM.DD"/>
+                                                    <ComboBoxItem Content="YYYYMMDD (숫자만)"/>
+                                                    <ComboBoxItem Content="HH:mm:ss (시간만)"/>
+                                                </ComboBox>
+                                            </StackPanel>
+                                        </DockPanel>
+
+                                        <!-- 날짜/시간 설정 2행: 글꼴, 크기(-/+), 굵게, 기울임, 실시간 미리보기 -->
+                                        <DockPanel IsEnabled="{Binding IsDateTimeEnabled}">
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="글꼴:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding DateTimeFont}" Width="92" Height="26" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,6,0"/>
+
+                                                <TextBlock Text="크기:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <Button Content="-" Command="{Binding DecreaseDateTimeSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                                <TextBox Text="{Binding DateTimeSize, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                                <Button Content="+" Command="{Binding IncreaseDateTimeSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,6,0"/>
+
+                                                <ToggleButton IsChecked="{Binding DateTimeBold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                                <ToggleButton IsChecked="{Binding DateTimeItalic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
+                                            </StackPanel>
+                                            <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="4" Padding="6,2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding FormattedDateTimePreview, StringFormat='미리보기: {0}'}" FontSize="11" FontWeight="Bold" Foreground="#1D4ED8"/>
+                                            </Border>
+                                        </DockPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+        <!-- 2. Bottom Action Bar -->
+        <Border Grid.Row="2" Background="White" CornerRadius="8" Padding="14,10" Margin="0,10,0,0" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+            <DockPanel>
+                <TextBlock Text="💡 여기서 설정한 서식과 표/바코드 디자인은 메인 인쇄(단건 &amp; 엑셀)에 실시간으로 자동 적용됩니다." FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                <Button Content="✔️ 닫기" Click="CloseButton_Click" Style="{StaticResource ModernButtonStyle}" Background="#059669" Height="32" Padding="18,0" FontSize="12.5" FontWeight="Bold" HorizontalAlignment="Right"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

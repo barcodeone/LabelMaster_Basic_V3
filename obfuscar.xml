@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Obfuscator>
+  <Var name="InPath" value=".\bin\Release" />
+  <Var name="OutPath" value=".\bin\Release\Obfuscated" />
+
+  <!-- .NET Framework 4.8 레퍼런스 경로 지정 -->
+  <AssemblySearchPath path="C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8" />
+  <AssemblySearchPath path="C:\Windows\Microsoft.NET\Framework64\v4.0.30319" />
+  <AssemblySearchPath path=".\bin\Release" />
+
+  <!-- 1. 기본 난독화 및 보안 옵션 -->
+  <Var name="KeepPublicApi" value="true" />
+  <Var name="HidePrivateApi" value="true" />
+  <Var name="RenameProperties" value="true" />
+  <Var name="RenameEvents" value="true" />
+  <Var name="RenameFields" value="true" />
+  <Var name="UseUnicodeNames" value="true" />
+  <Var name="HideStrings" value="true" />
+  <Var name="OptimizeMethods" value="true" />
+  <Var name="SuppressIldasm" value="true" />
+
+  <!-- 2. 대상 모듈 -->
+  <Module file="$(InPath)\LabelMaster_Basic_v2.exe">
+    <!-- WPF XAML 바인딩 대상 ViewModel 프로퍼티들은 리플렉션 안전 보장 -->
+    <SkipType name="BarcodePrint.ViewModel.MainViewModel" />
+    <SkipType name="BarcodePrint.ViewModel.RelayCommand" />
+    <SkipType name="BarcodePrint.WpfView.*" />
+    
+    <!-- 비즈니스 로직, 통신, 보안 및 알고리즘 모듈은 내부/비공개 멤버 전체 철저 난독화 -->
+  </Module>
+</Obfuscator>

@@ -1,0 +1,41 @@
+## Visual Studio & Build Outputs
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Packages (NuGet dependencies are restored during build)
+**/packages/*
+!**/packages/build/
+
+## Sensitive & Authentication Files (DO NOT COMMIT)
+credentials.json
+token.json
+*.pfx
+*.key
+*.cer
+*.crt
+
+## Local Hardware & Serial Data
+Info/*.dat
+Info/PrinterSerialMatch.log
+Info/server/
+print_history.json
+app_settings.json
+
+## Large & Temporary Archive Files
+repomix-output.xml
+*.zip
+*.tar
+*.rar
+temp_download.zip
+temp_extracted/
+UpgradeLog.htm
+
+## Obfuscar Output
+**/Obfuscated/

@@ -1,0 +1,55 @@
+================================================================================
+LabelMaster Basic v2 - 프로그램 라이선스 및 오픈소스 고지 (License Notice)
+================================================================================
+
+[ 프로그램 기본 정보 ]
+- 프로그램명: LabelMaster Basic v2
+- 버전 (Version): 2.0.0 (Release Build)
+- 개발 및 공급: 한국Xprinter (Xprinter Korea)
+- 공식 웹사이트: https://xprinter.co.kr
+- 최신버전 다운로드 링크: https://xpix.co.kr/labelmaster/basic/download
+
+--------------------------------------------------------------------------------
+1. 상용 라이선스 (Commercial License)
+--------------------------------------------------------------------------------
+본 소프트웨어는 한국Xprinter 정품 하드웨어 고객을 위한 전용 소프트웨어입니다.
+정품 Xprinter 라벨 프린터 하드웨어 및 공인된 시리얼 번호를 통해 정식 라이선스가
+부여되며, 허가되지 않은 무단 복제, 역공학 및 재배포를 금지합니다.
+
+--------------------------------------------------------------------------------
+2. 사용된 오픈소스 라이브러리 (Open Source Licenses)
+--------------------------------------------------------------------------------
+본 소프트웨어는 안정적인 기능 제공을 위해 상업적 이용이 허가된 아래의
+오픈소스 라이브러리를 준수하여 사용하고 있습니다.
+
+1. ClosedXML (MIT License)
+   - Copyright (c) 2016 ClosedXML
+   - https://github.com/ClosedXML/ClosedXML
+   - 엑셀(.xlsx) 파일 데이터 고속 읽기/쓰기 처리
+
+2. DocumentFormat.OpenXml (MIT License)
+   - Copyright (c) Microsoft Corporation
+   - https://github.com/OfficeDev/Open-XML-SDK
+   - Office Open XML 스프레드시트 표준 규격 지원
+
+3. ZXing.Net (Apache License 2.0)
+   - Copyright (C) 2012 ZXing.Net Authors
+   - https://github.com/micjahn/ZXing.Net
+   - 1차원(Code128, EAN13 등) 및 2차원(QR Code) 바코드 고정밀 렌더링
+
+4. Costura.Fody (MIT License)
+   - Copyright (c) Simon Cropp and contributors
+   - https://github.com/Fody/Costura
+   - 종속 DLL 단일 어셈블리 임베딩
+
+--------------------------------------------------------------------------------
+3. 기술 지원 및 고객 문의 (Technical Support & Inquiries)
+--------------------------------------------------------------------------------
+- 개발/공급: 한국Xprinter (Xprinter Korea)
+- 프로그램 문의: help@endream.com
+- 공식 웹사이트: https://xprinter.co.kr
+- 최신버전 다운로드 링크: https://xpix.co.kr/labelmaster/basic/download
+- 지원 하드웨어: Xprinter TSPL 라벨 프린터 전 기종 (XP-423B, D4601B, DT108B, T4501 등 ※ 일부 모델은 지원되지 않을 수 있습니다)
+
+Copyright (c) 2026 한국Xprinter. All rights reserved.
+================================================================================
