@@ -120,18 +120,32 @@ if exist "%~dp0bin\LabelMaster" (
     )
 )
 
+:: Google Drive 공식 배포 폴더 자동 업로드
+echo.
 echo ==================================================
-echo [SUCCESS] LabelMaster v%APP_VERSION% 빌드, 패키징 및 배포 완료!
+echo [INFO] Google Drive 배포 폴더 동기화 진행...
+python "%~dp0upload_all_to_gdrive.py"
+if %errorlevel% neq 0 (
+    echo [WARNING] Google Drive 업로드 실패 또는 인증 필요
+) else (
+    echo [INFO] Google Drive 동기화 완료
+)
+
+echo ==================================================
+echo [SUCCESS] LabelMaster v%APP_VERSION% 빌드, 패키징 및 3중 배포 완료!
 echo.
 echo [배포 결과 확인]
 echo - 로컬 배포 폴더: bin\LabelMaster
 echo - 로컬 실행 파일: bin\LabelMaster\LabelMaster.exe
 echo - 로컬 압축 파일: bin\LabelMaster_v%APP_VERSION%.zip
 echo.
-echo [Cloudflare R2 다운로드 주소]
+echo [1. Cloudflare R2 다운로드 주소]
 echo - https://pub-50e160c2ce5d41f6a4e2edcf7267f555.r2.dev/LabelMaster_v%APP_VERSION%.zip
 echo.
-echo [xpix.co.kr 다운로드 주소 (기존 basic과 중복되지 않는 신규 주소)]
+echo [2. xpix.co.kr 다운로드 주소 (기존 basic과 중복되지 않는 신규 주소)]
 echo - https://xpix.co.kr/labelmaster/windows/download
+echo.
+echo [3. Google Drive 공식 배포 폴더 주소]
+echo - https://drive.google.com/drive/u/0/folders/18Ee0vrvlibAwPf9lP0HNeXpE2DENZv-h
 echo.
 pause
