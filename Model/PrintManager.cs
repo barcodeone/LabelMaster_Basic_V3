@@ -340,10 +340,19 @@ namespace BarcodePrint.Model
                 SIZE = PRINT_INFO_CLASS.PrinterInfo.Paper_Height.ToString() + " mm," + PRINT_INFO_CLASS.PrinterInfo.Paper_Width.ToString() + " mm";
             }
 
-            //"GAPDETECT" or "BLINEDETECT" or  "AUTODETECT"
-            // TSPL 명령어 헤더 추가
-
             AddToByteList(tsplCommandBytes, ConvertToHexadecimal("CLS\r\n"));
+
+            // [열전사 리본 연동] IsRibbon 설정에 따라 리본 모터 동기화 및 센서 오작동 방지 명령 주입
+            if (ribbon)
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON ON\r\n"));
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET ENCODER OFF\r\n"));   // 리본 인코더 에러 센서 비활성화
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBONEND OFF\r\n")); // 리본 엔드 에러 센서 비활성화
+            }
+            else
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON OFF\r\n"));
+            }
 
             if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.GAP)
             {
@@ -354,6 +363,10 @@ namespace BarcodePrint.Model
                 COMMAND = "BLINEDETECT";
             }
             else if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.CONTINEUS)
+            {
+                COMMAND = "AUTODETECT";
+            }
+            else
             {
                 COMMAND = "AUTODETECT";
             }
@@ -368,36 +381,65 @@ namespace BarcodePrint.Model
             List<byte> tsplCommandBytes = new List<byte>();
 
             string SIZE = PRINT_INFO_CLASS.PrinterInfo.Paper_Width.ToString() + " mm," + PRINT_INFO_CLASS.PrinterInfo.Paper_Height.ToString() + " mm";
-            int SPEED = PRINT_INFO_CLASS.PrinterInfo.nPrintSpeed;
             bool ribbon = PRINT_INFO_CLASS.PrinterInfo.bRibbon;
             int GAP = PRINT_INFO_CLASS.PrinterInfo.nGAP;
-            string COMMAND = "HOME";
-
 
             if (PRINT_INFO_CLASS.PrinterInfo.bPaperRotated)
             {
                 SIZE = PRINT_INFO_CLASS.PrinterInfo.Paper_Height.ToString() + " mm," + PRINT_INFO_CLASS.PrinterInfo.Paper_Width.ToString() + " mm";
             }
 
-            //"GAPDETECT" or "BLINEDETECT" or  "AUTODETECT"
-            // TSPL 명령어 헤더 추가
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"SIZE {SIZE}\r\n"));
 
-            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("CLS\r\n"));
-
-            if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.GAP)
+            if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.BLINE)
             {
-                COMMAND = "GAPDETECT";
-            }
-            else if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.BLINE)
-            {
-                COMMAND = "BLINEDETECT";
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"BLINE {GAP} mm,0 mm\r\n"));
             }
             else if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.CONTINEUS)
             {
-                COMMAND = "AUTODETECT";
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("GAP 0,0\r\n"));
+            }
+            else
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"GAP {GAP} mm,0 mm\r\n"));
             }
 
-            AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"{COMMAND}\r\n"));
+            // [열전사 리본 연동]
+            if (ribbon)
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON ON\r\n"));
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET ENCODER OFF\r\n"));
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBONEND OFF\r\n"));
+            }
+            else
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON OFF\r\n"));
+            }
+
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("HOME\r\nCLS\r\n"));
+
+            return tsplCommandBytes.ToArray();
+        }
+
+        public static byte[] Command_FEED()
+        {
+            List<byte> tsplCommandBytes = new List<byte>();
+            bool ribbon = PRINT_INFO_CLASS.PrinterInfo.bRibbon;
+
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("CLS\r\n"));
+
+            if (ribbon)
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON ON\r\n"));
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET ENCODER OFF\r\n"));
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBONEND OFF\r\n"));
+            }
+            else
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON OFF\r\n"));
+            }
+
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("FORMFEED\r\n"));
 
             return tsplCommandBytes.ToArray();
         }

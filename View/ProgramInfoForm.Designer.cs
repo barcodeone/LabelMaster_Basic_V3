@@ -39,8 +39,8 @@ namespace BarcodePrint.View
             this.label_Info.Name = "label_Info";
             this.label_Info.Size = new System.Drawing.Size(280, 168);
             this.label_Info.TabIndex = 0;
-            this.label_Info.Text = "프로그램: 라벨마스터 베이직\r\n버전: 1.1.0\r\n\r\n개발: 한국Xprinter\r\n홈페이지: https://xprinter.co.kr\r\n\r" +
-    "\n이 프로그램은 라벨 인쇄를 위한\r\n한국Xprinter 전용 소프트웨어입니다.";
+            this.label_Info.Text = "프로그램: 라벨마스터 스튜디오\r\n버전: v1.0\r\n\r\n개발: 이엔드림 주식회사\r\n고객지원: endreaminc@gmail.com\r\n\r" +
+    "\n이 프로그램은 라벨 인쇄를 위한\r\nTSPL 전용 소프트웨어입니다.";
             // 
             // ProgramInfoForm
             // 

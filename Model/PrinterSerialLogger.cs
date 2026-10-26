@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 
@@ -132,6 +133,45 @@ namespace BarcodePrint.Model
                     WriteLog($"   스택 트레이스: {exception.StackTrace}");
                 }
             }
+        }
+
+        public static void WriteCommLog(string category, string message)
+        {
+            try
+            {
+                string text = $"[{category}] {message}";
+                WriteLog(text);
+
+                lock (lockObject)
+                {
+                    string commLogPath = Path.Combine(GetLogDirectory(), "PrinterComm.log");
+                    string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    string logEntry = $"[{timestamp}] [{category}] {message}";
+
+                    using (StreamWriter writer = new StreamWriter(commLogPath, true, Encoding.UTF8))
+                    {
+                        writer.WriteLine(logEntry);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public static void OpenCommLogFile()
+        {
+            try
+            {
+                string commLogPath = Path.Combine(GetLogDirectory(), "PrinterComm.log");
+                if (!File.Exists(commLogPath))
+                {
+                    commLogPath = GetLogFilePath();
+                }
+                if (File.Exists(commLogPath))
+                {
+                    Process.Start(new ProcessStartInfo("notepad.exe", $"\"{commLogPath}\"") { UseShellExecute = true });
+                }
+            }
+            catch { }
         }
 
         public static void LogProgramEnd()

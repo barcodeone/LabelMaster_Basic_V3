@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using BarcodePrint.Model;
 
@@ -21,8 +22,8 @@ namespace BarcodePrint.ViewModel
 
         public void SetItemOffsetDirect(int itemIndex, int xMm, int yMm, bool triggerPreview = false)
         {
-            int effW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 70;
-            int effH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 30;
+            int effW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80;
+            int effH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60;
             int clampedX = Math.Max(0, Math.Min(effW - 2, xMm));
             int clampedY = Math.Max(0, Math.Min(effH - 2, yMm));
 
@@ -49,8 +50,8 @@ namespace BarcodePrint.ViewModel
 
         public void UpdateItemPositionByDrag(int itemIndex, int deltaXMm, int deltaYMm)
         {
-            int effW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 70;
-            int effH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 30;
+            int effW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80;
+            int effH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60;
             switch (itemIndex)
             {
                 case 0: Col1OffsetX = Math.Max(0, Math.Min(effW - 2, Col1OffsetX + deltaXMm)); Col1OffsetY = Math.Max(0, Math.Min(effH - 2, Col1OffsetY + deltaYMm)); break;
@@ -71,18 +72,17 @@ namespace BarcodePrint.ViewModel
         {
             switch (itemIndex)
             {
-                case 0:
-                case 1: Col1Size = Math.Max(6, Math.Min(40, Col1Size + delta)); break;
-                case 2: Col2Size = Math.Max(6, Math.Min(40, Col2Size + delta)); break;
-                case 3: Col3Size = Math.Max(6, Math.Min(40, Col3Size + delta)); break;
-                case 4: Col4Size = Math.Max(6, Math.Min(40, Col4Size + delta)); break;
-                case 5: Col5Size = Math.Max(6, Math.Min(40, Col5Size + delta)); break;
-                case 6: Col6Size = Math.Max(6, Math.Min(40, Col6Size + delta)); break;
-                case 7: Col7Size = Math.Max(6, Math.Min(40, Col7Size + delta)); break;
-                case 8: Col8Size = Math.Max(6, Math.Min(40, Col8Size + delta)); break;
-                case 99: DateTimeSize = Math.Max(6, Math.Min(40, DateTimeSize + delta)); break;
-                case 100: TableTitleSize = Math.Max(6, Math.Min(36, TableTitleSize + delta)); break;
-                case 101: SerialSize = Math.Max(6, Math.Min(40, SerialSize + delta)); break;
+                case 1: Col1Size = Math.Max(4, Math.Min(200, Col1Size + delta)); break;
+                case 2: Col2Size = Math.Max(4, Math.Min(200, Col2Size + delta)); break;
+                case 3: Col3Size = Math.Max(4, Math.Min(200, Col3Size + delta)); break;
+                case 4: Col4Size = Math.Max(4, Math.Min(200, Col4Size + delta)); break;
+                case 5: Col5Size = Math.Max(4, Math.Min(200, Col5Size + delta)); break;
+                case 6: Col6Size = Math.Max(4, Math.Min(200, Col6Size + delta)); break;
+                case 7: Col7Size = Math.Max(4, Math.Min(200, Col7Size + delta)); break;
+                case 8: Col8Size = Math.Max(4, Math.Min(200, Col8Size + delta)); break;
+                case 99: DateTimeSize = Math.Max(4, Math.Min(200, DateTimeSize + delta)); break;
+                case 100: TableTitleSize = Math.Max(4, Math.Min(200, TableTitleSize + delta)); break;
+                case 101: SerialSize = Math.Max(4, Math.Min(200, SerialSize + delta)); break;
             }
         }
 
@@ -175,20 +175,9 @@ namespace BarcodePrint.ViewModel
         {
             string[] values = new string[8];
 
-            // 단건 직접 입력 탭(SelectedWorkMode == 0)인 경우 항상 사용자가 직접 입력한 값을 반환
-            if (SelectedWorkMode == 0)
-            {
-                values[0] = InputCol1 ?? "";
-                values[1] = InputCol2 ?? "";
-                values[2] = InputCol3 ?? "";
-                values[3] = InputCol4 ?? "";
-                values[4] = InputCol5 ?? "";
-                values[5] = InputCol6 ?? "";
-                values[6] = InputCol7 ?? "";
-                values[7] = InputCol8 ?? "";
-            }
-            // 엑셀/목록 관리 탭(SelectedWorkMode == 1)인 경우 현재 선택/지정된 레코드 값 반환
-            else if (CurrentPreviewIndex > 0 && Records != null && CurrentPreviewIndex <= Records.Count)
+            // 1. 현재 미리보기 인덱스가 1 이상이고 레코드가 존재하는 경우:
+            // 작업 모드(탭 0 라벨 서식 편집, 탭 1 엑셀 목록)와 무관하게 현재 탐색 중인 레코드의 데이터 반환
+            if (CurrentPreviewIndex > 0 && Records != null && CurrentPreviewIndex <= Records.Count)
             {
                 var rec = Records[CurrentPreviewIndex - 1];
                 values[0] = rec.Col1 ?? "";
@@ -200,7 +189,8 @@ namespace BarcodePrint.ViewModel
                 values[6] = rec.Col7 ?? "";
                 values[7] = rec.Col8 ?? "";
             }
-            else if (SelectedRecord != null)
+            // 2. 엑셀/목록 관리 탭(SelectedWorkMode == 1)에서 특정 레코드가 선택된 경우
+            else if (SelectedWorkMode == 1 && SelectedRecord != null)
             {
                 values[0] = SelectedRecord.Col1 ?? "";
                 values[1] = SelectedRecord.Col2 ?? "";
@@ -211,16 +201,22 @@ namespace BarcodePrint.ViewModel
                 values[6] = SelectedRecord.Col7 ?? "";
                 values[7] = SelectedRecord.Col8 ?? "";
             }
+            // 3. 단건 직접 입력 모드이거나 레코드가 없는 경우 사용자가 직접 입력한 값 반환 (비어있으면 템플릿 요소 Content 폴백 유지)
             else
             {
-                values[0] = InputCol1 ?? "";
-                values[1] = InputCol2 ?? "";
-                values[2] = InputCol3 ?? "";
-                values[3] = InputCol4 ?? "";
-                values[4] = InputCol5 ?? "";
-                values[5] = InputCol6 ?? "";
-                values[6] = InputCol7 ?? "";
-                values[7] = InputCol8 ?? "";
+                for (int c = 1; c <= 8; c++)
+                {
+                    string input = GetInputByIndex(c);
+                    if (!string.IsNullOrEmpty(input))
+                    {
+                        values[c - 1] = input;
+                    }
+                    else
+                    {
+                        var elem = CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == c);
+                        values[c - 1] = elem?.Content ?? "";
+                    }
+                }
             }
 
             return values;
@@ -329,7 +325,7 @@ namespace BarcodePrint.ViewModel
             bool isIncludeHeader = GetIncludeHeaderByIndex(colNum);
             bool isBarcode = GetBarcodeByIndex(colNum);
 
-            string displayVal = isPrice ? PriceFormatHelper.FormatShortPriceInput(val) : val;
+            string displayVal = isPrice ? PriceFormatHelper.FormatPrice(val, true) : val;
             if (string.IsNullOrEmpty(displayVal))
             {
                 displayVal = (isIncludeHeader && !isBarcode) ? $"{header}: [{header}]" : $"[{header}]";
@@ -405,6 +401,12 @@ namespace BarcodePrint.ViewModel
 
         public void ExecuteAlign(string align)
         {
+            if (_selectedElements != null && (_selectedElements.Count > 0 || SelectedElement != null))
+            {
+                AlignSelectedElements(align);
+                return;
+            }
+
             string alignKor = align == "LEFT" ? "좌측" : (align == "CENTER" ? "가운데" : "우측");
             int paperW = Math.Max(15, PaperWidth);
 
@@ -490,9 +492,12 @@ namespace BarcodePrint.ViewModel
             UpdatePreview();
         }
 
-        private void ExecuteAlignLeft() => ExecuteAlign("LEFT");
-        private void ExecuteAlignCenter() => ExecuteAlign("CENTER");
-        private void ExecuteAlignRight() => ExecuteAlign("RIGHT");
+        public void ExecuteAlignLeft() => ExecuteAlign("LEFT");
+        public void ExecuteAlignCenter() => ExecuteAlign("CENTER");
+        public void ExecuteAlignRight() => ExecuteAlign("RIGHT");
+        public void ExecuteAlignTop() => AlignSelectedElements("TOP");
+        public void ExecuteAlignMiddle() => AlignSelectedElements("MIDDLE");
+        public void ExecuteAlignBottom() => AlignSelectedElements("BOTTOM");
 
         public double CalculateItemHeightMm(int colNum)
         {
@@ -530,8 +535,14 @@ namespace BarcodePrint.ViewModel
             }
         }
 
-        private void ExecuteDistributeVertical()
+        public void ExecuteDistributeVertical()
         {
+            if (_selectedElements != null && _selectedElements.Count >= 2)
+            {
+                AlignSelectedElements("DISTRIBUTE_VERTICALLY");
+                return;
+            }
+
             int count = Math.Max(1, Math.Min(8, ActiveColumnCount));
             int paperH = Math.Max(15, EffectivePaperHeight > 0 ? EffectivePaperHeight : PaperHeight);
 
@@ -568,8 +579,14 @@ namespace BarcodePrint.ViewModel
             UpdatePreview();
         }
 
-        private void ExecuteDistributeHorizontal()
+        public void ExecuteDistributeHorizontal()
         {
+            if (_selectedElements != null && _selectedElements.Count >= 2)
+            {
+                AlignSelectedElements("DISTRIBUTE_HORIZONTALLY");
+                return;
+            }
+
             int count = Math.Max(1, Math.Min(8, ActiveColumnCount));
             int paperW = Math.Max(15, EffectivePaperWidth > 0 ? EffectivePaperWidth : PaperWidth);
 

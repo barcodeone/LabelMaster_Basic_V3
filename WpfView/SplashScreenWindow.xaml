@@ -1,7 +1,7 @@
 <Window x:Class="BarcodePrint.WpfView.SplashScreenWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="LabelMaster Basic v2 Starting..." Height="185" Width="430"
+        Title="라벨마스터 v1.0 시작 중..." Height="185" Width="430"
         WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" Topmost="True" ShowInTaskbar="False" FontFamily="Malgun Gothic">
 
@@ -51,20 +51,21 @@
             </Grid.RowDefinitions>
 
             <!-- 1. Brand Logo & Title -->
-            <Grid Grid.Row="0" Margin="0,0,0,16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="🏷️ LabelMaster" FontSize="21" FontWeight="Bold" Foreground="#0F172A"/>
-                    <Border Background="#2563EB" CornerRadius="4" Padding="7,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="Basic v2.0" FontSize="11.5" FontWeight="Bold" Foreground="White"/>
+            <Grid Grid.Row="0" Margin="0,0,0,14">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="48" Height="48" CornerRadius="8" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/LabelMaster;component/resource/Logo_LM.jpg" Stretch="Uniform" Margin="2" RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="라벨마스터" FontSize="20" FontWeight="Bold" Foreground="#0F172A"/>
+                            <Border Background="#2563EB" CornerRadius="4" Padding="6,1.5" Margin="8,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtSplashVersion" Text="v1.0.1" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="LABEL MASTER STUDIO" FontSize="10.5" FontWeight="SemiBold" Foreground="#64748B" Margin="0,2,0,0"/>
+                    </StackPanel>
                 </StackPanel>
-                <Border Grid.Column="1" Background="#EFF6FF" BorderBrush="#DBEAFE" BorderThickness="1" CornerRadius="6" Padding="10,4" VerticalAlignment="Center">
-                    <TextBlock Text="한국Xprinter" FontSize="11.5" FontWeight="Bold" Foreground="#1E40AF"/>
-                </Border>
             </Grid>
 
             <!-- 2. Big, Clear Progress Bar & Realtime Status Text -->
@@ -75,7 +76,7 @@
                 </Grid>
                 <!-- 시원하게 커진 프로그레스 바 (Height: 8px, 둥근 모서리) -->
                 <ProgressBar x:Name="LoadingProgressBar" Height="8" Minimum="0" Maximum="100" Value="0" Style="{StaticResource ModernProgressBarStyle}"/>
-                <TextBlock Text="https://xprinter.co.kr" FontSize="10.5" Foreground="#94A3B8" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                <TextBlock Text="고객지원: endreaminc@gmail.com" FontSize="10.5" Foreground="#94A3B8" HorizontalAlignment="Left" Margin="0,8,0,0"/>
             </StackPanel>
         </Grid>
     </Border>

@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -104,10 +106,95 @@ namespace BarcodePrint.Services
             }
         }
 
-        public string GetEffectivePrinterPort(UsbPrinterInfo printer)
+        public string GetEffectivePrinterPort(UsbPrinterInfo printer, string printerName = null)
         {
-            if (printer == null) return "USB001";
-            return !string.IsNullOrEmpty(printer.PortName) ? printer.PortName : "USB001";
+            string pName = printerName ?? printer?.Name ?? "";
+            bool isBt = pName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) ||
+                        pName.Contains("블루투스") ||
+                        (printer != null && printer.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase));
+            bool isLan = pName.StartsWith("[네트워크]", StringComparison.OrdinalIgnoreCase) ||
+                         (printer != null && printer.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase));
+
+            if (isBt)
+            {
+                // 1) 장치명 또는 MAC으로 레지스트리/WMI에서 실제 하드웨어 COM 포트 최우선 역조회 (오염된 캐시 자동 교정)
+                string rawDevName = printer?.FriendlyName ?? pName;
+                string cleanDevName = rawDevName.Replace("[블루투스]", "").Trim();
+                string resolved = UsbPrinterHelper.GetBluetoothPortForDeviceName(cleanDevName);
+                if (string.IsNullOrEmpty(resolved) && cleanDevName != rawDevName)
+                {
+                    resolved = UsbPrinterHelper.GetBluetoothPortForDeviceName(rawDevName);
+                }
+                if (!string.IsNullOrEmpty(resolved))
+                {
+                    if (printer != null) printer.PortName = resolved;
+                    return resolved;
+                }
+
+                if (printer != null && !string.IsNullOrEmpty(printer.Address) && !printer.Address.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+                {
+                    string macPort = UsbPrinterHelper.FindComPortForBluetoothMac(printer.Address);
+                    if (!string.IsNullOrEmpty(macPort))
+                    {
+                        printer.PortName = macPort;
+                        return macPort;
+                    }
+                }
+
+                // 2) 역조회가 안 될 때만 printer.PortName 사용
+                if (printer != null && !string.IsNullOrEmpty(printer.PortName) && !printer.PortName.StartsWith("USB", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(printer.PortName, @"COM\d+", RegexOptions.IgnoreCase))
+                {
+                    return printer.PortName;
+                }
+
+                // 3) AppSettings에 저장/선택된 BluetoothPortName 확인 (현재 시스템에 실제로 존재하는 포트일 때만 반영)
+                var st = new AppSettings();
+                st.Load();
+                if (!string.IsNullOrEmpty(st.BluetoothPortName) && Regex.IsMatch(st.BluetoothPortName, @"COM\d+", RegexOptions.IgnoreCase))
+                {
+                    string configuredPort = Regex.Match(st.BluetoothPortName, @"COM\d+", RegexOptions.IgnoreCase).Value.ToUpper();
+                    var available = UsbPrinterHelper.GetAvailableComPorts();
+                    if (available.Contains(configuredPort, StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (printer != null) printer.PortName = configuredPort;
+                        return configuredPort;
+                    }
+                }
+
+                // 4) pName 또는 printer.Address 자체에 COM 포트 번호가 포함된 경우
+                var m = Regex.Match(pName, @"COM\d+", RegexOptions.IgnoreCase);
+                if (m.Success)
+                {
+                    string pPort = m.Value.ToUpper();
+                    if (printer != null) printer.PortName = pPort;
+                    return pPort;
+                }
+                if (printer != null && !string.IsNullOrEmpty(printer.Address))
+                {
+                    var mAddr = Regex.Match(printer.Address, @"COM\d+", RegexOptions.IgnoreCase);
+                    if (mAddr.Success)
+                    {
+                        string addrPort = mAddr.Value.ToUpper();
+                        printer.PortName = addrPort;
+                        return addrPort;
+                    }
+                }
+
+                // 포트가 없으면 빈 문자열 반환 (절대 다른 장치의 포트로 오접속하지 않음)
+                return "";
+            }
+            if (isLan)
+            {
+                if (printer != null && !string.IsNullOrEmpty(printer.PortName) && !printer.PortName.StartsWith("USB", StringComparison.OrdinalIgnoreCase))
+                {
+                    return printer.PortName;
+                }
+                var st = new AppSettings();
+                st.Load();
+                return $"{st.TcpPrinterIp}:{st.TcpPrinterPort}";
+            }
+
+            return (!string.IsNullOrEmpty(printer?.PortName)) ? printer.PortName : "USB001";
         }
 
         /// <summary>
@@ -126,9 +213,21 @@ namespace BarcodePrint.Services
             try
             {
                 var info = cachedPrinters?.FirstOrDefault(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
-                string portName = GetEffectivePrinterPort(info);
-                string connType = info?.Type ?? (portName.StartsWith("USB", StringComparison.OrdinalIgnoreCase) ? "USB" : 
-                                                (portName.ToUpper().Contains("COM") || portName.ToUpper().Contains("BTH") ? "Bluetooth" : "LAN"));
+                if (info != null && (!info.IsPaired || printerName.Contains("(페어링 필요)")))
+                {
+                    badgeText = "🟠 미페어링 (페어링 필요)";
+                    badgeColor = "#F59E0B";
+                    return;
+                }
+
+                bool isBt = printerName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) ||
+                            printerName.Contains("블루투스") ||
+                            (info != null && info.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase));
+                bool isLan = printerName.StartsWith("[네트워크]", StringComparison.OrdinalIgnoreCase) ||
+                             (info != null && info.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase));
+
+                string connType = isBt ? "Bluetooth" : (isLan ? "LAN" : "USB");
+                string portName = GetEffectivePrinterPort(info, printerName);
 
                 string tsplStatus = QueryTsplLiveStatus(portName, connType);
                 if (!string.IsNullOrEmpty(tsplStatus))
@@ -143,6 +242,22 @@ namespace BarcodePrint.Services
                         badgeText = "🔴 " + tsplStatus;
                         badgeColor = "#DC2626";
                     }
+                    return;
+                }
+
+                // 🔍 블루투스 및 네트워크 프린터는 TSPL 질의 응답이 없으면 Windows Spooler로 빠지지 않고 즉시 오프라인 확정
+                if (isBt || isLan)
+                {
+                    badgeText = isBt ? "🔴 오프라인 (블루투스 미연결 / 전원 꺼짐)" : "🔴 오프라인 (네트워크 응답 없음 / 전원 꺼짐)";
+                    badgeColor = "#DC2626";
+                    return;
+                }
+
+                // 🔍 USB 프린터인 경우 물리적 USBPRINT 연결 장치가 존재하는지 확인
+                if (connType == "USB" && !HasConnectedUsbPrinters())
+                {
+                    badgeText = "🔴 오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
+                    badgeColor = "#DC2626";
                     return;
                 }
             }
@@ -160,6 +275,14 @@ namespace BarcodePrint.Services
                 if (!OpenPrinter(printerName, out hPrinter, ref defaults))
                 {
                     badgeText = "🔴 오프라인 (장치 없음)";
+                    badgeColor = "#D32F2F";
+                    return;
+                }
+
+                // USB 프린터인데 물리적 연결이 없는 경우 스풀러 상태가 0이어도 오프라인 처리
+                if (!HasConnectedUsbPrinters())
+                {
+                    badgeText = "🔴 오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
                     badgeColor = "#D32F2F";
                     return;
                 }
@@ -253,8 +376,8 @@ namespace BarcodePrint.Services
                 }
 
                 // 2차 시도: TSPL SDK 직렬 통신 폴백
-                var info = cachedPrinters?.FirstOrDefault(p => p.Name == printerName);
-                string portName = GetEffectivePrinterPort(info);
+                var info = cachedPrinters?.FirstOrDefault(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
+                string portName = GetEffectivePrinterPort(info, printerName);
 
                 IntPtr pHandle = TSPLPrint.InitPrinter(printerName);
                 if (pHandle != IntPtr.Zero)
@@ -276,7 +399,52 @@ namespace BarcodePrint.Services
                     }
                 }
 
-                errorMessage = "스풀러 및 TSPL SDK 포트 전송 모두 실패했습니다.";
+                // 3차 시도: 블루투스 가상 COM 포트(BthModem) NativeSerialStream 및 SerialPort 직접 전송 폴백
+                if (!string.IsNullOrEmpty(portName) && Regex.IsMatch(portName, @"COM\d+", RegexOptions.IgnoreCase))
+                {
+                    string comPort = Regex.Match(portName, @"COM\d+", RegexOptions.IgnoreCase).Value.ToUpper();
+                    string nativeErrMsg = null;
+                    try
+                    {
+                        using (var nativeStream = NativeSerialStream.Open(comPort))
+                        {
+                            if (nativeStream.IsOpen)
+                            {
+                                nativeStream.Write(tsplBytes, 0, tsplBytes.Length);
+                                return true;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        nativeErrMsg = ex.Message;
+                        PrinterSerialLogger.WriteCommLog("BT-ERR", $"NativeSerialStream 전송 예외 ({comPort}): {ex.Message}");
+                    }
+
+                    try
+                    {
+                        using (var sp = new System.IO.Ports.SerialPort(comPort, 9600, System.IO.Ports.Parity.None, 8, System.IO.Ports.StopBits.One))
+                        {
+                            sp.ReadTimeout = 3000;
+                            sp.WriteTimeout = 3000;
+                            sp.DtrEnable = true;
+                            sp.RtsEnable = true;
+                            sp.Handshake = System.IO.Ports.Handshake.None;
+                            sp.Open();
+                            sp.Write(tsplBytes, 0, tsplBytes.Length);
+                            try { sp.BaseStream.Flush(); } catch { }
+                            return true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        PrinterSerialLogger.WriteCommLog("BT-ERR", $"SerialPort 전송 예외 ({comPort}): {ex.Message}");
+                        errorMessage = $"블루투스 직렬 포트({comPort}) 전송 실패: {ex.Message}" + (!string.IsNullOrEmpty(nativeErrMsg) ? $" (파이프: {nativeErrMsg})" : "");
+                        return false;
+                    }
+                }
+
+                errorMessage = "스풀러, TSPL SDK 및 직렬(COM) 포트 전송 모두 실패했습니다.";
                 return false;
             }
             catch (Exception ex)
@@ -315,11 +483,55 @@ namespace BarcodePrint.Services
                 return empty;
             }
 
-            var info = cachedPrinters?.FirstOrDefault(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
-            string portName = GetEffectivePrinterPort(info);
+            Func<string, string> norm = s => (s ?? "")
+                .Replace("[블루투스]", "")
+                .Replace("[네트워크]", "")
+                .Replace("(페어링 필요)", "")
+                .Replace("(가상포트 연결 필요)", "")
+                .Replace("-", "")
+                .Replace(" ", "")
+                .Trim()
+                .ToUpperInvariant();
+
+            string targetKey = norm(printerName);
+            var info = cachedPrinters?.FirstOrDefault(p => norm(p.Name).Equals(targetKey) || norm(p.FriendlyName).Equals(targetKey));
+
+            if (info != null && (!info.IsPaired || info.Name.Contains("(페어링 필요)") || printerName.Contains("(페어링 필요)")))
+            {
+                var unp = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                unp["MODEL"] = info.FriendlyName;
+                unp["SERIAL"] = !string.IsNullOrEmpty(info.Serial) && info.Serial != "-" ? info.Serial : "-";
+                unp["MAC"] = !string.IsNullOrEmpty(info.Serial) && info.Serial != "-" ? info.Serial : "-";
+                unp["TYPE"] = "Bluetooth";
+                unp["PORT"] = "미할당 (페어링 필요)";
+                unp["상태"] = "⚠️ 미페어링 장치 (페어링 필요)";
+                unp["STATUS"] = "⚠️ 미페어링 장치 ([⚡ 연결 및 점검] 버튼을 누르면 페어링이 진행됩니다)";
+                return unp;
+            }
+
+            bool isBt = printerName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) ||
+                        printerName.Contains("블루투스") ||
+                        (info != null && info.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase));
+            bool isLan = printerName.StartsWith("[네트워크]", StringComparison.OrdinalIgnoreCase) ||
+                         (info != null && info.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase));
+
+            string connType = isBt ? "Bluetooth" : (isLan ? "LAN" : "USB");
+            string portName = GetEffectivePrinterPort(info, printerName);
             string registeredSerial = info?.Serial ?? "-";
-            string connType = info?.Type ?? (portName.StartsWith("USB", StringComparison.OrdinalIgnoreCase) ? "USB" : 
-                                            (portName.ToUpper().Contains("COM") || portName.ToUpper().Contains("BTH") ? "Bluetooth" : "LAN"));
+
+            // 블루투스인데 유효한 포트가 없는 경우 즉시 안내하고 통신 시도 차단
+            if (isBt && (string.IsNullOrEmpty(portName) || !Regex.IsMatch(portName, @"COM\d+", RegexOptions.IgnoreCase)))
+            {
+                var noPort = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                noPort["MODEL"] = info?.FriendlyName ?? printerName;
+                noPort["SERIAL"] = registeredSerial;
+                noPort["MAC"] = registeredSerial;
+                noPort["TYPE"] = "Bluetooth";
+                noPort["PORT"] = "가상포트 미할당";
+                noPort["상태"] = "⚠️ 가상 직렬(COM) 포트 미할당 (재검색 필요)";
+                noPort["STATUS"] = "⚠️ 가상 직렬(COM) 포트가 할당되지 않았습니다. [블루투스 장치 검색]을 눌러 포트를 갱신하세요.";
+                return noPort;
+            }
 
             // 1. New_xPix 방식: USB/LAN/BT Direct 통신으로 TSPL GETSETTING$ 통합 쿼리 전송 및 실시간 응답 수신
             try
@@ -348,82 +560,108 @@ namespace BarcodePrint.Services
                 System.Diagnostics.Debug.WriteLine($"TSPL Direct 질의 오류: {ex.Message}");
             }
 
-            // 하드웨어 쿼리 후 USB 엔드포인트 안정화 대기
-            Thread.Sleep(150);
-
-            // 2. 실시간 상태: New_xPix TSPL 실시간 통신 기반 정밀 하드웨어 상태 분석
+            // 2. 실시간 상태 판정
             string liveStatus = null;
-            try
+            if (rawDetails.Count > 0)
             {
-                liveStatus = QueryTsplLiveStatus(portName, connType);
-                if (string.IsNullOrEmpty(liveStatus))
+                liveStatus = "정상 준비 (Ready)";
+            }
+            else
+            {
+                // 통신 응답이 없는 경우: 블루투스/네트워크는 즉시 오프라인 확정
+                if (isBt)
                 {
-                    Thread.Sleep(300);
-                    liveStatus = QueryTsplLiveStatus(portName, connType);
+                    liveStatus = "오프라인 (블루투스 미연결 / 전원 꺼짐)";
+                }
+                else if (isLan)
+                {
+                    liveStatus = "오프라인 (네트워크 응답 없음 / 전원 꺼짐)";
+                }
+                else if (connType == "USB" && !HasConnectedUsbPrinters())
+                {
+                    liveStatus = "오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
+                }
+                else
+                {
+                    try
+                    {
+                        liveStatus = QueryTsplLiveStatus(portName, connType);
+                    }
+                    catch { }
                 }
             }
-            catch { }
 
             if (string.IsNullOrEmpty(liveStatus))
             {
-                try
+                if (isBt || isLan || (connType == "USB" && !HasConnectedUsbPrinters()))
                 {
-                    IntPtr hPrinter = IntPtr.Zero;
-                    PRINTER_DEFAULTS defaults = new PRINTER_DEFAULTS { DesiredAccess = 0x00000008 };
-                    if (OpenPrinter(printerName, out hPrinter, ref defaults))
+                    liveStatus = "오프라인 (통신 응답 없음)";
+                }
+                else
+                {
+                    try
                     {
-                        try
+                        IntPtr hPrinter = IntPtr.Zero;
+                        PRINTER_DEFAULTS defaults = new PRINTER_DEFAULTS { DesiredAccess = 0x00000008 };
+                        if (OpenPrinter(printerName, out hPrinter, ref defaults))
                         {
-                            int pcbNeeded = 0;
-                            GetPrinter(hPrinter, 2, IntPtr.Zero, 0, ref pcbNeeded);
-                            if (pcbNeeded > 0)
+                            try
                             {
-                                IntPtr pPrinter = Marshal.AllocHGlobal(pcbNeeded);
-                                try
+                                int pcbNeeded = 0;
+                                GetPrinter(hPrinter, 2, IntPtr.Zero, 0, ref pcbNeeded);
+                                if (pcbNeeded > 0)
                                 {
-                                    if (GetPrinter(hPrinter, 2, pPrinter, pcbNeeded, ref pcbNeeded))
+                                    IntPtr pPrinter = Marshal.AllocHGlobal(pcbNeeded);
+                                    try
                                     {
-                                        var pInfo = Marshal.PtrToStructure<PRINTER_INFO_2>(pPrinter);
-                                        uint status = pInfo.Status;
-                                        bool isWorkOffline = (pInfo.Attributes & 0x00000400) != 0;
-
-                                        if (isWorkOffline) liveStatus = "오프라인 (WorkOffline)";
-                                        else if (status == 0) liveStatus = "정상 준비 (Ready)";
-                                        else
+                                        if (GetPrinter(hPrinter, 2, pPrinter, pcbNeeded, ref pcbNeeded))
                                         {
-                                            List<string> statusList = new List<string>();
-                                            if ((status & 0x00000001) != 0) statusList.Add("일시 중지됨");
-                                            if ((status & 0x00000002) != 0) statusList.Add("오류");
-                                            if ((status & 0x00000008) != 0) statusList.Add("용지 걸림");
-                                            if ((status & 0x00000010) != 0) statusList.Add("용지 없음");
-                                            if ((status & 0x00000080) != 0) statusList.Add("오프라인");
-                                            if ((status & 0x00000200) != 0) statusList.Add("바쁨 (Busy)");
-                                            if ((status & 0x00000400) != 0) statusList.Add("인쇄 중");
-                                            if ((status & 0x00100000) != 0) statusList.Add("사용자 조치 필요");
-                                            if ((status & 0x00400000) != 0) statusList.Add("커버 열림");
-                                            liveStatus = statusList.Count > 0 ? string.Join(", ", statusList) : "정상 준비 (Ready)";
+                                            var pInfo = Marshal.PtrToStructure<PRINTER_INFO_2>(pPrinter);
+                                            uint status = pInfo.Status;
+                                            bool isWorkOffline = (pInfo.Attributes & 0x00000400) != 0;
+
+                                            if (isWorkOffline) liveStatus = "오프라인 (WorkOffline)";
+                                            else if (status == 0) liveStatus = (rawDetails.Count > 0) ? "정상 준비 (Ready)" : "오프라인 (응답 없음)";
+                                            else
+                                            {
+                                                List<string> statusList = new List<string>();
+                                                if ((status & 0x00000001) != 0) statusList.Add("일시 중지됨");
+                                                if ((status & 0x00000002) != 0) statusList.Add("오류");
+                                                if ((status & 0x00000008) != 0) statusList.Add("용지 걸림");
+                                                if ((status & 0x00000010) != 0) statusList.Add("용지 없음");
+                                                if ((status & 0x00000080) != 0) statusList.Add("오프라인");
+                                                if ((status & 0x00000200) != 0) statusList.Add("바쁨 (Busy)");
+                                                if ((status & 0x00000400) != 0) statusList.Add("인쇄 중");
+                                                if ((status & 0x00100000) != 0) statusList.Add("사용자 조치 필요");
+                                                if ((status & 0x00400000) != 0) statusList.Add("커버 열림");
+                                                liveStatus = statusList.Count > 0 ? string.Join(", ", statusList) : ((rawDetails.Count > 0) ? "정상 준비 (Ready)" : "오프라인 (응답 없음)");
+                                            }
                                         }
                                     }
-                                }
-                                finally
-                                {
-                                    Marshal.FreeHGlobal(pPrinter);
+                                    finally
+                                    {
+                                        Marshal.FreeHGlobal(pPrinter);
+                                    }
                                 }
                             }
-                        }
-                        finally
-                        {
-                            ClosePrinter(hPrinter);
+                            finally
+                            {
+                                ClosePrinter(hPrinter);
+                            }
                         }
                     }
+                    catch { }
                 }
-                catch { }
             }
 
-            if (string.IsNullOrEmpty(liveStatus)) liveStatus = "정상 준비 (Ready)";
+            if (string.IsNullOrEmpty(liveStatus))
+            {
+                liveStatus = (rawDetails.Count > 0) ? "정상 준비 (Ready)" : "오프라인 (통신 응답 없음)";
+            }
 
             // 3. New_xPix 기준 정렬된 결과 Dictionary 생성
             var details = new Dictionary<string, string>();
+            details["IS_SUCCESS"] = (rawDetails.Count > 0) ? "true" : "false";
 
             // 해상도
             if (rawDetails.TryGetValue("DPI", out string dpiVal)) details["해상도"] = dpiVal;
@@ -437,9 +675,25 @@ namespace BarcodePrint.Services
             if (rawDetails.TryGetValue("SER", out string serVal) && !string.IsNullOrWhiteSpace(serVal) && serVal != "-") details["시리얼"] = serVal;
             else details["시리얼"] = registeredSerial;
 
-            // 펌웨어
-            if (rawDetails.TryGetValue("VER", out string verVal)) details["펌웨어"] = verVal;
-            else details["펌웨어"] = "-";
+            // 펌웨어 (안드로이드/iOS/Mac 100% 동일 표시)
+            if (rawDetails.TryGetValue("VER", out string verVal) && !string.IsNullOrWhiteSpace(verVal) && verVal != "-") 
+            {
+                details["펌웨어"] = verVal;
+            }
+            else 
+            {
+                // 블루투스 연결에서 펌웨어 미회신 시 원샷 단독 질의 실행 (~!V / ~!T)
+                if (connType == "Bluetooth")
+                {
+                    string fbVer = QueryFirmwareVersionBluetoothFallback(portName);
+                    if (!string.IsNullOrEmpty(fbVer) && fbVer != "-") details["펌웨어"] = fbVer;
+                    else details["펌웨어"] = "-";
+                }
+                else
+                {
+                    details["펌웨어"] = "-";
+                }
+            }
 
             // 누적거리
             if (rawDetails.TryGetValue("MIL", out string milVal)) details["누적거리"] = milVal;
@@ -737,7 +991,19 @@ namespace BarcodePrint.Services
             return null;
         }
 
-        private List<string> FindUsbPrinterPaths()
+        public static bool HasConnectedUsbPrinters()
+        {
+            try
+            {
+                return FindUsbPrinterPaths().Count > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static List<string> FindUsbPrinterPaths()
         {
             var paths = new List<string>();
             Guid classGuid = UsbPrintGuid;
@@ -810,19 +1076,19 @@ namespace BarcodePrint.Services
                 "\"|BLN_INT=\";GETSETTING$(\"CONFIG\",\"SENSOR\",\"BLINE INTENSION\");" +
                 "\"|OFF=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"OFFSET\");" +
                 "\"|REFX=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE X\");" +
-                "\"|REFY=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE Y\");\"|\"\r\n";
+                "\"|REFY=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE Y\");\"|END|\"\r\n";
 
             byte[] cmdBytes = Encoding.ASCII.GetBytes(queryCmd);
 
             // 1차 시도
             string response = SendAndReceiveUsbDirect(usbPath, cmdBytes);
-            if (!string.IsNullOrEmpty(response) && (response.Contains("DPI=") || response.Contains("MDL=") || response.Contains("|")))
+            if (!string.IsNullOrEmpty(response) && (response.Contains("|END|") || response.Contains("DEN=") || response.Contains("W=")))
             {
                 return response;
             }
 
-            // 2차 재시도 (New_xPix와 동일하게 500ms 대기 후 재시도)
-            Thread.Sleep(500);
+            // 2차 재시도 (응답 누락 시 350ms 대기 후 재시도)
+            Thread.Sleep(350);
             return SendAndReceiveUsbDirect(usbPath, cmdBytes);
         }
 
@@ -839,16 +1105,16 @@ namespace BarcodePrint.Services
                     fs.Write(cmdBytes, 0, cmdBytes.Length);
                     fs.Flush();
 
-                    Thread.Sleep(150);
+                    Thread.Sleep(50);
 
                     List<byte> accumulated = new List<byte>();
                     byte[] buf = new byte[4096];
                     DateTime startTime = DateTime.Now;
 
-                    while ((DateTime.Now - startTime).TotalMilliseconds < 2500)
+                    while ((DateTime.Now - startTime).TotalMilliseconds < 1500)
                     {
                         var readTask = fs.ReadAsync(buf, 0, buf.Length);
-                        if (readTask.Wait(300))
+                        if (readTask.Wait(120))
                         {
                             int r = readTask.Result;
                             if (r > 0)
@@ -857,25 +1123,24 @@ namespace BarcodePrint.Services
                                 Array.Copy(buf, 0, slice, 0, r);
                                 accumulated.AddRange(slice);
 
-                                if (accumulated.Count >= 10)
+                                string curText = Encoding.ASCII.GetString(accumulated.ToArray());
+                                // 전체 쿼리의 최종 마커인 |END| 또는 마지막 항목(DEN)까지 모두 들어왔으면 즉시 수신 완료
+                                if (curText.Contains("|END|") || (curText.Contains("DEN=") && (curText.EndsWith("\n") || curText.EndsWith("\r") || curText.EndsWith("|"))))
                                 {
-                                    byte lastByte = accumulated[accumulated.Count - 1];
-                                    if (lastByte == 0x0A || lastByte == (byte)'|' || lastByte == 0x03)
-                                    {
-                                        break;
-                                    }
+                                    break;
                                 }
-                                Thread.Sleep(30);
                             }
                             else
                             {
-                                if (accumulated.Count >= 5) break;
-                                Thread.Sleep(50);
+                                string curText = Encoding.ASCII.GetString(accumulated.ToArray());
+                                if (curText.Contains("|END|") || (curText.Contains("DEN=") && curText.Length > 80)) break;
+                                Thread.Sleep(10);
                             }
                         }
                         else
                         {
-                            if (accumulated.Count >= 5) break;
+                            string curText = Encoding.ASCII.GetString(accumulated.ToArray());
+                            if (curText.Contains("|END|") || (curText.Contains("DEN=") && curText.Length > 80)) break;
                         }
                     }
 
@@ -897,16 +1162,27 @@ namespace BarcodePrint.Services
         {
             try
             {
-                string ip = Regex.Match(portName, @"(\d{1,3}\.){3}\d{1,3}").Value;
+                string ip = Regex.Match(portName ?? "", @"(\d{1,3}\.){3}\d{1,3}").Value;
                 if (string.IsNullOrEmpty(ip)) return null;
 
-                using (var tcp = new System.Net.Sockets.TcpClient())
-                {
-                    tcp.NoDelay = true;
-                    var connectTask = tcp.ConnectAsync(ip, 9100);
-                    if (Task.WhenAny(connectTask, Task.Delay(1500)).Result != connectTask) return null;
+                PrinterSerialLogger.WriteCommLog("LAN-QUERY", $"[{ip}:9100] 네트워크 프린터 하드웨어 스펙 질의 시작");
 
-                    using (var stream = tcp.GetStream())
+                using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    socket.NoDelay = true;
+                    socket.SendTimeout = 1500;
+                    socket.ReceiveTimeout = 2500;
+
+                    var ar = socket.BeginConnect(ip, 9100, null, null);
+                    if (!ar.AsyncWaitHandle.WaitOne(1500, false))
+                    {
+                        try { socket.Close(); } catch { }
+                        PrinterSerialLogger.WriteCommLog("LAN-WARN", $"[{ip}:9100] 연결 타임아웃 (1.5초 초과)");
+                        return null;
+                    }
+                    socket.EndConnect(ar);
+
+                    using (var stream = new NetworkStream(socket, false))
                     {
                         string queryCmd = 
                             "OUT \"DPI=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"DPI\");" +
@@ -919,16 +1195,16 @@ namespace BarcodePrint.Services
                             "\"|H=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"PAPER SIZE\");" +
                             "\"|GAP=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"GAP SIZE\");" +
                             "\"|BLN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"BLINE SIZE\");" +
-                            "\"|RIB=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"RIBBON\");" +
-                            "\"|CUT=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"CUTTER\");" +
-                            "\"|PMODE=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"PRINT MODE\");" +
-                            "\"|SPD=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"SPEED\");" +
-                            "\"|DEN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"DENSITY\");" +
                             "\"|GAP_INT=\";GETSETTING$(\"CONFIG\",\"SENSOR\",\"GAP INTENSION\");" +
                             "\"|BLN_INT=\";GETSETTING$(\"CONFIG\",\"SENSOR\",\"BLINE INTENSION\");" +
                             "\"|OFF=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"OFFSET\");" +
                             "\"|REFX=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE X\");" +
-                            "\"|REFY=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE Y\");\"|\"\r\n";
+                            "\"|REFY=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE Y\");" +
+                            "\"|RIB=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"RIBBON\");" +
+                            "\"|CUT=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"CUTTER\");" +
+                            "\"|PMODE=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"PRINT MODE\");" +
+                            "\"|SPD=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"SPEED\");" +
+                            "\"|DEN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"DENSITY\");\"|\"\r\n";
 
                         byte[] cmd = Encoding.ASCII.GetBytes(queryCmd);
                         stream.Write(cmd, 0, cmd.Length);
@@ -936,39 +1212,93 @@ namespace BarcodePrint.Services
 
                         Thread.Sleep(150);
 
+                        List<byte> acc = new List<byte>();
                         byte[] buffer = new byte[4096];
-                        if (stream.DataAvailable || tcp.Client.Poll(2000000, System.Net.Sockets.SelectMode.SelectRead))
+                        DateTime st = DateTime.Now;
+                        while ((DateTime.Now - st).TotalMilliseconds < 2500)
                         {
-                            int bytesRead = stream.Read(buffer, 0, buffer.Length);
-                            if (bytesRead > 0)
+                            if (stream.DataAvailable)
                             {
-                                string response = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                                if (response.Contains("DPI=") || response.Contains("MDL=") || response.Contains("|"))
+                                int bytesRead = stream.Read(buffer, 0, buffer.Length);
+                                if (bytesRead > 0)
                                 {
-                                    return response;
+                                    byte[] sl = new byte[bytesRead];
+                                    Array.Copy(buffer, 0, sl, 0, bytesRead);
+                                    acc.AddRange(sl);
+                                    string cur = Encoding.ASCII.GetString(acc.ToArray());
+                                    if (cur.Contains("DEN=") && (cur.EndsWith("\n") || cur.EndsWith("\r") || cur.EndsWith("|"))) break;
                                 }
                             }
+                            else
+                            {
+                                string cur = Encoding.ASCII.GetString(acc.ToArray());
+                                if (cur.Contains("DEN=") && cur.Length > 80) break;
+                                Thread.Sleep(40);
+                            }
+                        }
+
+                        if (acc.Count > 0)
+                        {
+                            string res = Encoding.ASCII.GetString(acc.ToArray());
+                            PrinterSerialLogger.WriteCommLog("LAN-RX", $"[{ip}:9100] 응답 수신 ({acc.Count} bytes): '{res}'");
+                            return res;
                         }
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                PrinterSerialLogger.WriteCommLog("LAN-ERR", $"[{portName}] 네트워크 통신 예외: {ex.Message}");
+            }
             return null;
         }
 
         private string QueryTsplHardwareInfoBluetooth(string portName)
         {
+            string cleanPort = Regex.Match(portName ?? "", @"COM\d+", RegexOptions.IgnoreCase).Value;
+            if (string.IsNullOrEmpty(cleanPort))
+            {
+                PrinterSerialLogger.WriteCommLog("BT-ERR", $"유효하지 않은 COM 포트명: '{portName}'");
+                return null;
+            }
+
+            PrinterSerialLogger.WriteCommLog("BT-INFO", $"====== [{cleanPort}] 블루투스 하드웨어 스펙 질의 시작 ======");
+
+            // 1단계: Windows Bluetooth 가상 COM 포트(BthModem - FILE_TYPE_PIPE)를 완벽 지원하는 NativeSerialStream 사용
             try
             {
-                string cleanPort = Regex.Match(portName, @"COM\d+", RegexOptions.IgnoreCase).Value;
-                if (string.IsNullOrEmpty(cleanPort)) return null;
-
-                using (var serial = new System.IO.Ports.SerialPort(cleanPort, 9600, System.IO.Ports.Parity.None, 8, System.IO.Ports.StopBits.One))
+                PrinterSerialLogger.WriteCommLog("BT-OPEN", $"[{cleanPort}] NativeSerialStream.Open() 시도...");
+                using (var nativeStream = NativeSerialStream.Open(cleanPort))
                 {
-                    serial.ReadTimeout = 2000;
-                    serial.WriteTimeout = 1500;
-                    serial.Open();
+                    PrinterSerialLogger.WriteCommLog("BT-OPEN", $"[{cleanPort}] NativeSerialStream.Open() 성공! (IsOpen: {nativeStream.IsOpen})");
 
+                    // 블루투스 RFCOMM 버퍼 안정화 대기
+                    Thread.Sleep(200);
+
+                    // 1) 빠른 펌웨어 질의 (~!T, ~!V)
+                    string fastVer = null;
+                    try
+                    {
+                        string tResp = nativeStream.QueryTsplCommand("~!T\r\n", 1500);
+                        if (!string.IsNullOrEmpty(tResp))
+                        {
+                            var vFind = Regex.Match(tResp, @"V\d+(\.\d+)+", RegexOptions.IgnoreCase);
+                            if (vFind.Success) fastVer = vFind.Value;
+                            else if (!tResp.Contains("!")) fastVer = tResp;
+                        }
+
+                        if (string.IsNullOrEmpty(fastVer))
+                        {
+                            string vResp = nativeStream.QueryTsplCommand("~!V\r\n", 1500);
+                            if (!string.IsNullOrEmpty(vResp) && !vResp.Contains("!")) fastVer = vResp;
+                        }
+                    }
+                    catch (Exception exFast)
+                    {
+                        PrinterSerialLogger.WriteCommLog("BT-ERR", $"[{cleanPort}] 빠른 펌웨어 질의 예외: {exFast.Message}");
+                    }
+
+                    // 2) 안드로이드/iOS/Mac 표준 GETSETTING$ 전체 하드웨어 스펙 통합 질의
                     string queryCmd = 
                         "OUT \"DPI=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"DPI\");" +
                         "\"|MDL=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"MODEL\");" +
@@ -980,35 +1310,93 @@ namespace BarcodePrint.Services
                         "\"|H=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"PAPER SIZE\");" +
                         "\"|GAP=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"GAP SIZE\");" +
                         "\"|BLN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"BLINE SIZE\");" +
-                        "\"|RIB=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"RIBBON\");" +
-                        "\"|CUT=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"CUTTER\");" +
-                        "\"|PMODE=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"PRINT MODE\");" +
-                        "\"|SPD=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"SPEED\");" +
-                        "\"|DEN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"DENSITY\");" +
                         "\"|GAP_INT=\";GETSETTING$(\"CONFIG\",\"SENSOR\",\"GAP INTENSION\");" +
                         "\"|BLN_INT=\";GETSETTING$(\"CONFIG\",\"SENSOR\",\"BLINE INTENSION\");" +
                         "\"|OFF=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"OFFSET\");" +
                         "\"|REFX=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE X\");" +
-                        "\"|REFY=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE Y\");\"|\"\r\n";
+                        "\"|REFY=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"REFERENCE Y\");" +
+                        "\"|RIB=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"RIBBON\");" +
+                        "\"|CUT=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"CUTTER\");" +
+                        "\"|PMODE=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"PRINT MODE\");" +
+                        "\"|SPD=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"SPEED\");" +
+                        "\"|DEN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"DENSITY\");\"|\"\r\n";
 
-                    byte[] cmd = Encoding.ASCII.GetBytes(queryCmd);
-                    serial.Write(cmd, 0, cmd.Length);
+                    string fullResponse = nativeStream.QueryTsplCommand(queryCmd, 2500) ?? "";
 
-                    Thread.Sleep(200);
-
-                    byte[] buffer = new byte[4096];
-                    int bytesRead = serial.Read(buffer, 0, buffer.Length);
-                    if (bytesRead > 0)
+                    // 빠른 질의로 얻은 펌웨어 버전 반영
+                    if (!string.IsNullOrEmpty(fastVer) && (!fullResponse.Contains("VER=") || Regex.IsMatch(fullResponse, @"VER=\s*\|") || Regex.IsMatch(fullResponse, @"VER=\s*$")))
                     {
-                        string response = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                        if (response.Contains("DPI=") || response.Contains("MDL=") || response.Contains("|"))
-                        {
-                            return response;
-                        }
+                        fullResponse += $"|VER={fastVer}|";
+                        PrinterSerialLogger.WriteCommLog("BT-INFO", $"[{cleanPort}] 빠른 펌웨어 질의 버전({fastVer})을 통합 응답에 결합 완료");
+                    }
+
+                    if (!string.IsNullOrEmpty(fullResponse))
+                    {
+                        PrinterSerialLogger.WriteCommLog("BT-SUCCESS", $"[{cleanPort}] 블루투스 네이티브 통신 성공! 응답 길이: {fullResponse.Length}");
+                        return fullResponse;
+                    }
+                    else
+                    {
+                        PrinterSerialLogger.WriteCommLog("BT-WARN", $"[{cleanPort}] NativeSerialStream 응답 없음 (0바이트)");
                     }
                 }
             }
-            catch { }
+            catch (Exception exNative)
+            {
+                PrinterSerialLogger.WriteCommLog("BT-ERR", $"[{cleanPort}] NativeSerialStream 실패: {exNative.Message}");
+                // 파이프 단절(블루투스 미연결 / 전원 꺼짐)인 경우 .NET SerialPort로 재시도해도 불필요한 지연만 발생하므로 즉시 종료
+                if (exNative.Message.Contains("파이프") || exNative.Message.Contains("pipe") || exNative.Message.Contains("프로세스"))
+                {
+                    return null;
+                }
+            }
+
+            // 2단계: Fallback (.NET SerialPort - 하위 호환성)
+            int[] baudRates = new int[] { 9600, 115200 };
+            foreach (int baud in baudRates)
+            {
+                try
+                {
+                    PrinterSerialLogger.WriteCommLog("BT-OPEN", $"[{cleanPort}] SerialPort.Open() 시도 (Baud: {baud})...");
+                    using (var serial = new System.IO.Ports.SerialPort(cleanPort, baud, System.IO.Ports.Parity.None, 8, System.IO.Ports.StopBits.One))
+                    {
+                        serial.ReadTimeout = 2500;
+                        serial.WriteTimeout = 1500;
+                        serial.DtrEnable = true;
+                        serial.RtsEnable = true;
+                        serial.Open();
+
+                        PrinterSerialLogger.WriteCommLog("BT-OPEN", $"[{cleanPort}] SerialPort.Open() 성공! (IsOpen: {serial.IsOpen})");
+                        Thread.Sleep(200);
+
+                        string queryCmd = 
+                            "OUT \"DPI=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"DPI\");" +
+                            "\"|MDL=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"MODEL\");" +
+                            "\"|SER=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"SERIAL\");" +
+                            "\"|VER=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"VERSION\");" +
+                            "\"|MIL=\";GETSETTING$(\"SYSTEM\",\"RECORD\",\"MILAGE\");" +
+                            "\"|DEN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"DENSITY\");\"|\"\r\n";
+
+                        byte[] cmd = Encoding.ASCII.GetBytes(queryCmd);
+                        serial.Write(cmd, 0, cmd.Length);
+                        Thread.Sleep(250);
+
+                        if (serial.BytesToRead > 0)
+                        {
+                            byte[] buffer = new byte[2048];
+                            int r = serial.Read(buffer, 0, buffer.Length);
+                            string resp = Encoding.ASCII.GetString(buffer, 0, r);
+                            if (!string.IsNullOrEmpty(resp)) return resp;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    PrinterSerialLogger.WriteCommLog("BT-ERR", $"[{cleanPort}] SerialPort Baud {baud} 실패: {ex.Message}");
+                }
+            }
+
+            PrinterSerialLogger.WriteCommLog("BT-FAIL", $"[{cleanPort}] 블루투스 TSPL 하드웨어 스펙 직접 질의 실패 (모든 시도 종료)");
             return null;
         }
 
@@ -1167,6 +1555,106 @@ namespace BarcodePrint.Services
                 }
                 catch { }
             }
+
+            // 펌웨어 버전 정규식 보정 (raw 문자열 전체에서 V1.0 등 버전 추출)
+            if (!details.ContainsKey("VER") || string.IsNullOrWhiteSpace(details["VER"]) || details["VER"] == "-")
+            {
+                var vMatch = Regex.Match(raw, @"\bV\d+(\.\d+)+\b", RegexOptions.IgnoreCase);
+                if (vMatch.Success)
+                {
+                    details["VER"] = vMatch.Value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 블루투스 프린터 펌웨어 버전 단독 Fallback 질의 (~!V / ~!T) - 안드로이드/iOS/Mac 동일
+        /// </summary>
+        private string QueryFirmwareVersionBluetoothFallback(string portName)
+        {
+            try
+            {
+                string cleanPort = Regex.Match(portName ?? "", @"COM\d+", RegexOptions.IgnoreCase).Value;
+                if (string.IsNullOrEmpty(cleanPort)) return null;
+
+                PrinterSerialLogger.WriteCommLog("BT-FW-FB", $"[{cleanPort}] 단독 펌웨어 Fallback 질의 시도...");
+
+                // 1) NativeSerialStream 시도 (BthModem 지원)
+                try
+                {
+                    using (var nativeStream = NativeSerialStream.Open(cleanPort))
+                    {
+                        // 1-1) ~!V
+                        string vResp = nativeStream.QueryTsplCommand("~!V\r\n", 1200);
+                        if (!string.IsNullOrEmpty(vResp) && !vResp.Contains("!")) return vResp;
+
+                        // 1-2) ~!T
+                        string tResp = nativeStream.QueryTsplCommand("~!T\r\n", 1200);
+                        if (!string.IsNullOrEmpty(tResp))
+                        {
+                            var m = Regex.Match(tResp, @"V\d+(\.\d+)+", RegexOptions.IgnoreCase);
+                            if (m.Success) return m.Value;
+                            if (!tResp.Contains("!")) return tResp;
+                        }
+                    }
+                }
+                catch (Exception exNative)
+                {
+                    PrinterSerialLogger.WriteCommLog("BT-FW-FB", $"[{cleanPort}] NativeSerialStream 질의 예외: {exNative.Message}");
+                }
+
+                // 2) SerialPort Fallback
+                using (var serial = new System.IO.Ports.SerialPort(cleanPort, 9600, System.IO.Ports.Parity.None, 8, System.IO.Ports.StopBits.One))
+                {
+                    serial.ReadTimeout = 1500;
+                    serial.WriteTimeout = 1000;
+                    serial.DtrEnable = true;
+                    serial.RtsEnable = true;
+                    serial.Open();
+
+                    Thread.Sleep(150);
+
+                    // 1) ~!V\r\n 질의 (TSPL 펌웨어 버전 번호 직접 질의)
+                    serial.Write("~!V\r\n");
+                    PrinterSerialLogger.WriteCommLog("BT-FW-FB", $"[{cleanPort}] TX: ~!V");
+                    Thread.Sleep(150);
+                    if (serial.BytesToRead > 0)
+                    {
+                        byte[] buf = new byte[256];
+                        int r = serial.Read(buf, 0, buf.Length);
+                        if (r > 0)
+                        {
+                            string s = Encoding.ASCII.GetString(buf, 0, r).Replace("\r", "").Replace("\n", "").Trim();
+                            PrinterSerialLogger.WriteCommLog("BT-FW-FB", $"[{cleanPort}] RX (~!V): '{s}'");
+                            if (!string.IsNullOrEmpty(s) && !s.Contains("!")) return s;
+                        }
+                    }
+
+                    // 2) ~!T\r\n 질의 (안드로이드와 동일: 프린터 펌웨어 모델 및 버전 문자열 질의)
+                    serial.DiscardInBuffer();
+                    serial.Write("~!T\r\n");
+                    PrinterSerialLogger.WriteCommLog("BT-FW-FB", $"[{cleanPort}] TX: ~!T");
+                    Thread.Sleep(150);
+                    if (serial.BytesToRead > 0)
+                    {
+                        byte[] buf = new byte[256];
+                        int r = serial.Read(buf, 0, buf.Length);
+                        if (r > 0)
+                        {
+                            string s = Encoding.ASCII.GetString(buf, 0, r).Replace("\r", "").Replace("\n", "").Trim();
+                            PrinterSerialLogger.WriteCommLog("BT-FW-FB", $"[{cleanPort}] RX (~!T): '{s}'");
+                            var m = Regex.Match(s, @"V\d+(\.\d+)+", RegexOptions.IgnoreCase);
+                            if (m.Success) return m.Value;
+                            if (!string.IsNullOrEmpty(s) && !s.Contains("!")) return s;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PrinterSerialLogger.WriteCommLog("BT-FW-FB", $"단독 펌웨어 질의 예외: {ex.Message}");
+            }
+            return null;
         }
 
         /// <summary>
@@ -1306,16 +1794,24 @@ namespace BarcodePrint.Services
         {
             try
             {
-                string ip = Regex.Match(portName, @"(\d{1,3}\.){3}\d{1,3}").Value;
+                string ip = Regex.Match(portName ?? "", @"(\d{1,3}\.){3}\d{1,3}").Value;
                 if (string.IsNullOrEmpty(ip)) return null;
 
-                using (var tcp = new System.Net.Sockets.TcpClient())
+                using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
                 {
-                    tcp.NoDelay = true;
-                    var connectTask = tcp.ConnectAsync(ip, 9100);
-                    if (Task.WhenAny(connectTask, Task.Delay(1000)).Result != connectTask) return null;
+                    socket.NoDelay = true;
+                    socket.SendTimeout = 1000;
+                    socket.ReceiveTimeout = 1500;
 
-                    using (var stream = tcp.GetStream())
+                    var ar = socket.BeginConnect(ip, 9100, null, null);
+                    if (!ar.AsyncWaitHandle.WaitOne(1000, false))
+                    {
+                        try { socket.Close(); } catch { }
+                        return null;
+                    }
+                    socket.EndConnect(ar);
+
+                    using (var stream = new NetworkStream(socket, false))
                     {
                         byte[] cmd = Encoding.ASCII.GetBytes("~!E\r\n\x1B!S");
                         stream.Write(cmd, 0, cmd.Length);
@@ -1324,7 +1820,7 @@ namespace BarcodePrint.Services
                         Thread.Sleep(80);
 
                         byte[] buffer = new byte[1024];
-                        if (stream.DataAvailable || tcp.Client.Poll(1000000, System.Net.Sockets.SelectMode.SelectRead))
+                        if (stream.DataAvailable || socket.Poll(1000000, SelectMode.SelectRead))
                         {
                             int bytesRead = stream.Read(buffer, 0, buffer.Length);
                             if (bytesRead > 0)
@@ -1345,13 +1841,40 @@ namespace BarcodePrint.Services
         {
             try
             {
-                string cleanPort = Regex.Match(portName, @"COM\d+", RegexOptions.IgnoreCase).Value;
+                string cleanPort = Regex.Match(portName ?? "", @"COM\d+", RegexOptions.IgnoreCase).Value;
+                if (string.IsNullOrEmpty(cleanPort))
+                {
+                    var st = new AppSettings();
+                    st.Load();
+                    cleanPort = Regex.Match(st.BluetoothPortName ?? "", @"COM\d+", RegexOptions.IgnoreCase).Value;
+                }
                 if (string.IsNullOrEmpty(cleanPort)) return null;
 
+                // 1) Windows Bluetooth 가상 COM 포트(BthModem - FILE_TYPE_PIPE) NativeSerialStream 우선 시도
+                try
+                {
+                    using (var nativeStream = NativeSerialStream.Open(cleanPort))
+                    {
+                        if (nativeStream.IsOpen)
+                        {
+                            string tResp = nativeStream.QueryTsplCommand("~!E\r\n\x1B!S", 1200);
+                            if (!string.IsNullOrEmpty(tResp))
+                            {
+                                return ParseTsplLiveStatusResponse(tResp);
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                // 2) 일반 직렬 포트 폴백
                 using (var serial = new System.IO.Ports.SerialPort(cleanPort, 9600, System.IO.Ports.Parity.None, 8, System.IO.Ports.StopBits.One))
                 {
-                    serial.ReadTimeout = 1000;
-                    serial.WriteTimeout = 1000;
+                    serial.ReadTimeout = 1200;
+                    serial.WriteTimeout = 1200;
+                    serial.DtrEnable = true;
+                    serial.RtsEnable = true;
+                    serial.Handshake = System.IO.Ports.Handshake.None;
                     serial.Open();
 
                     byte[] cmd = Encoding.ASCII.GetBytes("~!E\r\n\x1B!S");

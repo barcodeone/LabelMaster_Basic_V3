@@ -20,6 +20,7 @@ namespace BarcodePrint.ViewModel
         private bool _isCheckingPrinter = false;
         private string _selectedConnectionType = "ALL";
         private bool _isCurrentPrinterAuthorized = false;
+        private PrintRecordModel _currentPrintingRecord = null;
 
         /// <summary>
         /// 현재 선택된 프린터가 정품 라이선스에 등록되어 인증되었는지 여부
@@ -115,40 +116,34 @@ namespace BarcodePrint.ViewModel
 
         public void ApplyPrinterFilter()
         {
+            _isFilteringPrinters = true;
             try
             {
                 AvailablePrinters.Clear();
 
-                // BT 필터 시 선택된 COM 포트 장치가 목록에 없으면 자동 생성하여 추가
-                if (SelectedConnectionType == "BT" || SelectedConnectionType == "Bluetooth")
+                // 드라이버가 정식 설치된 프린터만 필터링하여 노출 (가짜 COM3 자동 생성 배제)
+                // LAN 필터 시 캐시에 LAN 장치가 전혀 없을 때만 기본 IP를 기반으로 보조 항목 생성
+                if (SelectedConnectionType == "LAN")
                 {
-                    if (!string.IsNullOrEmpty(BluetoothPortName) && !_cachedPrinters.Any(p => p.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase) && p.PortName.Equals(BluetoothPortName, StringComparison.OrdinalIgnoreCase)))
+                    if (!_cachedPrinters.Any(p => p.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase)))
                     {
-                        _cachedPrinters.Add(new UsbPrinterInfo
+                        if (!string.IsNullOrEmpty(TcpPrinterIp))
                         {
-                            Name = $"[블루투스] {BluetoothPortName}",
-                            FriendlyName = "Bluetooth Printer",
-                            PortName = BluetoothPortName,
-                            Serial = "-",
-                            Type = "Bluetooth",
-                            Address = BluetoothPortName
-                        });
-                    }
-                }
-                // LAN 필터 시 선택된 IP 장치가 목록에 없으면 자동 생성하여 추가
-                else if (SelectedConnectionType == "LAN")
-                {
-                    if (!string.IsNullOrEmpty(TcpPrinterIp) && !_cachedPrinters.Any(p => p.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase) && p.Address.Equals(TcpPrinterIp, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        _cachedPrinters.Add(new UsbPrinterInfo
-                        {
-                            Name = $"[네트워크] {TcpPrinterIp}",
-                            FriendlyName = "Network Printer",
-                            PortName = $"{TcpPrinterIp}:{TcpPrinterPort}",
-                            Serial = "-",
-                            Type = "LAN",
-                            Address = TcpPrinterIp
-                        });
+                            string netDevName = UsbPrinterHelper.GetNetworkPrinterDeviceName(TcpPrinterIp);
+                            string displayName = !string.IsNullOrEmpty(netDevName) && !netDevName.Equals("네트워크 라벨 프린터", StringComparison.OrdinalIgnoreCase)
+                                ? $"[네트워크] {netDevName}"
+                                : $"[네트워크] {TcpPrinterIp}";
+
+                            _cachedPrinters.Add(new UsbPrinterInfo
+                            {
+                                Name = displayName,
+                                FriendlyName = netDevName ?? "Network Printer",
+                                PortName = $"{TcpPrinterIp}:{TcpPrinterPort}",
+                                Serial = "-",
+                                Type = "LAN",
+                                Address = TcpPrinterIp
+                            });
+                        }
                     }
                 }
 
@@ -156,6 +151,15 @@ namespace BarcodePrint.ViewModel
                 if (SelectedConnectionType == "USB")
                 {
                     filtered = _cachedPrinters.Where(p => p.Type.Equals("USB", StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (filtered.Count == 0)
+                    {
+                        var freshPrinters = _printerService.GetVerifiedPrinters(_authenticatedSerials);
+                        if (freshPrinters != null && freshPrinters.Count > 0)
+                        {
+                            _cachedPrinters = freshPrinters;
+                            filtered = _cachedPrinters.Where(p => p.Type.Equals("USB", StringComparison.OrdinalIgnoreCase)).ToList();
+                        }
+                    }
                 }
                 else if (SelectedConnectionType == "LAN")
                 {
@@ -166,9 +170,49 @@ namespace BarcodePrint.ViewModel
                     filtered = _cachedPrinters.Where(p => p.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase)).ToList();
                 }
 
+                Func<string, string> getCleanName = s => (s ?? "")
+                    .Replace("[블루투스]", "")
+                    .Replace("[네트워크]", "")
+                    .Replace("(페어링 필요)", "")
+                    .Replace("(가상포트 연결 필요)", "")
+                    .Replace("-", "")
+                    .Replace(" ", "")
+                    .Trim()
+                    .ToUpperInvariant();
+
                 foreach (var p in filtered)
                 {
-                    if (!AvailablePrinters.Contains(p.Name))
+                    // 1. 과거 설정이나 포트명으로 저장된 [블루투스] COMx 형태를 실제 장치명으로 자동 보정
+                    if (p.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (p.Name.StartsWith("[블루투스] COM", StringComparison.OrdinalIgnoreCase) ||
+                            p.Name.Contains("(COM") ||
+                            p.Name.Equals("[블루투스] 블루투스 장치", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string realDev = UsbPrinterHelper.GetBluetoothDeviceNameForPort(p.PortName);
+                            p.Name = $"[블루투스] {realDev}";
+                            p.FriendlyName = realDev;
+                        }
+                    }
+                    // 2. 네트워크 프린터가 IP 주소로만 표기된 경우 실제 모델명/드라이버 장치명으로 자동 보정 (블루투스와 동일 규격)
+                    else if (p.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (p.Name.Equals($"[네트워크] {p.Address}", StringComparison.OrdinalIgnoreCase) ||
+                            p.Name.StartsWith("[네트워크] 192.", StringComparison.OrdinalIgnoreCase) ||
+                            p.Name.StartsWith("[네트워크] 10.", StringComparison.OrdinalIgnoreCase) ||
+                            p.Name.StartsWith("[네트워크] 172.", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string realNetDev = UsbPrinterHelper.GetNetworkPrinterDeviceName(p.Address);
+                            if (!string.IsNullOrEmpty(realNetDev) && !realNetDev.Equals("네트워크 라벨 프린터", StringComparison.OrdinalIgnoreCase))
+                            {
+                                p.Name = $"[네트워크] {realNetDev}";
+                                p.FriendlyName = realNetDev;
+                            }
+                        }
+                    }
+
+                    string cleanCurrent = getCleanName(p.Name);
+                    if (!AvailablePrinters.Any(existing => getCleanName(existing).Equals(cleanCurrent, StringComparison.OrdinalIgnoreCase)))
                     {
                         AvailablePrinters.Add(p.Name);
                     }
@@ -176,20 +220,40 @@ namespace BarcodePrint.ViewModel
 
                 if (AvailablePrinters.Count > 0)
                 {
-                    // 이전에 저장된 마지막 프린터 이름 복원 시도
+                    // 1) 사용자 설정의 마지막 선택 프린터가 현재 필터 목록에 존재하는지 확인
                     string preferredPrinter = _settings?.LastSelectedPrinterName;
+                    string target = null;
+
                     if (!string.IsNullOrEmpty(preferredPrinter) && AvailablePrinters.Contains(preferredPrinter))
                     {
-                        SelectedPrinterName = preferredPrinter;
+                        target = preferredPrinter;
                     }
-                    else if (string.IsNullOrEmpty(SelectedPrinterName) || !AvailablePrinters.Contains(SelectedPrinterName))
+                    else if (!string.IsNullOrEmpty(SelectedPrinterName) && AvailablePrinters.Contains(SelectedPrinterName))
                     {
-                        SelectedPrinterName = AvailablePrinters[0];
+                        target = SelectedPrinterName;
                     }
+                    else if (!string.IsNullOrEmpty(TargetPrinterName) && AvailablePrinters.Contains(TargetPrinterName))
+                    {
+                        target = TargetPrinterName;
+                    }
+                    else
+                    {
+                        target = AvailablePrinters[0];
+                    }
+
+                    // 콤보박스(TargetPrinterName)와 내부 상태(SelectedPrinterName)를 확실하게 동기화
+                    _selectedPrinterName = target;
+                    _targetPrinterName = target;
+                    OnPropertyChanged(nameof(SelectedPrinterName));
+                    OnPropertyChanged(nameof(TargetPrinterName));
                 }
                 else
                 {
-                    SelectedPrinterName = "";
+                    _selectedPrinterName = "";
+                    _targetPrinterName = "";
+                    OnPropertyChanged(nameof(SelectedPrinterName));
+                    OnPropertyChanged(nameof(TargetPrinterName));
+
                     string typeDesc = SelectedConnectionType == "ALL" ? "" : $" ({SelectedConnectionType})";
                     PrinterStatusBadge = $"🔴 연결된 프린터 없음{typeDesc}";
                     PrinterStatusColor = "#D32F2F";
@@ -202,56 +266,54 @@ namespace BarcodePrint.ViewModel
             {
                 System.Diagnostics.Debug.WriteLine($"ApplyPrinterFilter 오류: {ex.Message}");
             }
+            finally
+            {
+                _isFilteringPrinters = false;
+            }
         }
 
         public void CheckRealtimePrinterStatus()
         {
             if (_isCheckingPrinter) return;
+            string printerName = SelectedPrinterName;
+            if (string.IsNullOrEmpty(printerName))
+            {
+                IsCurrentPrinterAuthorized = false;
+                return;
+            }
+
             _isCheckingPrinter = true;
 
             Task.Run(() =>
             {
                 try
                 {
-                    if (string.IsNullOrEmpty(SelectedPrinterName))
-                    {
-                        Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
-                        {
-                            IsCurrentPrinterAuthorized = false;
-                        }));
-                        return;
-                    }
-
                     // 캐시된 프린터 정보에서 시리얼 검증
-                    var info = _cachedPrinters?.FirstOrDefault(p => p.Name.Equals(SelectedPrinterName, StringComparison.OrdinalIgnoreCase));
+                    var info = _cachedPrinters?.FirstOrDefault(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
                     string cachedSerial = info?.Serial;
                     bool isAuthorized = ValidatePrinterAuthorization(cachedSerial);
+                    var licenseMode = TrialLicenseManager.EvaluateLicense(isAuthorized, cachedSerial, printerName);
 
-                    _printerService.CheckRealtimePrinterStatus(SelectedPrinterName, _cachedPrinters, out string badge, out string color);
+                    _printerService.CheckRealtimePrinterStatus(printerName, _cachedPrinters, out string badge, out string color);
 
                     Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
                     {
+                        UpdateTrialLicenseState();
+
                         if (isAuthorized)
                         {
                             IsCurrentPrinterAuthorized = true;
-                            PrinterStatusBadge = badge;
-                            PrinterStatusColor = color;
                         }
                         else
                         {
-                            IsCurrentPrinterAuthorized = false;
-
-                            if (badge.Contains("헤드 열림") || badge.Contains("용지 없음") || badge.Contains("용지 걸림") || badge.Contains("오류") || badge.Contains("오프라인"))
-                            {
-                                PrinterStatusBadge = badge;
-                                PrinterStatusColor = color;
-                            }
-                            else
-                            {
-                                PrinterStatusBadge = "🔴 미등록 프린터 (기기 등록 필요)";
-                                PrinterStatusColor = "#DC2626";
-                            }
+                            // 체험판 모드: 1회 30장 제한으로 인쇄 허용
+                            IsCurrentPrinterAuthorized = true;
                         }
+
+                        // 프린터 상태 뱃지에는 항상 실제 프린터 하드웨어 상태(정상 준비, 오프라인, 용지 없음 등)를 표시
+                        // (체험판 정보는 좌측 상단 전용 뱃지 1개로 표시)
+                        PrinterStatusBadge = badge;
+                        PrinterStatusColor = color;
 
                         // UI 바인딩 강제 갱신
                         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
@@ -277,36 +339,44 @@ namespace BarcodePrint.ViewModel
                 string tsplCmd = "";
                 string desc = "";
 
+                // [열전사 리본 연동] IsRibbon 설정에 따라 리본 모터 동기화 및 센서 오작동 방지 명령 주입
+                string ribbonCmd = IsRibbon
+                    ? "SET RIBBON ON\r\nSET ENCODER OFF\r\nSET RIBBONEND OFF\r\n"
+                    : "SET RIBBON OFF\r\n";
+
                 switch (action)
                 {
                     case "CALIBRATE":
                     case "GAPDETECT":
                         if (PaperType == "BLINE")
                         {
-                            tsplCmd = "CLS\r\nBLINEDETECT\r\n";
+                            tsplCmd = $"BLINE 2 mm,0 mm\r\nCLS\r\n{ribbonCmd}BLINEDETECT\r\n";
                             desc = "블랙마크 센서 보정(Bline Detect)";
                         }
                         else if (PaperType == "CONTINUOUS")
                         {
-                            tsplCmd = "CLS\r\nGAP 0,0\r\n";
+                            tsplCmd = $"CLS\r\n{ribbonCmd}GAP 0,0\r\n";
                             desc = "연속지 모드 설정";
                         }
                         else
                         {
-                            tsplCmd = "CLS\r\nAUTODETECT\r\n";
-                            desc = "센서/용지 자동 보정(Auto Detect)";
+                            tsplCmd = $"GAP 2 mm,0 mm\r\nCLS\r\n{ribbonCmd}GAPDETECT\r\n";
+                            desc = "갭 센서 자동 보정(Gap Detect)";
                         }
                         break;
                     case "AUTODETECT":
-                        tsplCmd = "CLS\r\nAUTODETECT\r\n";
+                        tsplCmd = $"CLS\r\n{ribbonCmd}AUTODETECT\r\n";
                         desc = "센서 자동 감지(Auto Detect)";
                         break;
                     case "HOME":
-                        tsplCmd = "CLS\r\nHOME\r\n";
+                        string gapCmd = PaperType == "BLINE"
+                            ? $"BLINE {GapHeight} mm,{BlineOffset.ToString("0.0", CultureInfo.InvariantCulture)} mm\r\n"
+                            : (PaperType == "CONTINUOUS" ? "GAP 0,0\r\n" : $"GAP {GapHeight} mm,0 mm\r\n");
+                        tsplCmd = $"SIZE {PaperWidth} mm,{PaperHeight} mm\r\n{gapCmd}{ribbonCmd}HOME\r\nCLS\r\n";
                         desc = "라벨 원점 이동(Home)";
                         break;
                     case "FEED":
-                        tsplCmd = "CLS\r\nFORMFEED\r\n";
+                        tsplCmd = $"CLS\r\n{ribbonCmd}FORMFEED\r\n";
                         desc = "용지 1장 배출(Feed)";
                         break;
                     case "SELFTEST":
@@ -374,7 +444,7 @@ namespace BarcodePrint.ViewModel
             }
         }
 
-        private void DrawTextOnDc(DrawingContext dc, string text, double fontSizeMm, double offsetXMm, double offsetYMm, double dotsPerMm, System.Windows.Media.Brush brush, string fontName = "맑은 고딕", bool isBold = true, bool isItalic = false, double cellWidthMm = 0, string align = "LEFT", double cellHeightMm = 0, double cellPaddingMm = 0)
+        private void DrawTextOnDc(DrawingContext dc, string text, double fontSizeMm, double offsetXMm, double offsetYMm, double dotsPerMm, System.Windows.Media.Brush brush, string fontName = "맑은 고딕", bool isBold = true, bool isItalic = false, double cellWidthMm = 0, string align = "LEFT", double cellHeightMm = 0, double cellPaddingMm = 0, bool isUnderline = false, double fontScaleX = 1.0, double lineSpacing = 1.0, double letterSpacing = 0.0)
         {
             if (string.IsNullOrEmpty(text)) return;
 
@@ -388,6 +458,17 @@ namespace BarcodePrint.ViewModel
             var style = isItalic ? FontStyles.Italic : FontStyles.Normal;
             var weight = isBold ? FontWeights.Bold : FontWeights.Normal;
 
+            double effScaleX = (fontScaleX > 0) ? fontScaleX : 1.0;
+            double effLineSpacing = (lineSpacing > 0) ? lineSpacing : 1.0;
+
+            // 장평(가로 비율) 변환 적용
+            bool pushedScale = false;
+            if (Math.Abs(effScaleX - 1.0) > 0.001)
+            {
+                dc.PushTransform(new ScaleTransform(effScaleX, 1.0, leftPx, topPx));
+                pushedScale = true;
+            }
+
             var ft = new FormattedText(
                 text,
                 CultureInfo.CurrentCulture,
@@ -397,11 +478,21 @@ namespace BarcodePrint.ViewModel
                 brush,
                 1.0);
 
+            if (isUnderline)
+            {
+                ft.SetTextDecorations(TextDecorations.Underline);
+            }
+
+            if (effLineSpacing > 0 && Math.Abs(effLineSpacing - 1.0) > 0.001)
+            {
+                ft.LineHeight = Math.Max(6, targetPxSize) * effLineSpacing;
+            }
+
             if (cellWidthMm > 0)
             {
                 // 셀 또는 박스 너비가 지정된 경우: 내부 패딩(cellPaddingMm)을 정확히 제외한 순수 콘텐츠 너비로 줄바꿈 폭 지정
-                double cellWidthPx = cellWidthMm * dotsPerMm;
-                double padPx = cellPaddingMm * dotsPerMm;
+                double cellWidthPx = (cellWidthMm * dotsPerMm) / effScaleX;
+                double padPx = (cellPaddingMm * dotsPerMm) / effScaleX;
                 double contentWidthPx = Math.Max(1.0, cellWidthPx - (padPx * 2.0));
                 ft.MaxTextWidth = contentWidthPx;
 
@@ -418,21 +509,6 @@ namespace BarcodePrint.ViewModel
                     leftPx += padPx;
                 }
             }
-            else
-            {
-                // 너비 미지정(자유 배치 NoWrap): 줄바꿈 없이 한 줄로 렌더링 (미리보기 TextWrapping.NoWrap과 100% 일치)
-                int effectiveW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 70;
-                if (align == "CENTER")
-                {
-                    double availableWidthPx = effectiveW * dotsPerMm;
-                    leftPx = Math.Max(0, (availableWidthPx - ft.Width) / 2.0);
-                }
-                else if (align == "RIGHT")
-                {
-                    double availableWidthPx = effectiveW * dotsPerMm;
-                    leftPx = Math.Max(0, availableWidthPx - ft.Width - (2.0 * dotsPerMm));
-                }
-            }
 
             if (cellHeightMm > 0)
             {
@@ -440,14 +516,82 @@ namespace BarcodePrint.ViewModel
                 topPx += Math.Max(0, (cellHeightPx - ft.Height) / 2.0);
             }
 
-            dc.DrawText(ft, new System.Windows.Point(leftPx, topPx));
+            if (Math.Abs(letterSpacing) > 0.001)
+            {
+                // 자간(em 단위) 반영 렌더링
+                string[] lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+                double currentY = topPx;
+                double lineHeightPx = (effLineSpacing > 0) ? (Math.Max(6, targetPxSize) * effLineSpacing * 1.2) : (targetPxSize * 1.2);
+                double extraCharSpacingPx = targetPxSize * letterSpacing;
+
+                foreach (string line in lines)
+                {
+                    if (string.IsNullOrEmpty(line))
+                    {
+                        currentY += lineHeightPx;
+                        continue;
+                    }
+
+                    double totalLineWidthPx = 0;
+                    var charFts = new List<FormattedText>();
+                    for (int ci = 0; ci < line.Length; ci++)
+                    {
+                        var ftChar = new FormattedText(
+                            line[ci].ToString(),
+                            CultureInfo.CurrentCulture,
+                            FlowDirection.LeftToRight,
+                            new Typeface(new System.Windows.Media.FontFamily(familyName), style, weight, FontStretches.Normal),
+                            Math.Max(6, targetPxSize),
+                            brush,
+                            1.0);
+                        if (isUnderline) ftChar.SetTextDecorations(TextDecorations.Underline);
+                        charFts.Add(ftChar);
+                        totalLineWidthPx += ftChar.Width;
+                        if (ci < line.Length - 1) totalLineWidthPx += extraCharSpacingPx;
+                    }
+
+                    double lineStartXPx = leftPx;
+                    if (cellWidthMm > 0)
+                    {
+                        double cellWPx = (cellWidthMm * dotsPerMm) / effScaleX;
+                        if (align == "CENTER")
+                        {
+                            lineStartXPx = leftPx + Math.Max(0, (cellWPx - totalLineWidthPx) / 2.0);
+                        }
+                        else if (align == "RIGHT")
+                        {
+                            lineStartXPx = leftPx + Math.Max(0, cellWPx - totalLineWidthPx - ((cellPaddingMm * dotsPerMm) / effScaleX));
+                        }
+                    }
+
+                    double curCharX = lineStartXPx;
+                    for (int ci = 0; ci < charFts.Count; ci++)
+                    {
+                        dc.DrawText(charFts[ci], new System.Windows.Point(curCharX, currentY));
+                        curCharX += charFts[ci].Width + extraCharSpacingPx;
+                    }
+
+                    currentY += lineHeightPx;
+                }
+            }
+            else
+            {
+                dc.DrawText(ft, new System.Windows.Point(leftPx, topPx));
+            }
+
+            if (pushedScale)
+            {
+                dc.Pop();
+            }
         }
 
         private Bitmap GenerateLabelBitmapForPrint(string col1, string col2, string col3, string col4, string col5, string col6, string col7, string col8)
         {
-            double dotsPerMm = 8.0; // 203 DPI (8 dots/mm)
-            int effectiveW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 70;
-            int effectiveH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 28;
+            // 프린터 실제 해상도(300 DPI vs 203 DPI)에 따른 동적 dotsPerMm 계산 (300 DPI 축소 인쇄 원천 방지)
+            double printerDpi = PRINT_INFO_CLASS.PrinterInfo.printer_DPI > 0 ? (double)PRINT_INFO_CLASS.PrinterInfo.printer_DPI : 203.0;
+            double dotsPerMm = printerDpi / 25.4;
+            int effectiveW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80;
+            int effectiveH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60;
             int pxW = (int)Math.Round(effectiveW * dotsPerMm);
             int pxH = (int)Math.Round(effectiveH * dotsPerMm);
 
@@ -655,7 +799,7 @@ namespace BarcodePrint.ViewModel
                             string displayText = val;
                             if (isPrice && !string.IsNullOrWhiteSpace(val))
                             {
-                                displayText = PriceFormatHelper.FormatPrice(val);
+                                displayText = PriceFormatHelper.FormatPrice(val, true);
                             }
 
                             if (anyIncludeHeader)
@@ -750,7 +894,7 @@ namespace BarcodePrint.ViewModel
                                 string displayText = val;
                                 if (isPrice && !string.IsNullOrWhiteSpace(val))
                                 {
-                                    displayText = PriceFormatHelper.FormatPrice(val);
+                                    displayText = PriceFormatHelper.FormatPrice(val, true);
                                 }
                                 if (!string.IsNullOrEmpty(displayText))
                                 {
@@ -764,7 +908,7 @@ namespace BarcodePrint.ViewModel
                                 string displayText = val;
                                 if (isPrice && !string.IsNullOrWhiteSpace(val))
                                 {
-                                    displayText = PriceFormatHelper.FormatPrice(val);
+                                    displayText = PriceFormatHelper.FormatPrice(val, true);
                                 }
 
                                 if (!string.IsNullOrEmpty(displayText))
@@ -788,7 +932,11 @@ namespace BarcodePrint.ViewModel
                         int size = GetSizeByIndex(colNum);
                         int offX = GetOffsetXByIndex(colNum);
                         int offY = GetOffsetYByIndex(colNum);
-                        BarcodeVisualHelper.RenderBarcodeOnDc(dc, val, bType, size, offX, offY, dotsPerMm, showBText);
+                        var elem = CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == colNum);
+                        double wMm = (elem != null && elem.Width > 0) ? elem.Width : GetWidthByIndex(colNum);
+                        double hMm = (elem != null && elem.Height > 0) ? elem.Height : 0;
+                        string textPos = (elem != null && !string.IsNullOrEmpty(elem.BarcodeTextPosition)) ? elem.BarcodeTextPosition : (showBText ? "BELOW" : "NONE");
+                        BarcodeVisualHelper.RenderBarcodeOnDc(dc, val, bType, size, offX, offY, dotsPerMm, showBText, textPos, wMm, hMm);
                     }
                 }
                 else
@@ -813,14 +961,18 @@ namespace BarcodePrint.ViewModel
 
                         if (isBarcode)
                         {
-                            BarcodeVisualHelper.RenderBarcodeOnDc(dc, val, bType, size, offX, offY, dotsPerMm, showBText);
+                            var elem = CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == colNum);
+                            double wMm = (elem != null && elem.Width > 0) ? elem.Width : GetWidthByIndex(colNum);
+                            double hMm = (elem != null && elem.Height > 0) ? elem.Height : 0;
+                            string textPos = (elem != null && !string.IsNullOrEmpty(elem.BarcodeTextPosition)) ? elem.BarcodeTextPosition : (showBText ? "BELOW" : "NONE");
+                            BarcodeVisualHelper.RenderBarcodeOnDc(dc, val, bType, size, offX, offY, dotsPerMm, showBText, textPos, wMm, hMm);
                         }
                         else
                         {
                             string displayText = val;
                             if (isPrice && !string.IsNullOrWhiteSpace(val))
                             {
-                                displayText = PriceFormatHelper.FormatPrice(val);
+                                displayText = PriceFormatHelper.FormatPrice(val, true);
                             }
                             if (isIncludeHeader && !string.IsNullOrWhiteSpace(header))
                             {
@@ -848,6 +1000,9 @@ namespace BarcodePrint.ViewModel
                     string serialStr = FormattedSerialPreview;
                     DrawTextOnDc(dc, serialStr, SerialSize, SerialOffsetX, SerialOffsetY, dotsPerMm, System.Windows.Media.Brushes.Black, SerialFont, SerialBold, SerialItalic, SerialWidth, SerialAlign, 0, 0);
                 }
+
+                // 자유 배치 커스텀 요소 인쇄 렌더링 (선, 도형, 추가 텍스트/바코드 등)
+                RenderCustomElementsOnDc(dc, dotsPerMm);
 
                 if (hasOffset)
                 {
@@ -882,6 +1037,225 @@ namespace BarcodePrint.ViewModel
             }
         }
 
+        private void RenderCustomElementsOnDc(DrawingContext dc, double dotsPerMm)
+        {
+            if (CurrentTemplate == null || CurrentTemplate.Elements == null) return;
+
+            foreach (var elem in CurrentTemplate.Elements)
+            {
+                if (elem.IsVariable && elem.InputOrder <= 8 && elem.InputOrder <= ActiveColumnCount) continue;
+                if (elem.Id == "TITLE_ELEMENT" || elem.Id == "DATETIME_ELEMENT") continue;
+
+                double leftPx = elem.X * dotsPerMm;
+                double topPx = elem.Y * dotsPerMm;
+                double widthPx = elem.Width * dotsPerMm;
+                double heightPx = elem.Height * dotsPerMm;
+
+                switch (elem.Type)
+                {
+                    case ElementType.LINE:
+                        var linePen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, Math.Max(1.0, elem.LineWidth));
+                        var dashArr = ShapeGeometryHelper.GetStrokeDashArray(elem.LineStyle);
+                        if (dashArr != null)
+                        {
+                            linePen.DashStyle = new DashStyle(dashArr, 0);
+                        }
+                        var lineGeo = ShapeGeometryHelper.CreateLineGeometry(elem.LineStyle, widthPx, heightPx, elem.LineWidth, leftPx, topPx);
+                        dc.DrawGeometry(null, linePen, lineGeo);
+                        break;
+
+                    case ElementType.SHAPE:
+                        double shapeStroke = Math.Max(1.0, elem.LineWidth);
+                        var shapePen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, shapeStroke)
+                        {
+                            LineJoin = PenLineJoin.Round
+                        };
+                        var shapeBrush = elem.IsFilled ? System.Windows.Media.Brushes.Black : null;
+                        var shapeGeo = ShapeGeometryHelper.CreateShapeGeometry(elem.ShapeType, widthPx, heightPx, shapeStroke, leftPx, topPx);
+                        dc.DrawGeometry(shapeBrush, shapePen, shapeGeo);
+                        break;
+
+                    case ElementType.TABLE:
+                        RenderTableOnDc(dc, elem, dotsPerMm, _currentPrintingRecord);
+                        break;
+
+                    case ElementType.BARCODE:
+                    case ElementType.QR_CODE:
+                        string barcodeContent = GetElementEffectiveContent(elem);
+                        if (!string.IsNullOrWhiteSpace(barcodeContent))
+                        {
+                            BarcodeVisualHelper.RenderBarcodeOnDc(dc, barcodeContent, elem.BarcodeType, (int)Math.Round(elem.FontSize), (int)Math.Round(elem.X), (int)Math.Round(elem.Y), dotsPerMm, elem.ShowBarcodeText, elem.BarcodeTextPosition, elem.Width, elem.Height);
+                        }
+                        break;
+
+                    case ElementType.TEXT:
+                    case ElementType.DATE_TIME:
+                        string textContent = GetElementEffectiveContent(elem);
+                        if (!string.IsNullOrWhiteSpace(textContent))
+                        {
+                            DrawTextOnDc(dc, textContent, elem.FontSize, elem.X, elem.Y, dotsPerMm, System.Windows.Media.Brushes.Black, elem.FontName, elem.IsBold, elem.IsItalic, elem.Width, elem.Alignment, 0, 0, elem.IsUnderline, elem.FontScaleX, elem.LineSpacing, elem.LetterSpacing);
+                        }
+                        break;
+
+                    case ElementType.IMAGE:
+                        if (!string.IsNullOrWhiteSpace(elem.Content) && System.IO.File.Exists(elem.Content))
+                        {
+                            try
+                            {
+                                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                                bmp.BeginInit();
+                                bmp.UriSource = new Uri(elem.Content);
+                                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                                bmp.EndInit();
+                                dc.DrawImage(bmp, new Rect(leftPx, topPx, widthPx, heightPx));
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Image render error: {ex.Message}");
+                            }
+                        }
+                        break;
+                }
+            }
+        }
+
+        private void RenderTableOnDc(DrawingContext dc, TemplateElement elem, double dotsPerMm, PrintRecordModel record = null)
+        {
+            if (elem == null || dc == null) return;
+            elem.EnsureTableData();
+
+            int rows = Math.Max(1, elem.Rows);
+            int cols = Math.Max(1, elem.Columns);
+            double x = elem.X * dotsPerMm;
+            double y = elem.Y * dotsPerMm;
+            double w = elem.Width * dotsPerMm;
+            double h = elem.Height * dotsPerMm;
+            if (w <= 0 || h <= 0) return;
+
+            // 1. 각 열 너비 경계 계산 (ColumnWidths 비중 반영)
+            double[] colX = new double[cols + 1];
+            colX[0] = x;
+            double[] colWeights = elem.ColumnWidths;
+            double totalColWeight = 0;
+            if (colWeights != null && colWeights.Length == cols)
+            {
+                foreach (var weight in colWeights) totalColWeight += Math.Max(0.1, weight);
+            }
+            if (totalColWeight <= 0) totalColWeight = cols;
+
+            double currentX = x;
+            for (int c = 0; c < cols; c++)
+            {
+                double weight = (colWeights != null && colWeights.Length == cols) ? Math.Max(0.1, colWeights[c]) : 1.0;
+                double cw = w * (weight / totalColWeight);
+                currentX += cw;
+                colX[c + 1] = (c == cols - 1) ? x + w : currentX;
+            }
+
+            // 2. 각 행 높이 경계 계산 (RowHeights 비중 반영)
+            double[] rowY = new double[rows + 1];
+            rowY[0] = y;
+            double[] rowWeights = elem.RowHeights;
+            double totalRowWeight = 0;
+            if (rowWeights != null && rowWeights.Length == rows)
+            {
+                foreach (var weight in rowWeights) totalRowWeight += Math.Max(0.1, weight);
+            }
+            if (totalRowWeight <= 0) totalRowWeight = rows;
+
+            double currentY = y;
+            for (int r = 0; r < rows; r++)
+            {
+                double weight = (rowWeights != null && rowWeights.Length == rows) ? Math.Max(0.1, rowWeights[r]) : 1.0;
+                double rh = h * (weight / totalRowWeight);
+                currentY += rh;
+                rowY[r + 1] = (r == rows - 1) ? y + h : currentY;
+            }
+
+            bool pushedRotate = false;
+            if (elem.Rotation != 0)
+            {
+                dc.PushTransform(new RotateTransform(elem.Rotation, x + w / 2.0, y + h / 2.0));
+                pushedRotate = true;
+            }
+
+            try
+            {
+                // 3. 헤더 행 음영 (IsFilled 시)
+                if (elem.IsFilled && rows > 0)
+                {
+                    var headerRect = new Rect(x, y, w, Math.Max(1.0, rowY[1] - rowY[0]));
+                    dc.DrawRectangle(new SolidColorBrush(System.Windows.Media.Color.FromRgb(226, 232, 240)), null, headerRect);
+                }
+
+                // 4. 표 외곽선 및 격자선 그리기
+                double strokePx = Math.Max(1.0, elem.LineWidth * (dotsPerMm / (96.0 / 25.4)));
+                var gridPen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, strokePx);
+
+                // 외곽 테두리
+                dc.DrawRectangle(null, gridPen, new Rect(x, y, w, h));
+
+                // 내부 세로 격자선
+                for (int c = 1; c < cols; c++)
+                {
+                    dc.DrawLine(gridPen, new System.Windows.Point(colX[c], y), new System.Windows.Point(colX[c], y + h));
+                }
+
+                // 내부 가로 격자선
+                for (int r = 1; r < rows; r++)
+                {
+                    dc.DrawLine(gridPen, new System.Windows.Point(x, rowY[r]), new System.Windows.Point(x + w, rowY[r]));
+                }
+
+                // 5. 셀 텍스트 렌더링
+                for (int r = 0; r < rows; r++)
+                {
+                    bool isHeader = (r == 0);
+                    for (int c = 0; c < cols; c++)
+                    {
+                        string cellText = GetTableCellEffectiveContent(elem, r, c, record);
+                        if (string.IsNullOrEmpty(cellText)) continue;
+
+                        double cellLeftMm = (colX[c]) / dotsPerMm;
+                        double cellTopMm = (rowY[r]) / dotsPerMm;
+                        double cellWidthMm = (colX[c + 1] - colX[c]) / dotsPerMm;
+                        double cellHeightMm = (rowY[r + 1] - rowY[r]) / dotsPerMm;
+
+                        var (cFontName, cFontSize, cBold, cAlign) = elem.GetCellResolvedStyle(r, c);
+                        string effectiveFontName = string.IsNullOrWhiteSpace(cFontName) ? (string.IsNullOrWhiteSpace(elem.FontName) ? "맑은 고딕" : elem.FontName) : cFontName;
+
+                        DrawTextOnDc(
+                            dc,
+                            cellText,
+                            cFontSize > 0 ? cFontSize : 9.0,
+                            cellLeftMm,
+                            cellTopMm,
+                            dotsPerMm,
+                            System.Windows.Media.Brushes.Black,
+                            effectiveFontName,
+                            cBold,
+                            elem.IsItalic,
+                            cellWidthMm,
+                            cAlign ?? "CENTER",
+                            cellHeightMm,
+                            Math.Max(0.5, elem.CellPadding),
+                            elem.IsUnderline,
+                            elem.FontScaleX,
+                            elem.LineSpacing,
+                            elem.LetterSpacing
+                        );
+                    }
+                }
+            }
+            finally
+            {
+                if (pushedRotate)
+                {
+                    dc.Pop();
+                }
+            }
+        }
+
         private bool SendToTsplPrinter(string col1, string col2, string col3, string col4, string col5, string col6, string col7, string col8, int copies = 1)
         {
             try
@@ -889,12 +1263,6 @@ namespace BarcodePrint.ViewModel
                 if (AvailablePrinters == null || AvailablePrinters.Count == 0 || string.IsNullOrEmpty(SelectedPrinterName))
                 {
                     _dialogService.ShowWarning("선택된 프린터가 없습니다. 프린터를 선택해 주세요.", "인쇄 알림");
-                    return false;
-                }
-
-                if (!IsCurrentPrinterAuthorized)
-                {
-                    _dialogService.ShowWarning("사용 권한이 등록되지 않은 프린터입니다.\n\n프로그램 사용을 위해 기기 등록이 필요합니다. 관리자에게 문의해 주세요.", "기기 등록 필요");
                     return false;
                 }
 
@@ -1028,12 +1396,18 @@ namespace BarcodePrint.ViewModel
 
             bool allSuccess = true;
             int successCount = 0;
+            int totalCopiesPrinted = 0;
 
             foreach (var rec in targets)
             {
+
                 bool success = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
                 rec.Status = success ? "인쇄 완료" : "인쇄 실패";
-                if (success) successCount++;
+                if (success)
+                {
+                    successCount++;
+                    totalCopiesPrinted += ExcelPrintCopies;
+                }
                 else allSuccess = false;
             }
 
@@ -1097,14 +1471,28 @@ namespace BarcodePrint.ViewModel
 
         public void ExecutePrintOnly()
         {
-            if (IsAllInputsEmpty())
+            string c1 = !string.IsNullOrEmpty(InputCol1) ? InputCol1 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 1)?.Content ?? "");
+            string c2 = !string.IsNullOrEmpty(InputCol2) ? InputCol2 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 2)?.Content ?? "");
+            string c3 = !string.IsNullOrEmpty(InputCol3) ? InputCol3 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 3)?.Content ?? "");
+            string c4 = !string.IsNullOrEmpty(InputCol4) ? InputCol4 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 4)?.Content ?? "");
+            string c5 = !string.IsNullOrEmpty(InputCol5) ? InputCol5 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 5)?.Content ?? "");
+            string c6 = !string.IsNullOrEmpty(InputCol6) ? InputCol6 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 6)?.Content ?? "");
+            string c7 = !string.IsNullOrEmpty(InputCol7) ? InputCol7 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 7)?.Content ?? "");
+            string c8 = !string.IsNullOrEmpty(InputCol8) ? InputCol8 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 8)?.Content ?? "");
+
+            bool hasData = !string.IsNullOrWhiteSpace(c1) || !string.IsNullOrWhiteSpace(c2) || 
+                            !string.IsNullOrWhiteSpace(c3) || !string.IsNullOrWhiteSpace(c4) || 
+                            !string.IsNullOrWhiteSpace(c5) || !string.IsNullOrWhiteSpace(c6) || 
+                            !string.IsNullOrWhiteSpace(c7) || !string.IsNullOrWhiteSpace(c8);
+
+            if (!hasData && (CurrentTemplate == null || CurrentTemplate.Elements == null || CurrentTemplate.Elements.Count == 0))
             {
                 _dialogService.ShowMessage("인쇄할 데이터를 입력해 주세요.", "알림", MessageBoxImage.Information);
                 return;
             }
 
             int copies = Math.Max(1, Math.Min(999, SinglePrintCopies));
-            bool printSuccess = SendToTsplPrinter(InputCol1, InputCol2, InputCol3, InputCol4, InputCol5, InputCol6, InputCol7, InputCol8, copies);
+            bool printSuccess = SendToTsplPrinter(c1, c2, c3, c4, c5, c6, c7, c8, copies);
 
             StatusMessage = printSuccess ? $"단건 인쇄 완료: {copies}매" : $"인쇄 실패: {SelectedPrinterName}";
             ClearInputs();
@@ -1190,18 +1578,28 @@ namespace BarcodePrint.ViewModel
             }
 
             int successCount = 0;
-            foreach (var rec in Records)
+            int totalCopiesPrinted = 0;
+            try
             {
-                bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
-                if (ok)
+                foreach (var rec in Records)
                 {
-                    rec.Status = "인쇄 완료";
-                    successCount++;
+                    _currentPrintingRecord = rec;
+                    bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
+                    if (ok)
+                    {
+                        rec.Status = "인쇄 완료";
+                        successCount++;
+                        totalCopiesPrinted += ExcelPrintCopies;
+                    }
+                    else
+                    {
+                        rec.Status = "인쇄 실패";
+                    }
                 }
-                else
-                {
-                    rec.Status = "인쇄 실패";
-                }
+            }
+            finally
+            {
+                _currentPrintingRecord = null;
             }
 
             SaveHistoryRecords();
@@ -1223,18 +1621,28 @@ namespace BarcodePrint.ViewModel
             }
 
             int successCount = 0;
-            foreach (var rec in unprinted)
+            int totalCopiesPrinted = 0;
+            try
             {
-                bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
-                if (ok)
+                foreach (var rec in unprinted)
                 {
-                    rec.Status = "인쇄 완료";
-                    successCount++;
+                    _currentPrintingRecord = rec;
+                    bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
+                    if (ok)
+                    {
+                        rec.Status = "인쇄 완료";
+                        successCount++;
+                        totalCopiesPrinted += ExcelPrintCopies;
+                    }
+                    else
+                    {
+                        rec.Status = "인쇄 실패";
+                    }
                 }
-                else
-                {
-                    rec.Status = "인쇄 실패";
-                }
+            }
+            finally
+            {
+                _currentPrintingRecord = null;
             }
 
             SaveHistoryRecords();
@@ -1276,18 +1684,28 @@ namespace BarcodePrint.ViewModel
             }
 
             int successCount = 0;
-            foreach (var rec in targets)
+            int totalCopiesPrinted = 0;
+            try
             {
-                bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
-                if (ok)
+                foreach (var rec in targets)
                 {
-                    rec.Status = "인쇄 완료";
-                    successCount++;
+                    _currentPrintingRecord = rec;
+                    bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
+                    if (ok)
+                    {
+                        rec.Status = "인쇄 완료";
+                        successCount++;
+                        totalCopiesPrinted += ExcelPrintCopies;
+                    }
+                    else
+                    {
+                        rec.Status = "인쇄 실패";
+                    }
                 }
-                else
-                {
-                    rec.Status = "인쇄 실패";
-                }
+            }
+            finally
+            {
+                _currentPrintingRecord = null;
             }
 
             SaveHistoryRecords();

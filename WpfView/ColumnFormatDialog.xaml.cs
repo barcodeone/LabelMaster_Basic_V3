@@ -129,7 +129,7 @@ namespace BarcodePrint.WpfView
             // 3. 크기
             if (int.TryParse(TxtSize.Text, out int size))
             {
-                _vm.SetSizeByIndex(_colIndex, Math.Max(4, Math.Min(72, size)));
+                _vm.SetSizeByIndex(_colIndex, Math.Max(4, Math.Min(200, size)));
             }
 
             // 4. 스타일
@@ -165,7 +165,7 @@ namespace BarcodePrint.WpfView
         {
             if (int.TryParse(TxtSize.Text, out int size))
             {
-                TxtSize.Text = Math.Max(6, size - 1).ToString();
+                TxtSize.Text = Math.Max(4, size - 1).ToString();
             }
         }
 
@@ -173,7 +173,7 @@ namespace BarcodePrint.WpfView
         {
             if (int.TryParse(TxtSize.Text, out int size))
             {
-                TxtSize.Text = Math.Min(72, size + 1).ToString();
+                TxtSize.Text = Math.Min(200, size + 1).ToString();
             }
         }
 

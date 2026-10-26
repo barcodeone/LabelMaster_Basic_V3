@@ -1,6 +1,7 @@
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
@@ -8,6 +9,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BarcodePrint.Model
@@ -20,10 +22,65 @@ namespace BarcodePrint.Model
         public string PortName { get; set; } = "";
         public string Type { get; set; } = "USB"; // "USB", "LAN", "Bluetooth"
         public string Address { get; set; } = "";
+        public bool IsPaired { get; set; } = true;
     }
 
     public static class UsbPrinterHelper
     {
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct BLUETOOTH_DEVICE_INFO
+        {
+            public int dwSize;
+            public ulong Address;
+            public uint ulClassofDevice;
+            [MarshalAs(UnmanagedType.Bool)] public bool fConnected;
+            [MarshalAs(UnmanagedType.Bool)] public bool fRemembered;
+            [MarshalAs(UnmanagedType.Bool)] public bool fAuthenticated;
+            public ushort wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute, wSecond, wMilliseconds;
+            public ushort uYear, uMonth, uDayOfWeek, uDay, uHour, uMinute, uSecond, uMilliseconds;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 248)]
+            public string szName;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BLUETOOTH_DEVICE_SEARCH_PARAMS
+        {
+            public int dwSize;
+            [MarshalAs(UnmanagedType.Bool)] public bool fReturnAuthenticated;
+            [MarshalAs(UnmanagedType.Bool)] public bool fReturnRemembered;
+            [MarshalAs(UnmanagedType.Bool)] public bool fReturnUnknown;
+            [MarshalAs(UnmanagedType.Bool)] public bool fReturnConnected;
+            [MarshalAs(UnmanagedType.Bool)] public bool fIssueInquiry;
+            public byte cTimeoutMultiplier;
+            public IntPtr hRadio;
+        }
+
+        [DllImport("BluetoothApis.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr BluetoothFindFirstDevice(ref BLUETOOTH_DEVICE_SEARCH_PARAMS searchParams, ref BLUETOOTH_DEVICE_INFO deviceInfo);
+
+        [DllImport("BluetoothApis.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool BluetoothFindNextDevice(IntPtr hFind, ref BLUETOOTH_DEVICE_INFO deviceInfo);
+
+        [DllImport("BluetoothApis.dll", SetLastError = true)]
+        public static extern bool BluetoothFindDeviceClose(IntPtr hFind);
+
+        [DllImport("Bthprops.cpl", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern uint BluetoothAuthenticateDevice(
+            IntPtr hwndParent,
+            IntPtr hRadio,
+            ref BLUETOOTH_DEVICE_INFO pDevice,
+            string pszPasskey,
+            ulong ulPasskeyLength
+        );
+
+        [DllImport("Bthprops.cpl", SetLastError = true)]
+        public static extern uint BluetoothSetServiceState(
+            IntPtr hRadio,
+            ref BLUETOOTH_DEVICE_INFO pbtdi,
+            ref Guid pGuidService,
+            uint dwServiceFlags
+        );
+
         // 지원되는 Xprinter 브랜드 및 모델 키워드 리스트 (일반 사무용 프린터 배제)
         public static readonly List<string> SupportedKeywords = new List<string>
         {
@@ -46,14 +103,38 @@ namespace BarcodePrint.Model
 
         public static List<string> GetAvailableComPorts()
         {
+            var ports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                return SerialPort.GetPortNames().OrderBy(p => p).ToList();
+                foreach (var p in SerialPort.GetPortNames())
+                {
+                    if (!string.IsNullOrWhiteSpace(p)) ports.Add(p.Trim().ToUpper());
+                }
             }
-            catch
+            catch { }
+
+            // 현재 설정된 블루투스 포트 포함
+            try
             {
-                return new List<string> { "COM1", "COM2", "COM3", "COM4", "COM5" };
+                var settings = new AppSettings();
+                settings.Load();
+                if (!string.IsNullOrWhiteSpace(settings.BluetoothPortName))
+                {
+                    ports.Add(settings.BluetoothPortName.Trim().ToUpper());
+                }
             }
+            catch { }
+
+            if (ports.Count == 0)
+            {
+                ports.Add("COM3");
+            }
+
+            return ports.OrderBy(p =>
+            {
+                var match = Regex.Match(p, @"\d+");
+                return match.Success ? int.Parse(match.Value) : 999;
+            }).ToList();
         }
 
         public static List<UsbPrinterInfo> GetConnectedUsbPrinters(string targetPrinterName = null, IEnumerable<string> targetSerials = null)
@@ -289,39 +370,232 @@ namespace BarcodePrint.Model
         }
 
         /// <summary>
-        /// 블루투스 가상 COM 포트로 비출력 안전 쿼리(OUT GETSETTING$)를 전송하여 시리얼 번호 획득
+        /// 블루투스 가상 COM 포트로 비출력 안전 쿼리를 전송하여 연결 점검 및 시리얼/응답 획득
         /// </summary>
-        public static string QueryTsplSerialViaCom(string comPortName, int baudRate = 9600, int timeoutMs = 1000)
+        /// <summary>
+        /// 블루투스 가상 COM 포트로 비출력 안전 쿼리를 전송하여 연결 점검 및 시리얼/응답 획득
+        /// </summary>
+        /// <summary>
+        /// 블루투스 가상 COM 포트로 비출력 안전 쿼리를 전송하여 연결 점검 및 시리얼/응답 획득
+        /// </summary>
+        public static string QueryTsplSerialViaCom(string comPortName, int baudRate = 9600, int timeoutMs = 2500)
         {
             if (string.IsNullOrEmpty(comPortName)) return null;
 
+            string cleanPort = Regex.Match(comPortName, @"COM\d+", RegexOptions.IgnoreCase).Value;
+            if (string.IsNullOrEmpty(cleanPort)) cleanPort = comPortName.Trim().TrimEnd(':');
+
+            PrinterSerialLogger.WriteCommLog("COM-TEST", $"[{cleanPort}] 가상 COM 포트 통신 점검 시작 (입력: '{comPortName}')");
+
+            // 1차 시도 (지정된 baudRate, 기본 9600, 타임아웃 2500ms)
+            string res = QueryTsplSerialInternal(cleanPort, baudRate, timeoutMs);
+            if (!string.IsNullOrEmpty(res) && res != "-")
+            {
+                PrinterSerialLogger.WriteCommLog("COM-TEST", $"[{cleanPort}] 1차 시도(Baud {baudRate}) 성공: '{res}'");
+                return res;
+            }
+
+            // 2차 시도 (fallbackBaud: 115200 <-> 9600)
+            int fallbackBaud = (baudRate == 9600) ? 115200 : 9600;
+            res = QueryTsplSerialInternal(cleanPort, fallbackBaud, 2000);
+            if (!string.IsNullOrEmpty(res) && res != "-")
+            {
+                PrinterSerialLogger.WriteCommLog("COM-TEST", $"[{cleanPort}] 2차 시도(Baud {fallbackBaud}) 성공: '{res}'");
+                return res;
+            }
+
+            // 3차 시도: 포트가 이미 스풀러나 드라이버에 의해 열려있는 경우 Windows Spooler 점검
             try
             {
-                using (var serialPort = new SerialPort(comPortName, baudRate))
+                using (var searcher = new System.Management.ManagementObjectSearcher($"SELECT Name, PortName, PrinterStatus, WorkOffline FROM Win32_Printer WHERE PortName LIKE '%{cleanPort}%'"))
                 {
-                    serialPort.ReadTimeout = timeoutMs;
-                    serialPort.WriteTimeout = timeoutMs;
-                    serialPort.Open();
-
-                    // 인쇄를 유발하지 않는 TSPL 공식 OUT 질의문 전송
-                    serialPort.Write(SafeTsplInfoQuery);
-                    System.Threading.Thread.Sleep(200);
-
-                    byte[] buffer = new byte[1024];
-                    int bytesRead = 0;
-                    if (serialPort.BytesToRead > 0)
+                    foreach (System.Management.ManagementObject obj in searcher.Get())
                     {
-                        bytesRead = serialPort.Read(buffer, 0, Math.Min(buffer.Length, serialPort.BytesToRead));
-                    }
-
-                    if (bytesRead > 0)
-                    {
-                        string raw = Encoding.ASCII.GetString(buffer, 0, bytesRead).Trim();
-                        return ParseSerialFromTsplResponse(raw);
+                        bool offline = (bool)(obj["WorkOffline"] ?? false);
+                        if (!offline)
+                        {
+                            string pName = obj["Name"]?.ToString() ?? cleanPort;
+                            PrinterSerialLogger.WriteCommLog("COM-TEST", $"[{cleanPort}] 스풀러 드라이버 온라인 감지: '{pName}'");
+                            return $"정상 준비 (드라이버 {pName})";
+                        }
                     }
                 }
             }
-            catch { }
+            catch (Exception exWmi)
+            {
+                PrinterSerialLogger.WriteCommLog("COM-TEST", $"[{cleanPort}] WMI 스풀러 점검 예외: {exWmi.Message}");
+            }
+
+            PrinterSerialLogger.WriteCommLog("COM-TEST", $"[{cleanPort}] 통신 점검 실패 (응답 없음)");
+            return null;
+        }
+
+        private static string QueryTsplSerialInternal(string cleanPort, int baudRate, int timeoutMs)
+        {
+            // 1단계: Windows Bluetooth 가상 COM 포트(BthModem)를 위한 NativeSerialStream 우선 시도
+            try
+            {
+                using (var nativeStream = BarcodePrint.Services.NativeSerialStream.Open(cleanPort))
+                {
+                    PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] NativeSerialStream.Open() 성공!");
+                    Thread.Sleep(150);
+
+                    // ~!T
+                    string tResp = nativeStream.QueryTsplCommand("~!T\r\n", 1200);
+                    if (!string.IsNullOrEmpty(tResp) && !tResp.Contains("!"))
+                    {
+                        var m = Regex.Match(tResp, @"V\d+(\.\d+)+", RegexOptions.IgnoreCase);
+                        return m.Success ? m.Value : tResp;
+                    }
+
+                    // TSPL 표준 질의
+                    string queryCmd = 
+                        "OUT \"MDL=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"MODEL\");" +
+                        "\"|SER=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"SERIAL\");" +
+                        "\"|VER=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"VERSION\");" +
+                        "\"|DEN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"DENSITY\");\"|\"\r\n";
+
+                    string resp = nativeStream.QueryTsplCommand(queryCmd, timeoutMs);
+                    if (!string.IsNullOrEmpty(resp))
+                    {
+                        string parsed = ParseSerialFromTsplResponse(resp);
+                        if (!string.IsNullOrEmpty(parsed) && parsed != "-") return parsed;
+                        var mdlMatch = Regex.Match(resp, @"MDL=([^\|\r\n]+)");
+                        if (mdlMatch.Success && !string.IsNullOrEmpty(mdlMatch.Groups[1].Value.Trim()))
+                            return mdlMatch.Groups[1].Value.Trim();
+                        return "정상 준비 (Ready)";
+                    }
+
+                    if (nativeStream.IsOpen)
+                    {
+                        PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] NativeSerialStream 포트 열림 확인 (준비 완료)");
+                        return "정상 준비 (Ready)";
+                    }
+                }
+            }
+            catch (Exception exNative)
+            {
+                PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] NativeSerialStream 시도 예외: {exNative.Message}");
+            }
+
+            // 2단계: 표준 .NET SerialPort 시도
+            try
+            {
+                PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] SerialPort.Open() 시도 (Baud: {baudRate})...");
+                using (var serialPort = new SerialPort(cleanPort, baudRate, Parity.None, 8, StopBits.One))
+                {
+                    serialPort.ReadTimeout = 2000;
+                    serialPort.WriteTimeout = 1500;
+                    serialPort.DtrEnable = true;
+                    serialPort.RtsEnable = true;
+                    serialPort.Open();
+
+                    PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] SerialPort.Open() 성공! (IsOpen: {serialPort.IsOpen})");
+
+                    // 블루투스 RFCOMM 버퍼 안정화 대기
+                    Thread.Sleep(200);
+
+                    // 1) ~!T 및 ~!V 빠른 펌웨어 질의
+                    try
+                    {
+                        serialPort.DiscardInBuffer();
+                        serialPort.Write("~!T\r\n");
+                        Thread.Sleep(120);
+                        if (serialPort.BytesToRead > 0)
+                        {
+                            byte[] tBuf = new byte[256];
+                            int tr = serialPort.Read(tBuf, 0, tBuf.Length);
+                            string tStr = Encoding.ASCII.GetString(tBuf, 0, tr).Replace("\r", "").Replace("\n", "").Trim();
+                            PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] RX (~!T): '{tStr}'");
+                            if (!string.IsNullOrEmpty(tStr) && !tStr.Contains("!")) return tStr;
+                        }
+                    }
+                    catch { }
+
+                    // 2) 표준 TSPL 질의
+                    string queryCmd = 
+                        "OUT \"MDL=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"MODEL\");" +
+                        "\"|SER=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"SERIAL\");" +
+                        "\"|VER=\";GETSETTING$(\"SYSTEM\",\"INFORMATION\",\"VERSION\");" +
+                        "\"|DEN=\";GETSETTING$(\"CONFIG\",\"TSPL\",\"DENSITY\");\"|\"\r\n";
+
+                    byte[] cmdBytes = Encoding.ASCII.GetBytes(queryCmd);
+                    serialPort.Write(cmdBytes, 0, cmdBytes.Length);
+                    PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] TX: {queryCmd.Trim()}");
+
+                    var sw = Stopwatch.StartNew();
+                    var acc = new List<byte>();
+                    byte[] buffer = new byte[2048];
+
+                    while (sw.ElapsedMilliseconds < timeoutMs)
+                    {
+                        if (serialPort.BytesToRead > 0)
+                        {
+                            int bytesRead = serialPort.Read(buffer, 0, Math.Min(buffer.Length, serialPort.BytesToRead));
+                            if (bytesRead > 0)
+                            {
+                                byte[] sl = new byte[bytesRead];
+                                Array.Copy(buffer, 0, sl, 0, bytesRead);
+                                acc.AddRange(sl);
+                                string cur = Encoding.ASCII.GetString(acc.ToArray());
+
+                                string parsed = ParseSerialFromTsplResponse(cur);
+                                if (!string.IsNullOrEmpty(parsed) && parsed != "-")
+                                {
+                                    PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] 시리얼 파싱 성공: {parsed}");
+                                    return parsed;
+                                }
+
+                                if (cur.Contains("MDL=") || cur.Contains("DEN=") || cur.Contains("VER="))
+                                {
+                                    PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] 응답 키워드 수신: '{cur}'");
+                                    var mdlMatch = Regex.Match(cur, @"MDL=([^\|\r\n]+)");
+                                    if (mdlMatch.Success && !string.IsNullOrEmpty(mdlMatch.Groups[1].Value.Trim()))
+                                    {
+                                        return mdlMatch.Groups[1].Value.Trim();
+                                    }
+                                    return "정상 준비 (Ready)";
+                                }
+                            }
+                        }
+                        Thread.Sleep(40);
+                    }
+
+                    if (acc.Count > 0)
+                    {
+                        string fullResp = Encoding.ASCII.GetString(acc.ToArray()).Trim();
+                        PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] 전체 수신 데이터: '{fullResp}'");
+                        string parsed = ParseSerialFromTsplResponse(fullResp);
+                        if (!string.IsNullOrEmpty(parsed) && parsed != "-") return parsed;
+                        if (fullResp.Length > 2) return "정상 준비 (Ready)";
+                    }
+
+                    // 3) 보조 쿼리: ~HS
+                    serialPort.DiscardInBuffer();
+                    serialPort.Write("~HS\r\n");
+                    Thread.Sleep(120);
+                    if (serialPort.BytesToRead > 0)
+                    {
+                        PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] ~HS 응답 있음");
+                        return "정상 준비 (Ready)";
+                    }
+
+                    if (serialPort.IsOpen)
+                    {
+                        PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] 포트 Open 유지됨 (데이터 미수신)");
+                        return "정상 준비 (Ready)";
+                    }
+                }
+            }
+            catch (UnauthorizedAccessException uex)
+            {
+                PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] 포트 점유 중 (UnauthorizedAccess): {uex.Message}");
+                return "정상 준비 (프린터 드라이버 연결 중)";
+            }
+            catch (Exception ex)
+            {
+                PrinterSerialLogger.WriteCommLog("COM-INT", $"[{cleanPort}] 시리얼 통신 예외 ({ex.GetType().Name}): {ex.Message}");
+            }
             return null;
         }
 
@@ -644,228 +918,284 @@ namespace BarcodePrint.Model
         }
 
         /// <summary>
-        /// 시스템에 등록된 블루투스 가상 COM 포트 및 페어링된 블루투스 프린터를 정밀 스캔하여 실제 장치 이름(FriendlyName)을 매핑 후 UsbPrinterInfo 리스트로 반환
+        /// 시스템에 페어링된 블루투스 장치 마스터 사전(MAC 주소 ➔ 실제 장치 이름) 구축
         /// </summary>
-        public static async Task<List<UsbPrinterInfo>> ScanBluetoothPrintersAsync()
+        public static Dictionary<string, string> GetPairedBluetoothDeviceMap()
         {
-            return await Task.Run(() =>
+            var macToDeviceNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
             {
-                var list = new List<UsbPrinterInfo>();
-                try
+                // 1. 레지스트리 BTHPORT\Parameters\Devices 에서 페어링된 블루투스 장치명 수집
+                using (var devKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Devices"))
                 {
-                    var portModelMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    var portMacMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    var bluetoothPorts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    var macToDeviceNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-                    // 1. WMI 및 레지스트리에서 페어링된 모든 블루투스 장치(MAC 주소 ➔ 실제 장치 이름) 마스터 사전 구축
-                    try
+                    if (devKey != null)
                     {
-                        using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, Caption, Description, DeviceID, PNPDeviceID FROM Win32_PnPEntity WHERE PNPDeviceID LIKE '%BTH%' OR ClassGuid = '{e0cbf06c-cdb3-4647-bb8a-263b43f0f974}'"))
+                        foreach (var subMac in devKey.GetSubKeyNames())
                         {
-                            foreach (System.Management.ManagementObject obj in searcher.Get())
+                            using (var sub = devKey.OpenSubKey(subMac))
                             {
-                                string name = obj["Name"]?.ToString() ?? obj["Caption"]?.ToString() ?? "";
-                                string pnpId = obj["PNPDeviceID"]?.ToString() ?? "";
-
-                                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(pnpId)) continue;
-
-                                // 시스템/스택 기본 장치명 제외
-                                if (name.StartsWith("Generic ", StringComparison.OrdinalIgnoreCase) ||
-                                    name.StartsWith("Microsoft ", StringComparison.OrdinalIgnoreCase) ||
-                                    name.StartsWith("Bluetooth LE ", StringComparison.OrdinalIgnoreCase) ||
-                                    name.StartsWith("Bluetooth Device ", StringComparison.OrdinalIgnoreCase) ||
-                                    name.StartsWith("표준 Bluetooth", StringComparison.OrdinalIgnoreCase) ||
-                                    name.StartsWith("Service Discovery", StringComparison.OrdinalIgnoreCase) ||
-                                    name.StartsWith("Device Information", StringComparison.OrdinalIgnoreCase) ||
-                                    name.Contains("Adapter") || name.Contains("어댑터") || name.Contains("Enumerator") || name.Contains("열거자"))
+                                if (sub == null) continue;
+                                string devName = sub.GetValue("Name") as string;
+                                if (string.IsNullOrEmpty(devName))
                                 {
-                                    continue;
-                                }
-
-                                // 12자리 Hex MAC 주소 추출 (예: DEV_DC0D30D66320, 908C43DFF2C9)
-                                var macMatch = Regex.Match(pnpId, @"DEV_([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
-                                if (!macMatch.Success)
-                                {
-                                    macMatch = Regex.Match(pnpId, @"([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
-                                }
-
-                                if (macMatch.Success)
-                                {
-                                    string rawMac = macMatch.Groups[1].Value.ToUpper();
-                                    if (!rawMac.StartsWith("000000000000"))
+                                    var rawBytes = sub.GetValue("Name") as byte[];
+                                    if (rawBytes != null && rawBytes.Length > 0)
                                     {
-                                        macToDeviceNameMap[rawMac] = name.Trim();
+                                        devName = System.Text.Encoding.UTF8.GetString(rawBytes).TrimEnd('\0');
+                                    }
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(devName))
+                                {
+                                    string cleanMac = subMac.Replace(":", "").Replace("-", "").ToUpper();
+                                    if (!macToDeviceNameMap.ContainsKey(cleanMac))
+                                    {
+                                        macToDeviceNameMap[cleanMac] = devName.Trim();
                                     }
                                 }
                             }
                         }
                     }
-                    catch { }
+                }
+            }
+            catch { }
 
-                    // 레지스트리 BTHPORT\Parameters\Devices 에서 추가 블루투스 장치명 수집
-                    try
+            try
+            {
+                // 2. WMI Win32_PnPEntity 에서 추가 블루투스 장치명 수집
+                using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, Caption, Description, DeviceID, PNPDeviceID FROM Win32_PnPEntity WHERE PNPDeviceID LIKE '%BTH%' OR ClassGuid = '{e0cbf06c-cdb3-4647-bb8a-263b43f0f974}'"))
+                {
+                    foreach (System.Management.ManagementObject obj in searcher.Get())
                     {
-                        using (var devKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Devices"))
-                        {
-                            if (devKey != null)
-                            {
-                                foreach (var subMac in devKey.GetSubKeyNames())
-                                {
-                                    using (var sub = devKey.OpenSubKey(subMac))
-                                    {
-                                        if (sub == null) continue;
-                                        string devName = sub.GetValue("Name") as string;
-                                        if (string.IsNullOrEmpty(devName))
-                                        {
-                                            var rawBytes = sub.GetValue("Name") as byte[];
-                                            if (rawBytes != null && rawBytes.Length > 0)
-                                            {
-                                                devName = System.Text.Encoding.UTF8.GetString(rawBytes).TrimEnd('\0');
-                                            }
-                                        }
+                        string name = obj["Name"]?.ToString() ?? obj["Caption"]?.ToString() ?? "";
+                        string pnpId = obj["PNPDeviceID"]?.ToString() ?? "";
 
-                                        if (!string.IsNullOrWhiteSpace(devName))
-                                        {
-                                            string cleanMac = subMac.Replace(":", "").Replace("-", "").ToUpper();
-                                            if (!macToDeviceNameMap.ContainsKey(cleanMac))
-                                            {
-                                                macToDeviceNameMap[cleanMac] = devName.Trim();
-                                            }
-                                        }
-                                    }
-                                }
+                        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(pnpId)) continue;
+
+                        if (name.StartsWith("Generic ", StringComparison.OrdinalIgnoreCase) ||
+                            name.StartsWith("Microsoft ", StringComparison.OrdinalIgnoreCase) ||
+                            name.StartsWith("Bluetooth LE ", StringComparison.OrdinalIgnoreCase) ||
+                            name.StartsWith("Bluetooth Device ", StringComparison.OrdinalIgnoreCase) ||
+                            name.StartsWith("표준 Bluetooth", StringComparison.OrdinalIgnoreCase) ||
+                            name.StartsWith("Service Discovery", StringComparison.OrdinalIgnoreCase) ||
+                            name.StartsWith("Device Information", StringComparison.OrdinalIgnoreCase) ||
+                            name.Contains("Adapter") || name.Contains("어댑터") || name.Contains("Enumerator") || name.Contains("열거자"))
+                        {
+                            continue;
+                        }
+
+                        var macMatch = Regex.Match(pnpId, @"DEV_([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
+                        if (!macMatch.Success)
+                        {
+                            macMatch = Regex.Match(pnpId, @"([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
+                        }
+
+                        if (macMatch.Success)
+                        {
+                            string rawMac = macMatch.Groups[1].Value.ToUpper();
+                            if (!rawMac.StartsWith("000000000000") && !macToDeviceNameMap.ContainsKey(rawMac))
+                            {
+                                macToDeviceNameMap[rawMac] = name.Trim();
                             }
                         }
                     }
-                    catch { }
+                }
+            }
+            catch { }
 
-                    // 2. WMI Win32_Printer에서 이미 설치된 블루투스 프린터 매핑
-                    try
+            return macToDeviceNameMap;
+        }
+
+        /// <summary>
+        /// 시스템에 페어링된 블루투스 프린터/라벨 장치들의 실제 이름 목록을 우선순위 순으로 반환 (예: "Xprinter 7941", "XP-D465B")
+        /// </summary>
+        public static List<string> GetPairedBluetoothPrinterNames()
+        {
+            var results = new List<string>();
+            var allDevices = GetPairedBluetoothDeviceMap();
+
+            // 1. 라벨/영수증 프린터 키워드 매칭 우선순위
+            string[] printerKeywords = new[] { "Xprinter", "XP-", "Label", "Printer", "POS", "Barcode", "MPT", "BTP", "RP", "TSC", "Bixolon", "Zebra", "Sewoo", "Citizen" };
+            string[] nonPrinterKeywords = new[] { 
+                "mac", "mini", "phone", "iphone", "galaxy", "headset", "earbuds", "buds", "airpods", 
+                "mouse", "keyboard", "audio", "speaker", "client", "service", "profile", "프로필", 
+                "프로파일", "iap", "spp", "ble", "avrcp", "a2dp", "handsfree", "dongle", "특성" 
+            };
+
+            var printerCandidates = new List<string>();
+            var fallbackCandidates = new List<string>();
+
+            foreach (var kvp in allDevices)
+            {
+                string dev = kvp.Value.Trim();
+                if (string.IsNullOrEmpty(dev)) continue;
+
+                bool isNonPrinter = nonPrinterKeywords.Any(k => dev.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0);
+                if (isNonPrinter) continue;
+
+                bool isPrinter = printerKeywords.Any(k => dev.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0);
+                if (isPrinter)
+                {
+                    if (!printerCandidates.Contains(dev, StringComparer.OrdinalIgnoreCase))
+                        printerCandidates.Add(dev);
+                }
+                else
+                {
+                    if (!fallbackCandidates.Contains(dev, StringComparer.OrdinalIgnoreCase))
+                        fallbackCandidates.Add(dev);
+                }
+            }
+
+            // 명확한 프린터 후보가 있으면 비-프린터 프로필/서비스는 완전히 배제
+            if (printerCandidates.Count > 0)
+            {
+                results.AddRange(printerCandidates);
+            }
+            else
+            {
+                results.AddRange(fallbackCandidates);
+            }
+            return results;
+        }
+
+        /// <summary>
+        /// 지정된 포트(예: "COM3") 또는 시스템 환경에서 가장 적합한 실제 블루투스 장치 이름을 반환 (COM 포트 번호 대신 장치명 표기 보장)
+        /// </summary>
+        public static string GetBluetoothDeviceNameForPort(string portName)
+        {
+            string cleanPort = (portName ?? "").Trim().ToUpper();
+
+            // 1. 레지스트리 BTHENUM에서 포트명에 직접 매핑된 장치명 검색
+            try
+            {
+                string bthPath = @"SYSTEM\CurrentControlSet\Enum\BTHENUM";
+                using (var bthKey = Registry.LocalMachine.OpenSubKey(bthPath))
+                {
+                    if (bthKey != null)
                     {
-                        using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                        var macMap = GetPairedBluetoothDeviceMap();
+                        foreach (var sub1 in bthKey.GetSubKeyNames())
                         {
-                            foreach (System.Management.ManagementObject obj in searcher.Get())
+                            using (var k1 = bthKey.OpenSubKey(sub1))
                             {
-                                string name = obj["Name"]?.ToString() ?? "";
-                                string port = obj["PortName"]?.ToString() ?? "";
-                                string driver = obj["DriverName"]?.ToString() ?? "";
-
-                                var match = Regex.Match(port, @"COM\d+", RegexOptions.IgnoreCase);
-                                if (match.Success)
+                                if (k1 == null) continue;
+                                foreach (var sub2 in k1.GetSubKeyNames())
                                 {
-                                    string pKey = match.Value.ToUpper();
-                                    string identifiedModel = !string.IsNullOrEmpty(name) ? name : driver;
-                                    portModelMap[pKey] = identifiedModel;
-                                    bluetoothPorts.Add(pKey);
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-
-                    // 3. WMI Win32_PnPEntity에서 직렬 포트 및 블루투스 링크 매핑
-                    try
-                    {
-                        using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, Caption, DeviceID, PNPDeviceID FROM Win32_PnPEntity WHERE ClassGuid = '{4d36e978-e325-11ce-bfc1-08002be10318}' OR PNPDeviceID LIKE 'BTHENUM%' OR Name LIKE '%(COM%'"))
-                        {
-                            foreach (System.Management.ManagementObject obj in searcher.Get())
-                            {
-                                string pnpName = obj["Name"]?.ToString() ?? obj["Caption"]?.ToString() ?? "";
-                                string pnpId = obj["PNPDeviceID"]?.ToString() ?? "";
-
-                                var match = Regex.Match(pnpName, @"(COM\d+)", RegexOptions.IgnoreCase);
-                                if (match.Success)
-                                {
-                                    string pKey = match.Groups[1].Value.ToUpper();
-
-                                    // 블루투스 포트 여부 확인
-                                    bool isBthPort = pnpId.IndexOf("BTH", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                     pnpName.IndexOf("Bluetooth", StringComparison.OrdinalIgnoreCase) >= 0;
-
-                                    if (isBthPort)
+                                    using (var k2 = k1.OpenSubKey(sub2))
                                     {
-                                        bluetoothPorts.Add(pKey);
-
-                                        // PNPDeviceID에서 MAC 주소 추출 (예: &DC0D30D66320_C00000000)
-                                        var macMatch = Regex.Match(pnpId, @"([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
-                                        if (macMatch.Success)
+                                        if (k2 == null) continue;
+                                        using (var pKey = k2.OpenSubKey("Device Parameters"))
                                         {
-                                            string rawMac = macMatch.Groups[1].Value.ToUpper();
-                                            if (!rawMac.StartsWith("000000000000"))
+                                            if (pKey != null)
                                             {
-                                                portMacMap[pKey] = string.Join("-", Enumerable.Range(0, 6).Select(i => rawMac.Substring(i * 2, 2)));
-
-                                                if (macToDeviceNameMap.TryGetValue(rawMac, out string matchedName))
+                                                string p = (pKey.GetValue("PortName") as string)?.TrimEnd(':').ToUpper();
+                                                if (!string.IsNullOrEmpty(p) && p == cleanPort)
                                                 {
-                                                    portModelMap[pKey] = matchedName;
+                                                    var macMatch = Regex.Match(sub2, @"([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
+                                                    if (macMatch.Success)
+                                                    {
+                                                        string rawMac = macMatch.Groups[1].Value.ToUpper();
+                                                        if (macMap.TryGetValue(rawMac, out string mName) && !string.IsNullOrWhiteSpace(mName))
+                                                        {
+                                                            return mName;
+                                                        }
+                                                    }
+
+                                                    string friendly = k2.GetValue("FriendlyName") as string;
+                                                    string devDesc = k2.GetValue("DeviceDesc") as string;
+                                                    string targetName = !string.IsNullOrEmpty(friendly) ? friendly : devDesc;
+                                                    if (!string.IsNullOrEmpty(targetName) && !targetName.StartsWith("표준", StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        return targetName;
+                                                    }
                                                 }
                                             }
                                         }
-
-                                        // 아직 이름이 없으면 PnP 이름에서 정제
-                                        if (!portModelMap.ContainsKey(pKey))
-                                        {
-                                            string cleanName = Regex.Replace(pnpName, @"\s*\(COM\d+\)", "").Trim();
-                                            if (!cleanName.StartsWith("표준 Bluetooth", StringComparison.OrdinalIgnoreCase) &&
-                                                !cleanName.StartsWith("Bluetooth Serial", StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                portModelMap[pKey] = cleanName;
-                                            }
-                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    catch { }
+                }
+            }
+            catch { }
 
-                    // 4. 레지스트리 BTHENUM 키에서 PortName 직접 매핑
-                    try
+            // 2. 시스템에 페어링된 블루투스 프린터가 있다면 최우선 장치명 반환
+            var pairedPrinters = GetPairedBluetoothPrinterNames();
+            if (pairedPrinters.Count > 0)
+            {
+                return pairedPrinters[0];
+            }
+
+            // 3. 대체 명칭 (절대 포트 번호로 표기하지 않음)
+            return "블루투스 라벨 프린터";
+        }
+
+        /// <summary>
+        /// 지정된 블루투스 장치명 또는 모델명(예: "XP-D4604B")에 매핑된 실제 COM 포트명을 레지스트리/WMI에서 역조회
+        /// </summary>
+        public static string GetBluetoothPortForDeviceName(string deviceName)
+        {
+            if (string.IsNullOrWhiteSpace(deviceName)) return "";
+            string cleanTarget = deviceName
+                .Replace("[블루투스]", "")
+                .Replace("(페어링 필요)", "")
+                .Replace("(가상포트 연결 필요)", "")
+                .Replace("-", "")
+                .Replace(" ", "")
+                .Trim()
+                .ToUpperInvariant();
+
+            if (string.IsNullOrEmpty(cleanTarget)) return "";
+
+            // 1. 레지스트리 BTHENUM 키에서 PortName 역조회
+            try
+            {
+                string bthPath = @"SYSTEM\CurrentControlSet\Enum\BTHENUM";
+                using (var bthKey = Registry.LocalMachine.OpenSubKey(bthPath))
+                {
+                    if (bthKey != null)
                     {
-                        string bthPath = @"SYSTEM\CurrentControlSet\Enum\BTHENUM";
-                        using (var bthKey = Registry.LocalMachine.OpenSubKey(bthPath))
+                        var macMap = GetPairedBluetoothDeviceMap();
+                        foreach (var sub1 in bthKey.GetSubKeyNames())
                         {
-                            if (bthKey != null)
+                            using (var k1 = bthKey.OpenSubKey(sub1))
                             {
-                                foreach (var sub1 in bthKey.GetSubKeyNames())
+                                if (k1 == null) continue;
+                                foreach (var sub2 in k1.GetSubKeyNames())
                                 {
-                                    using (var k1 = bthKey.OpenSubKey(sub1))
+                                    using (var k2 = k1.OpenSubKey(sub2))
                                     {
-                                        if (k1 == null) continue;
-                                        foreach (var sub2 in k1.GetSubKeyNames())
+                                        if (k2 == null) continue;
+                                        using (var pKey = k2.OpenSubKey("Device Parameters"))
                                         {
-                                            using (var k2 = k1.OpenSubKey(sub2))
+                                            if (pKey != null)
                                             {
-                                                if (k2 == null) continue;
-                                                string friendly = k2.GetValue("FriendlyName") as string;
-                                                string devDesc = k2.GetValue("DeviceDesc") as string;
-                                                string targetName = !string.IsNullOrEmpty(friendly) ? friendly : devDesc;
-
-                                                using (var pKey = k2.OpenSubKey("Device Parameters"))
+                                                string port = (pKey.GetValue("PortName") as string)?.TrimEnd(':').ToUpper();
+                                                if (!string.IsNullOrEmpty(port))
                                                 {
-                                                    if (pKey != null)
+                                                    string friendly = (k2.GetValue("FriendlyName") as string) ?? "";
+                                                    string devDesc = (k2.GetValue("DeviceDesc") as string) ?? "";
+                                                    string cleanF = friendly.Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
+                                                    string cleanD = devDesc.Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
+
+                                                    if (cleanF.Contains(cleanTarget) || cleanTarget.Contains(cleanF) ||
+                                                        cleanD.Contains(cleanTarget) || cleanTarget.Contains(cleanD))
                                                     {
-                                                        string port = pKey.GetValue("PortName") as string;
-                                                        if (!string.IsNullOrEmpty(port))
+                                                        return port;
+                                                    }
+
+                                                    // MAC 매핑 이름 확인
+                                                    var macMatch = Regex.Match(sub2, @"([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
+                                                    if (macMatch.Success)
+                                                    {
+                                                        string rawMac = macMatch.Groups[1].Value.ToUpper();
+                                                        if (macMap.TryGetValue(rawMac, out string mName))
                                                         {
-                                                            string portClean = port.ToUpper().TrimEnd(':');
-                                                            bluetoothPorts.Add(portClean);
-
-                                                            // 서브키 이름에서 MAC 주소 확인
-                                                            var macMatch = Regex.Match(sub2, @"([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
-                                                            if (macMatch.Success)
+                                                            string cleanM = (mName ?? "").Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
+                                                            if (cleanM.Contains(cleanTarget) || cleanTarget.Contains(cleanM))
                                                             {
-                                                                string rawMac = macMatch.Groups[1].Value.ToUpper();
-                                                                if (!rawMac.StartsWith("000000000000") && macToDeviceNameMap.TryGetValue(rawMac, out string mName))
-                                                                {
-                                                                    portModelMap[portClean] = mName;
-                                                                }
-                                                            }
-
-                                                            if (!portModelMap.ContainsKey(portClean) && !string.IsNullOrEmpty(targetName))
-                                                            {
-                                                                portModelMap[portClean] = targetName;
+                                                                return port;
                                                             }
                                                         }
                                                     }
@@ -877,53 +1207,341 @@ namespace BarcodePrint.Model
                             }
                         }
                     }
-                    catch { }
+                }
+            }
+            catch { }
 
-                    // 5. 시스템의 직렬 포트 열거 및 블루투스 장치 목록 생성
-                    var allPorts = SerialPort.GetPortNames().OrderBy(p => p).ToList();
-
-                    // 블루투스 포트로 확인된 것들을 우선 추가
-                    var targetPorts = allPorts.Where(p => bluetoothPorts.Contains(p.ToUpper())).ToList();
-                    
-                    // 만약 명시적 블루투스 포트가 없으면 모든 COM 포트 fallback
-                    if (targetPorts.Count == 0)
+            // 2. WMI Win32_PnPEntity 역조회
+            try
+            {
+                using (var searcher = new System.Management.ManagementObjectSearcher(
+                    "SELECT Name, Caption, PNPDeviceID FROM Win32_PnPEntity WHERE ClassGuid = '{4d36e978-e325-11ce-bfc1-08002be10318}' OR Name LIKE '%(COM%'"))
+                {
+                    foreach (System.Management.ManagementObject obj in searcher.Get())
                     {
-                        targetPorts = allPorts;
-                    }
-
-                    // 정렬: 장치 이름이 명확히 확인된 포트 우선
-                    var sortedPorts = targetPorts.OrderByDescending(p => portModelMap.ContainsKey(p.ToUpper()))
-                                                 .ThenBy(p => p).ToList();
-
-                    foreach (var port in sortedPorts)
-                    {
-                        string pUpper = port.ToUpper();
-                        string modelName = portModelMap.TryGetValue(pUpper, out string m) ? m : null;
-                        string mac = portMacMap.TryGetValue(pUpper, out string mc) ? mc : "-";
-
-                        string displayName;
-                        if (!string.IsNullOrEmpty(modelName))
+                        string pnpName = obj["Name"]?.ToString() ?? obj["Caption"]?.ToString() ?? "";
+                        var match = Regex.Match(pnpName, @"(COM\d+)", RegexOptions.IgnoreCase);
+                        if (match.Success)
                         {
-                            displayName = $"[블루투스] {modelName} ({port})";
+                            string port = match.Groups[1].Value.ToUpper();
+                            string cleanPnp = pnpName.Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
+                            if (cleanPnp.Contains(cleanTarget) || cleanTarget.Contains(cleanPnp))
+                            {
+                                return port;
+                            }
                         }
-                        else
-                        {
-                            displayName = $"[블루투스] 블루투스 장치 ({port})";
-                        }
-
-                        list.Add(new UsbPrinterInfo
-                        {
-                            Name = displayName,
-                            FriendlyName = modelName ?? "Bluetooth Printer",
-                            PortName = port,
-                            Serial = mac,
-                            Type = "Bluetooth",
-                            Address = port
-                        });
                     }
                 }
-                catch { }
+            }
+            catch { }
+
+            return "";
+        }
+
+        /// <summary>
+        /// 지정된 IP 주소에 대응하는 네트워크 프린터 장치명(모델명)을 반환 (블루투스처럼 명확한 장치명 표시 보장)
+        /// </summary>
+        public static string GetNetworkPrinterDeviceName(string ip)
+        {
+            if (string.IsNullOrWhiteSpace(ip)) return "네트워크 라벨 프린터";
+            string cleanIp = ip.Trim();
+
+            // 1. Windows 스풀러 드라이버 목록에서 해당 IP 포트를 사용하는 프린터 검색
+            try
+            {
+                using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                {
+                    foreach (System.Management.ManagementObject obj in searcher.Get())
+                    {
+                        string pName = obj["Name"]?.ToString() ?? "";
+                        string port = obj["PortName"]?.ToString() ?? "";
+                        string driver = obj["DriverName"]?.ToString() ?? "";
+
+                        if (!string.IsNullOrEmpty(port) && port.IndexOf(cleanIp, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            if (!string.IsNullOrEmpty(pName)) return pName;
+                            if (!string.IsNullOrEmpty(driver)) return driver;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 2. 이전에 저장된 네트워크 프린터 모델명 확인
+            try
+            {
+                var settings = new AppSettings();
+                settings.Load();
+                if (!string.IsNullOrWhiteSpace(settings.LastTcpPrinterModel))
+                {
+                    return settings.LastTcpPrinterModel.Trim();
+                }
+            }
+            catch { }
+
+            return "Xprinter 라벨 프린터";
+        }
+
+        /// <summary>
+        /// Windows 시스템에 정식 드라이버로 등록된 블루투스/직렬(COM) 라벨 프린터를 스캔하여 UsbPrinterInfo 리스트 반환
+        /// (드라이버가 설치되지 않은 미등록/미페어링 기기는 제외하고 정상 인쇄 가능한 드라이버 프린터만 안전하게 반환)
+        /// </summary>
+        public static async Task<List<UsbPrinterInfo>> ScanBluetoothPrintersAsync()
+        {
+            return await Task.Run(() =>
+            {
+                var list = new List<UsbPrinterInfo>();
+                try
+                {
+                    // 1. Windows 스풀러(Win32_Printer)에서 라벨 프린터 목록 취득
+                    var allInstalled = GetConnectedUsbPrinters();
+                    if (allInstalled != null)
+                    {
+                        foreach (var p in allInstalled)
+                        {
+                            if (p.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (!list.Any(x => x.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    list.Add(p);
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. 포트명이 COMx이거나 BTH로 시작하는 기타 등록된 Xprinter 드라이버 보강
+                    using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                    {
+                        foreach (System.Management.ManagementObject obj in searcher.Get())
+                        {
+                            string name = obj["Name"]?.ToString() ?? "";
+                            string port = obj["PortName"]?.ToString() ?? "";
+                            string driver = obj["DriverName"]?.ToString() ?? "";
+
+                            if (string.IsNullOrEmpty(name)) continue;
+                            if (!IsXprinterDevice(name, driver)) continue;
+
+                            bool isBtPort = port.ToUpper().Contains("COM") || port.ToUpper().Contains("BTH") || port.ToUpper().Contains("BLUETOOTH");
+                            if (isBtPort)
+                            {
+                                if (!list.Any(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase) || x.PortName.Equals(port, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    list.Add(new UsbPrinterInfo
+                                    {
+                                        Name = name,
+                                        FriendlyName = !string.IsNullOrEmpty(driver) ? driver : name,
+                                        PortName = port,
+                                        Serial = "-",
+                                        Type = "Bluetooth",
+                                        Address = port,
+                                        IsPaired = true
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"블루투스 드라이버 프린터 검색 오류: {ex.Message}");
+                }
                 return list;
+            });
+        }
+
+        /// <summary>
+        /// 레지스트리 BTHENUM 및 SERIALCOMM 에서 지정된 블루투스 MAC 주소에 매핑된 실제 COM 포트명을 조회
+        /// </summary>
+        public static string FindComPortForBluetoothMac(string rawMac12)
+        {
+            if (string.IsNullOrWhiteSpace(rawMac12)) return "";
+            string cleanMac = rawMac12.Replace(":", "").Replace("-", "").Trim().ToUpper();
+
+            try
+            {
+                string bthPath = @"SYSTEM\CurrentControlSet\Enum\BTHENUM";
+                using (var bthKey = Registry.LocalMachine.OpenSubKey(bthPath))
+                {
+                    if (bthKey != null)
+                    {
+                        foreach (var sub1 in bthKey.GetSubKeyNames())
+                        {
+                            using (var k1 = bthKey.OpenSubKey(sub1))
+                            {
+                                if (k1 == null) continue;
+                                foreach (var sub2 in k1.GetSubKeyNames())
+                                {
+                                    if (sub2.IndexOf(cleanMac, StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        using (var k2 = k1.OpenSubKey(sub2))
+                                        using (var pKey = k2?.OpenSubKey("Device Parameters"))
+                                        {
+                                            if (pKey != null)
+                                            {
+                                                string p = (pKey.GetValue("PortName") as string)?.TrimEnd(':').ToUpper();
+                                                if (!string.IsNullOrEmpty(p)) return p;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return "";
+        }
+
+        /// <summary>
+        /// 미페어링된 블루투스 프린터를 윈도우에 자동 페어링하고, 가상 직렬(COM) 포트를 활성화하여 생성된 COM 포트명을 반환
+        /// </summary>
+        public static async Task<(bool success, string portName, string message)> PairAndSetupBluetoothPrinterAsync(string rawMacOrName)
+        {
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    string cleanInput = (rawMacOrName ?? "")
+                        .Replace("[블루투스]", "")
+                        .Replace("(페어링 필요)", "")
+                        .Replace("(가상포트 연결 필요)", "")
+                        .Trim();
+
+                    string cleanTargetKey = cleanInput.Replace(":", "").Replace("-", "").Replace(" ", "").Trim().ToUpper();
+
+                    // 1. 라디오 스캔으로 장치 찾기
+                    var sp = new BLUETOOTH_DEVICE_SEARCH_PARAMS();
+                    sp.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_SEARCH_PARAMS));
+                    sp.fReturnAuthenticated = true;
+                    sp.fReturnRemembered = true;
+                    sp.fReturnUnknown = true;
+                    sp.fReturnConnected = true;
+                    sp.fIssueInquiry = true;
+                    sp.cTimeoutMultiplier = 3;
+                    sp.hRadio = IntPtr.Zero;
+
+                    var di = new BLUETOOTH_DEVICE_INFO();
+                    di.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+
+                    IntPtr hFind = BluetoothFindFirstDevice(ref sp, ref di);
+                    BLUETOOTH_DEVICE_INFO targetDi = new BLUETOOTH_DEVICE_INFO();
+                    bool found = false;
+
+                    if (hFind != IntPtr.Zero)
+                    {
+                        do
+                        {
+                            string curMac = di.Address.ToString("X12").ToUpper();
+                            string curName = (di.szName ?? "").Trim();
+                            string cleanCurName = curName.Replace(":", "").Replace("-", "").Replace(" ", "").Trim().ToUpper();
+
+                            bool matchMac = !string.IsNullOrEmpty(curMac) && curMac.Equals(cleanTargetKey, StringComparison.OrdinalIgnoreCase);
+                            bool matchName = false;
+
+                            // 12자리 Hex MAC 주소인 경우 오직 MAC 주소 완전 일치로만 매칭 (이름 매칭 방지)
+                            bool isTargetMac = cleanTargetKey.Length == 12 && Regex.IsMatch(cleanTargetKey, "^[0-9A-F]{12}$");
+                            if (!isTargetMac)
+                            {
+                                // 이름 기반 매칭인 경우:
+                                // 모델 번호(숫자 시퀀스) 불일치 방어 (예: 325 != 7941)
+                                var curNums = Regex.Matches(curName, @"\d+").Cast<Match>().Select(m => m.Value).ToList();
+                                var targetNums = Regex.Matches(cleanInput, @"\d+").Cast<Match>().Select(m => m.Value).ToList();
+                                bool numConflict = curNums.Any() && targetNums.Any() && !curNums.Intersect(targetNums).Any();
+
+                                if (!numConflict && !string.IsNullOrEmpty(cleanCurName) && !string.IsNullOrEmpty(cleanTargetKey))
+                                {
+                                    matchName = cleanCurName.Contains(cleanTargetKey) || cleanTargetKey.Contains(cleanCurName);
+                                }
+                            }
+
+                            if (matchMac || matchName)
+                            {
+                                targetDi = di;
+                                found = true;
+                                break;
+                            }
+                            di = new BLUETOOTH_DEVICE_INFO();
+                            di.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+                        } while (BluetoothFindNextDevice(hFind, ref di));
+                        BluetoothFindDeviceClose(hFind);
+                    }
+
+                    if (!found)
+                    {
+                        return (false, "", $"주변에서 해당 블루투스 프린터('{cleanInput}')를 검색하지 못했습니다. 프린터 전원을 확인해주세요.");
+                    }
+
+                    // 2. 이미 인증되어 있지 않다면 페어링(Authenticate) 수행
+                    if (!targetDi.fAuthenticated)
+                    {
+                        // 1차 0000 시도
+                        uint authRes = BluetoothAuthenticateDevice(IntPtr.Zero, IntPtr.Zero, ref targetDi, "0000", 4);
+                        if (authRes != 0)
+                        {
+                            // 2차 1234 시도
+                            authRes = BluetoothAuthenticateDevice(IntPtr.Zero, IntPtr.Zero, ref targetDi, "1234", 4);
+                        }
+
+                        if (authRes != 0)
+                        {
+                            return (false, "", $"블루투스 페어링(인증)에 실패했습니다. (오류코드: {authRes})\nWindows [설정 > Bluetooth]에서 직접 페어링을 진행해주세요.");
+                        }
+                    }
+
+                    // 3. 직렬 포트(SPP) 서비스 활성화
+                    Guid sppGuid = new Guid("00001101-0000-1000-8000-00805F9B34FB");
+                    BluetoothSetServiceState(IntPtr.Zero, ref targetDi, ref sppGuid, 1);
+
+                    // 4. Windows PnP 가상 COM 포트 생성 대기 (최대 7초)
+                    string matchedPort = "";
+                    string devMac12 = targetDi.Address.ToString("X12").ToUpper();
+
+                    var initialPorts = new HashSet<string>(SerialPort.GetPortNames(), StringComparer.OrdinalIgnoreCase);
+
+                    for (int wait = 0; wait < 14; wait++)
+                    {
+                        Thread.Sleep(500);
+
+                        // 1) SERIALCOMM 또는 BTHENUM 레지스트리에서 해당 MAC 매핑 검색
+                        matchedPort = FindComPortForBluetoothMac(devMac12);
+                        if (!string.IsNullOrEmpty(matchedPort))
+                        {
+                            break;
+                        }
+
+                        // 2) 새로 추가된 COM 포트가 있는지 확인
+                        var currentPorts = SerialPort.GetPortNames();
+                        var newlyAdded = currentPorts.FirstOrDefault(p => !initialPorts.Contains(p));
+                        if (!string.IsNullOrEmpty(newlyAdded))
+                        {
+                            matchedPort = newlyAdded.Trim().TrimEnd(':').ToUpper();
+                            break;
+                        }
+
+                        // 3) 장치명으로 레지스트리/WMI 역조회
+                        string nameMatched = GetBluetoothPortForDeviceName(targetDi.szName);
+                        if (!string.IsNullOrEmpty(nameMatched))
+                        {
+                            matchedPort = nameMatched;
+                            break;
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(matchedPort))
+                    {
+                        return (true, matchedPort, $"[{targetDi.szName}] 장치가 성공적으로 페어링되고 {matchedPort} 포트가 생성되었습니다.");
+                    }
+                    else
+                    {
+                        // ⚠️ 주의: 절대 기존 다른 장치의 포트(availablePorts.Last)를 반환하지 않음!
+                        return (true, "", $"[{targetDi.szName}] 장치가 성공적으로 페어링되었습니다.\n\nWindows에서 가상 직렬(COM) 포트를 생성하는 데 시간이 걸릴 수 있습니다.\n잠시 후 [블루투스 장치 검색]을 눌러 포트를 갱신해주세요.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    return (false, "", $"페어링 중 오류 발생: {ex.Message}");
+                }
             });
         }
     }

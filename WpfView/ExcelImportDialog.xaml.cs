@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using BarcodePrint.Model;
 using BarcodePrint.Services;
 
 namespace BarcodePrint.WpfView
@@ -23,7 +24,12 @@ namespace BarcodePrint.WpfView
         private ExcelSourceColumnOption _selectedOption;
 
         public int TargetItemNumber { get; set; } // 1 ~ 8
-        public string TargetItemLabel => $"[항목 {TargetItemNumber}]";
+        private string _customLabel;
+        public string TargetItemLabel
+        {
+            get => !string.IsNullOrEmpty(_customLabel) ? _customLabel : $"[항목 {TargetItemNumber}]";
+            set => _customLabel = value;
+        }
 
         public ObservableCollection<ExcelSourceColumnOption> AvailableOptions { get; set; }
 
@@ -52,6 +58,12 @@ namespace BarcodePrint.WpfView
         private readonly string _filePath;
         private readonly IExcelService _excelService;
         private readonly BarcodePrint.Model.AppSettings _settings;
+        private readonly TemplateElement _targetElement;
+
+        public bool IsSingleElementMode => _targetElement != null;
+        public int SelectedSingleColumnIndex { get; private set; } = 0;
+        public string SelectedSingleColumnHeader { get; private set; } = "";
+        public List<string> AllSheetHeaders { get; private set; } = new List<string>();
 
         public ObservableCollection<ExcelSourceColumnOption> AvailableOptions { get; } = new ObservableCollection<ExcelSourceColumnOption>();
         public ObservableCollection<ExcelColumnMappingItem> MappingSlots { get; } = new ObservableCollection<ExcelColumnMappingItem>();
@@ -65,21 +77,72 @@ namespace BarcodePrint.WpfView
         private TextBlock SelectedCountText => FindName("TxtSelectedCount") as TextBlock;
         private CheckBox RememberMappingCheckBox => FindName("ChkRememberMapping") as CheckBox;
 
-        public ExcelImportDialog(string filePath, IExcelService excelService, BarcodePrint.Model.AppSettings settings = null)
+        public ExcelImportDialog(string filePath, IExcelService excelService, BarcodePrint.Model.AppSettings settings = null, TemplateElement targetElement = null)
         {
             InitializeComponentSafely();
             _filePath = filePath;
             _excelService = excelService;
             _settings = settings;
+            _targetElement = targetElement;
 
-            // 1~8번 고정 슬롯 초기화
-            for (int i = 1; i <= 8; i++)
+            if (IsSingleElementMode)
             {
+                Title = "📊 엑셀 컬럼 매핑 (선택된 요소)";
+                Height = 440;
+                Width = 640;
+                MinHeight = 400;
+
+                var headerTitle = FindName("TxtHeaderTitle") as TextBlock;
+                if (headerTitle != null) headerTitle.Text = "📑 엑셀 데이터 가져오기 & 컬럼 매핑";
+
+                var headerSubtitle = FindName("TxtHeaderSubtitle") as TextBlock;
+                if (headerSubtitle != null) headerSubtitle.Text = "선택된 라벨 요소에 연동할 엑셀 컬럼을 콤보박스에서 선택해주세요.";
+
+                var banner = FindName("PnlTargetElementBanner") as Border;
+                if (banner != null) banner.Visibility = Visibility.Visible;
+
+                var targetInfo = FindName("TxtTargetElementInfo") as TextBlock;
+                if (targetInfo != null)
+                {
+                    string previewText = string.IsNullOrWhiteSpace(_targetElement.Content) ? "(내용 없음)" : _targetElement.Content.Replace("\r", " ").Replace("\n", " ");
+                    targetInfo.Text = $"[{_targetElement.Type}] \"{previewText}\"";
+                }
+
+                var slotsTitle = FindName("TxtSlotsTitle") as TextBlock;
+                if (slotsTitle != null) slotsTitle.Text = "📋 선택된 요소 컬럼 매핑";
+
+                var batchBtns = FindName("PnlBatchButtons") as StackPanel;
+                if (batchBtns != null) batchBtns.Visibility = Visibility.Collapsed;
+
+                var chk = FindName("ChkRememberMapping") as CheckBox;
+                if (chk != null) chk.Visibility = Visibility.Collapsed;
+
+                var btnConfirm = FindName("BtnConfirm") as Button;
+                if (btnConfirm != null)
+                {
+                    btnConfirm.Content = "✔️ 선택된 요소에 매핑 적용";
+                    btnConfirm.Width = 190;
+                }
+
+                // 선택된 요소 전용 1개 슬롯만 추가
                 MappingSlots.Add(new ExcelColumnMappingItem
                 {
-                    TargetItemNumber = i,
+                    TargetItemNumber = 1,
+                    TargetItemLabel = "선택 요소",
                     AvailableOptions = this.AvailableOptions
                 });
+            }
+            else
+            {
+                // 1~8번 고정 슬롯 초기화
+                for (int i = 1; i <= 8; i++)
+                {
+                    MappingSlots.Add(new ExcelColumnMappingItem
+                    {
+                        TargetItemNumber = i,
+                        AvailableOptions = this.AvailableOptions
+                    });
+                }
             }
 
             if (SlotsList != null)
@@ -99,7 +162,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var resourceLocater = new Uri("/LabelMaster_Basic_v2;component/wpfview/excelimportdialog.xaml", UriKind.Relative);
+                var resourceLocater = new Uri("/LabelMaster;component/wpfview/excelimportdialog.xaml", UriKind.Relative);
                 System.Windows.Application.LoadComponent(this, resourceLocater);
             }
             catch (Exception ex)
@@ -149,6 +212,7 @@ namespace BarcodePrint.WpfView
 
             // 2. 엑셀 헤더 목록 추가
             var headers = _excelService.GetSheetHeaders(_filePath, sheetName);
+            AllSheetHeaders = new List<string>(headers);
             for (int i = 0; i < headers.Count; i++)
             {
                 string header = string.IsNullOrWhiteSpace(headers[i]) ? $"열 {i + 1}" : headers[i];
@@ -159,6 +223,38 @@ namespace BarcodePrint.WpfView
                     DisplayText = $"[{colLetter}열] {header}",
                     HeaderName = header
                 });
+            }
+
+            if (IsSingleElementMode)
+            {
+                // 선택된 요소의 기존 매핑 확인 및 자동 선택
+                ExcelSourceColumnOption matchedOpt = null;
+                string curCol = _targetElement?.DataSourceColumn;
+                if (!string.IsNullOrWhiteSpace(curCol))
+                {
+                    if (int.TryParse(curCol, out int numCol) && numCol > 0)
+                    {
+                        matchedOpt = AvailableOptions.FirstOrDefault(o => o.ExcelColumnIndex == numCol);
+                    }
+                    if (matchedOpt == null)
+                    {
+                        matchedOpt = AvailableOptions.FirstOrDefault(o => o.ExcelColumnIndex > 0 &&
+                            string.Equals(o.HeaderName?.Trim(), curCol.Trim(), StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+
+                if (matchedOpt == null && AvailableOptions.Count > 1)
+                {
+                    // 기본값: 첫 번째 실제 컬럼 선택
+                    matchedOpt = AvailableOptions[1];
+                }
+
+                if (MappingSlots.Count > 0)
+                {
+                    MappingSlots[0].SelectedOption = matchedOpt ?? AvailableOptions[0];
+                }
+                UpdateMappedCount();
+                return;
             }
 
             // 3. 마지막 매핑 옵션이 활성화되어 있고 저장된 매핑이 있으면 마지막 매핑 적용, 없으면 순차 매핑 적용
@@ -293,6 +389,25 @@ namespace BarcodePrint.WpfView
 
         private void UpdateMappedCount()
         {
+            if (IsSingleElementMode)
+            {
+                if (SelectedCountText != null)
+                {
+                    var opt = MappingSlots.FirstOrDefault()?.SelectedOption;
+                    if (opt != null && opt.ExcelColumnIndex > 0)
+                    {
+                        SelectedCountText.Text = $"연동 컬럼: {opt.DisplayText}";
+                        SelectedCountText.Foreground = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFrom("#059669");
+                    }
+                    else
+                    {
+                        SelectedCountText.Text = "연동 해제 (직접 입력값 유지)";
+                        SelectedCountText.Foreground = System.Windows.Media.Brushes.Gray;
+                    }
+                }
+                return;
+            }
+
             int mappedCount = MappingSlots.Count(s => s.IsMapped);
             if (SelectedCountText != null)
             {
@@ -305,6 +420,20 @@ namespace BarcodePrint.WpfView
 
         private void OnConfirmClick(object sender, RoutedEventArgs e)
         {
+            if (IsSingleElementMode)
+            {
+                var opt = MappingSlots.FirstOrDefault()?.SelectedOption;
+                SelectedSingleColumnIndex = opt?.ExcelColumnIndex ?? 0;
+                SelectedSingleColumnHeader = opt != null && opt.ExcelColumnIndex > 0 ? opt.HeaderName : "";
+
+                SelectedColumnIndices = new List<int> { SelectedSingleColumnIndex };
+                SelectedCustomHeaders = new List<string> { SelectedSingleColumnHeader };
+
+                DialogResult = true;
+                Close();
+                return;
+            }
+
             int mappedCount = MappingSlots.Count(s => s.IsMapped);
             if (mappedCount == 0)
             {

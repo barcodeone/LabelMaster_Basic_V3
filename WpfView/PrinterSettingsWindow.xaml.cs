@@ -18,7 +18,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var resourceLocater = new Uri("/LabelMaster_Basic_v2;component/wpfview/printersettingswindow.xaml", UriKind.Relative);
+                var resourceLocater = new Uri("/LabelMaster;component/wpfview/printersettingswindow.xaml", UriKind.Relative);
                 System.Windows.Application.LoadComponent(this, resourceLocater);
             }
             catch (Exception ex)
@@ -29,10 +29,24 @@ namespace BarcodePrint.WpfView
 
         private void PrinterSettingsWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // 진입 시 자동으로 최신 하드웨어 스펙 조회 실행
+            // 진입 시 현재 선택된 프린터 동기화 및 하드웨어 스펙 확인
             if (ViewModel != null && !string.IsNullOrEmpty(ViewModel.SelectedPrinterName))
             {
-                ViewModel.ReadPrinterHardwareInfoCommand?.Execute(null);
+                ViewModel.TargetPrinterName = ViewModel.SelectedPrinterName;
+
+                // 창 진입 시 사용자를 방해하는 강제 연결 팝업을 띄우지 않고, 기존 정보가 있을 때만 백그라운드로 가볍게 갱신
+                if (ViewModel.PrinterHardwareDetailsList != null && ViewModel.PrinterHardwareDetailsList.Count > 5)
+                {
+                    ViewModel.ExecuteReadPrinterHardwareInfo(showLoadingPopup: false);
+                }
+            }
+        }
+
+        private void GoToAdvancedSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (PrinterTabControl != null)
+            {
+                PrinterTabControl.SelectedIndex = 1;
             }
         }
 

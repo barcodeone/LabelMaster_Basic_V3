@@ -99,7 +99,7 @@ namespace BarcodePrint.View
             this.Label_AdjustFormOpen.Name = "Label_AdjustFormOpen";
             this.Label_AdjustFormOpen.Size = new System.Drawing.Size(125, 20);
             this.Label_AdjustFormOpen.TabIndex = 1;
-            this.Label_AdjustFormOpen.Text = "제작 : 한국Xprinter";
+            this.Label_AdjustFormOpen.Text = "제작 : 이엔드림 주식회사";
             // 
             // label2
             // 
@@ -109,7 +109,7 @@ namespace BarcodePrint.View
             this.label2.Name = "label2";
             this.label2.Size = new System.Drawing.Size(641, 65);
             this.label2.TabIndex = 43;
-            this.label2.Text = "라벨마스터 for 베이직";
+            this.label2.Text = "라벨마스터 스튜디오";
             this.label2.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.label2.MouseDown += new System.Windows.Forms.MouseEventHandler(this.label2_MouseDown);
             this.label2.MouseMove += new System.Windows.Forms.MouseEventHandler(this.label2_MouseMove);
@@ -681,7 +681,7 @@ namespace BarcodePrint.View
             this.MinimumSize = new System.Drawing.Size(950, 600);
             this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "라벨마스터forBasic";
+            this.Text = "라벨마스터 스튜디오";
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.Shown += new System.EventHandler(this.MainForm_Shown);
             this.MouseDown += new System.Windows.Forms.MouseEventHandler(this.MainForm_MouseDown);

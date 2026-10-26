@@ -63,9 +63,7 @@ namespace BarcodePrint.View
 
         // 빌드시 변경해야 할 정보들 1.시리얼넘버(외부 암호화 파일로 분리됨), 2.회사링크, 3.전화번호
         string[] UserSerials = new string[0];
-        //string CompanyLink = "https://printerlabel.co.kr"; // 창성제일
-        string CompanyLink = "https://xprinter.co.kr"; // 
-        //string CompanyLink = "https://kklabel.co.kr"; 
+        string CompanyLink = "https://xpix.co.kr/labelmaster/windows/download"; // 이엔드림 주식회사
         bool IsRelease = true; // 배포 모드 여부
         bool shouldCloseOnLoad = false; // 로드 시 종료 여부 플래그
         public bool isDemoVersion = false; // 데모 버전 플래그 (체험판)
@@ -706,8 +704,8 @@ namespace BarcodePrint.View
                 System.Windows.Forms.MessageBox.Show(
                     "프린터 인증에 실패했거나 시리얼 번호가 일치하지 않습니다.\n\n" +
                     "프린터 시리얼 넘버 : " + (string.IsNullOrEmpty(serial) ? "미확인" : serial) + "\n" +
-                    "구매처에 문의하시기 바랍니다.\n-한국Xprinter-",
-                    "라벨마스터",
+                    "구매처 또는 고객지원(endreaminc@gmail.com)에 문의하시기 바랍니다.\n-이엔드림 주식회사-",
+                    "라벨마스터 스튜디오",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
 
@@ -2286,8 +2284,8 @@ namespace BarcodePrint.View
                         if (!isDemoVersion && !shouldCloseOnLoad)
                         {
                             System.Windows.Forms.MessageBox.Show(
-                                "프린터 시리얼 번호 매칭에 실패하였습니다.\n인쇄 기능이 비활성화됩니다.\n\n구매처에 문의하시기 바랍니다.\n-한국Xprinter-",
-                                "라벨마스터",
+                                "프린터 시리얼 번호 매칭에 실패하였습니다.\n인쇄 기능이 비활성화됩니다.\n\n구매처 또는 고객지원(endreaminc@gmail.com)에 문의하시기 바랍니다.\n-이엔드림 주식회사-",
+                                "라벨마스터 스튜디오",
                                 System.Windows.Forms.MessageBoxButtons.OK,
                                 System.Windows.Forms.MessageBoxIcon.Warning);
                         }

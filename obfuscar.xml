@@ -20,7 +20,7 @@
   <Var name="SuppressIldasm" value="true" />
 
   <!-- 2. 대상 모듈 -->
-  <Module file="$(InPath)\LabelMaster_Basic_v2.exe">
+  <Module file="$(InPath)\LabelMaster.exe">
     <!-- WPF XAML 바인딩 대상 ViewModel 프로퍼티들은 리플렉션 안전 보장 -->
     <SkipType name="BarcodePrint.ViewModel.MainViewModel" />
     <SkipType name="BarcodePrint.ViewModel.RelayCommand" />

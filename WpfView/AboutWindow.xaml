@@ -1,82 +1,110 @@
 <Window x:Class="BarcodePrint.WpfView.AboutWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="ℹ️ LabelMaster Basic v2 - 프로그램 및 업체 정보" Height="600" Width="530"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        Background="#F8FAFC" FontFamily="Malgun Gothic" WindowStyle="SingleBorderWindow">
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="프로그램 정보 - 라벨마스터 (LabelMaster)"
+        Width="640" Height="620" MinWidth="580" MinHeight="540"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Malgun Gothic"
+        Background="#F8FAFC"
+        ResizeMode="NoResize">
 
     <Window.Resources>
+        <SolidColorBrush x:Key="PrimaryAccentBrush" Color="#2563EB"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1E293B"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#64748B"/>
+
         <Style x:Key="ModernButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#2563EB"/>
+            <Setter Property="Background" Value="{StaticResource PrimaryAccentBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#1D4ED8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
         <Style x:Key="SecondaryButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#F1F5F9"/>
-            <Setter Property="Foreground" Value="#1E293B"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#334155"/>
             <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="14,8"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#F1F5F9"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#94A3B8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="18">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
-            <!-- Header -->
+            <!-- 0. Header with App Icon and Version -->
             <RowDefinition Height="Auto"/>
-            <!-- Content Tabs or Scrollable Cards -->
+            <!-- 1. Scrollable Info Area -->
             <RowDefinition Height="*"/>
-            <!-- Bottom Buttons -->
+            <!-- 2. Bottom Close Button -->
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- 1. Bright Elegant Header Banner -->
-        <Border Grid.Row="0" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1.2" CornerRadius="8" Padding="16,14" Margin="0,0,0,14">
+        <!-- 0. Header -->
+        <Border Grid.Row="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="16,14" Margin="0,0,0,12">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="🏷️ LabelMaster" FontSize="20" FontWeight="Bold" Foreground="#1E3A8A"/>
-                        <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="Basic v2.0" FontSize="11.5" FontWeight="Bold" Foreground="White"/>
-                        </Border>
+
+                <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Width="48" Height="48" Margin="0,0,14,0">
+                    <Image Source="pack://application:,,,/LabelMaster;component/resource/Logo_LM.jpg" Stretch="Uniform" Margin="2" RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="라벨마스터" FontWeight="ExtraBold" FontSize="18" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Text="LabelMaster" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" Margin="8,4,0,0"/>
                     </StackPanel>
-                    <TextBlock Text="Xprinter 바코드 &amp; 엑셀 라벨 인쇄 시스템" FontSize="12" Foreground="#475569" Margin="0,4,0,0"/>
+                    <TextBlock Text="간편한 엑셀 대량 연동 &amp; 고속 라벨 인쇄 시스템" FontSize="11.5" Foreground="#64748B" Margin="0,2,0,0"/>
                 </StackPanel>
-                <Border Grid.Column="1" Background="White" BorderBrush="#93C5FD" BorderThickness="1" CornerRadius="6" Padding="10,6" VerticalAlignment="Center">
-                    <TextBlock Text="한국Xprinter" FontWeight="Bold" FontSize="12.5" Foreground="#1D4ED8"/>
+
+                <Border Grid.Column="2" Background="#ECFDF5" BorderBrush="#A7F3D0" BorderThickness="1" CornerRadius="6" Padding="8,4" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtVersionBadge" Text="v1.0.1" FontSize="11.5" FontWeight="Bold" Foreground="#059669"/>
                 </Border>
             </Grid>
         </Border>
 
-        <!-- 2. Main Information Cards -->
+        <!-- 1. Main Information Cards -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
             <StackPanel Orientation="Vertical">
                 <!-- Card 1: 프로그램 및 개발/공급사 정보 -->
@@ -84,13 +112,22 @@
                     <StackPanel>
                         <TextBlock Text="🏢 업체 및 개발 정보" FontWeight="Bold" FontSize="13.5" Foreground="#1E3A8A" Margin="0,0,0,8"/>
                         
-                        <Grid Margin="0,3">
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="135"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="프로그램 버전:" FontWeight="Bold" Foreground="#64748B" FontSize="12"/>
+                            <TextBlock x:Name="TxtBuildVersionInfo" Grid.Column="1" Text="v1.0.1 (Build 2026.10.23)" FontWeight="Bold" Foreground="#2563EB" FontSize="12.5"/>
+                        </Grid>
+
+                        <Grid Margin="0,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="135"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="개발 / 공급사:" FontWeight="Bold" Foreground="#64748B" FontSize="12"/>
-                            <TextBlock Grid.Column="1" Text="한국Xprinter (Xprinter Korea)" FontWeight="SemiBold" Foreground="#1E293B" FontSize="12"/>
+                            <TextBlock Grid.Column="1" Text="이엔드림 주식회사" FontWeight="Bold" Foreground="#1E293B" FontSize="12.5"/>
                         </Grid>
 
                         <Grid Margin="0,4">
@@ -98,23 +135,10 @@
                                 <ColumnDefinition Width="135"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="공식 웹사이트:" FontWeight="Bold" Foreground="#64748B" FontSize="12"/>
+                            <TextBlock Grid.Column="0" Text="최신버전 다운로드:" FontWeight="Bold" Foreground="#64748B" FontSize="12"/>
                             <TextBlock Grid.Column="1" FontSize="12">
-                                <Hyperlink NavigateUri="https://xprinter.co.kr" RequestNavigate="OnHyperlinkRequestNavigate">
-                                    https://xprinter.co.kr
-                                </Hyperlink>
-                            </TextBlock>
-                        </Grid>
-
-                        <Grid Margin="0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="135"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="최신버전 다운로드 링크:" FontWeight="Bold" Foreground="#64748B" FontSize="12"/>
-                            <TextBlock Grid.Column="1" FontSize="12">
-                                <Hyperlink NavigateUri="https://xpix.co.kr/labelmaster/basic/download" RequestNavigate="OnHyperlinkRequestNavigate">
-                                    https://xpix.co.kr/labelmaster/basic/download
+                                <Hyperlink NavigateUri="https://xpix.co.kr/labelmaster/windows/download" RequestNavigate="OnHyperlinkRequestNavigate">
+                                    https://xpix.co.kr/labelmaster/windows/download
                                 </Hyperlink>
                             </TextBlock>
                         </Grid>
@@ -126,8 +150,8 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="프로그램 문의:" FontWeight="Bold" Foreground="#64748B" FontSize="12"/>
                             <TextBlock Grid.Column="1" FontSize="12">
-                                <Hyperlink NavigateUri="mailto:help@endream.com" RequestNavigate="OnHyperlinkRequestNavigate">
-                                    help@endream.com
+                                <Hyperlink NavigateUri="mailto:endreaminc@gmail.com" RequestNavigate="OnHyperlinkRequestNavigate">
+                                    endreaminc@gmail.com
                                 </Hyperlink>
                             </TextBlock>
                         </Grid>
@@ -139,44 +163,90 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="지원 프린터:" FontWeight="Bold" Foreground="#64748B" FontSize="12" VerticalAlignment="Top" Margin="0,1,0,0"/>
                             <StackPanel Grid.Column="1">
-                                <TextBlock Text="Xprinter 라벨 프린터 전기종 (XP-423B, D4601B, DT108B, T4501 등)" Foreground="#334155" FontSize="11.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                <TextBlock Text="※ 일부 모델은 지원되지 않을 수 있습니다." Foreground="#DC2626" FontSize="11" FontWeight="Bold" Margin="0,2,0,0"/>
+                                <TextBlock Text="TSPL 라벨 프린터 전 기종 (DT237BT, XP-370, XP-375 등 일부 모델은 일부 기능이 제한될 수 있습니다)" Foreground="#15803D" FontSize="12" FontWeight="Bold" TextWrapping="Wrap"/>
+                                <TextBlock Text="※ TSPL(TSPL-EZ) 명령어 표준을 지원하는 모든 라벨 프린터에서 인쇄 가능합니다." Foreground="#64748B" FontSize="11" Margin="0,2,0,0"/>
                             </StackPanel>
                         </Grid>
                     </StackPanel>
                 </Border>
 
-                <!-- Card 2: 라이선스 및 인증 정보 -->
+                <!-- Card 2: 라이선스 및 이용 안내 -->
                 <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,10">
                     <StackPanel>
-                        <TextBlock Text="📜 라이선스 및 인증 정보" FontWeight="Bold" FontSize="13.5" Foreground="#0F766E" Margin="0,0,0,8"/>
-                        
-                        <TextBlock Text="본 소프트웨어는 한국Xprinter 정품 하드웨어 고객을 위한 전용 상용 라이선스(Commercial License) 프로그램입니다." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                        <TextBlock Text="• 정품 Xprinter 장치 연결 시 자동으로 정품 인증 및 인쇄가 허가됩니다." FontSize="11.5" Foreground="#475569" Margin="0,2"/>
-                        <TextBlock Text="• 서버 인증 기반의 시리얼 라이선스를 지원합니다." FontSize="11.5" Foreground="#475569" Margin="0,2"/>
-                        <TextBlock Text="Copyright © 2026 한국Xprinter. All rights reserved." FontSize="11" Foreground="#94A3B8" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock Text="📜 라이선스 및 이용 정책" FontWeight="Bold" FontSize="13.5" Foreground="#0F766E" VerticalAlignment="Center"/>
+                            <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Padding="8,3" HorizontalAlignment="Right">
+                                <TextBlock Text="🛡️ 표준 라이선스" FontWeight="Bold" FontSize="11.5" Foreground="#334155"/>
+                            </Border>
+                        </DockPanel>
+
+                        <!-- 이용 정책 안내 박스 -->
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="ℹ️ 라벨마스터 이용 및 정책 안내" FontWeight="Bold" FontSize="12.5" Foreground="#1E293B" Margin="0,0,0,4"/>
+                                <TextBlock Text="본 소프트웨어는 당사 서비스 정책에 따라 제공되며 엑셀 대량 인쇄, 바코드 생성, PDF 송장 인쇄 등 다양한 기능을 지원합니다. 단, 운영 정책 및 향후 업데이트 방향에 따라 일부 기능 또는 전체 서비스가 유료 라이선스로 전환되거나 서비스 내용이 변경될 수 있습니다." 
+                                           FontSize="11.5" Foreground="#475569" TextWrapping="Wrap" LineHeight="17"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="135"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="라이선스 형태:" FontWeight="Bold" Foreground="#64748B" FontSize="12"/>
+                            <TextBlock Grid.Column="1" Text="표준 라이선스 (Standard Edition)" FontWeight="SemiBold" Foreground="#1E293B" FontSize="12"/>
+                        </Grid>
+
+                        <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="135"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="엑셀 데이터 연동:" FontWeight="Bold" Foreground="#64748B" FontSize="12"/>
+                            <TextBlock Grid.Column="1" Text="대용량 엑셀 로드 및 연속 인쇄 지원" FontWeight="SemiBold" Foreground="#1E293B" FontSize="12"/>
+                        </Grid>
+
+                        <!-- 불법 복제 및 코드 수정 금지 주의 문구 박스 -->
+                        <Border Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,10,0,0">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,4">
+                                    <TextBlock Text="⚠️ 지식재산권 보호 및 불법 변조 금지 경고" FontWeight="Bold" FontSize="12" Foreground="#991B1B"/>
+                                </DockPanel>
+                                <TextBlock Text="• 본 소프트웨어의 저작권 및 모든 지식재산권은 '이엔드림 주식회사'에 귀속되며, 대한민국 저작권법 및 관련 국제 법률의 엄격한 보호를 받습니다." 
+                                           FontSize="11" Foreground="#B91C1C" TextWrapping="Wrap" LineHeight="16" Margin="0,0,0,3"/>
+                                <TextBlock Text="• 당사의 사전 서면 동의 없는 소스 코드의 역컴파일(Decompile), 리버스 엔지니어링, 임의 코드 수정, 바이너리 조작, 크랙 배포 및 무단 상업적 재판매 행위를 엄격히 금지합니다." 
+                                           FontSize="11" Foreground="#B91C1C" TextWrapping="Wrap" LineHeight="16" Margin="0,0,0,3"/>
+                                <TextBlock Text="• 불법 복제, 무단 수정 및 배포 행위 적발 시 경고 없이 관련 법령에 따라 민·형사상 법적 조치와 손해배상 청구가 진행됩니다." 
+                                           FontSize="11" Foreground="#991B1B" FontWeight="SemiBold" TextWrapping="Wrap" LineHeight="16"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Copyright © 2026 이엔드림 주식회사. All rights reserved." FontSize="11" Foreground="#94A3B8" FontWeight="SemiBold" Margin="0,10,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Card 3: 사용된 오픈소스 라이브러리 -->
-                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="14">
+                <!-- Card 3: 기존 설정 유지 & 버전 업데이트 안내 -->
+                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,10">
                     <StackPanel>
-                        <TextBlock Text="📦 오픈소스 라이브러리 고지" FontWeight="Bold" FontSize="13" Foreground="#475569" Margin="0,0,0,8"/>
-                        <TextBlock Text="• ClosedXML (MIT License) - 엑셀 파일 입출력 처리" FontSize="11" Foreground="#64748B" Margin="0,1"/>
-                        <TextBlock Text="• DocumentFormat.OpenXml (MIT License) - OpenXML 포맷 지원" FontSize="11" Foreground="#64748B" Margin="0,1"/>
-                        <TextBlock Text="• ZXing.Net (Apache 2.0 License) - 1D/2D 바코드 렌더링" FontSize="11" Foreground="#64748B" Margin="0,1"/>
-                        <TextBlock Text="• Costura.Fody (MIT License) - 단일 실행 파일 번들링" FontSize="11" Foreground="#64748B" Margin="0,1"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="💡 기존 설정 유지 안내" FontWeight="Bold" FontSize="12.5" Foreground="#475569"/>
+                        </StackPanel>
+                        <TextBlock Text="새 버전으로 업데이트 시 이전 폴더의 'Info\app_settings.json' 파일을 복사하시면 기존 라벨 서식과 프린터 설정이 그대로 유지됩니다." 
+                                   FontSize="11.5" Foreground="#64748B" TextWrapping="Wrap" Margin="0,0,0,8" LineHeight="16"/>
+
+                        <!-- Open Info Folder Button -->
+                        <Button Content="📁 설정(Info) 폴더 열기" Click="OnOpenInfoFolderClick" 
+                                Style="{StaticResource SecondaryButtonStyle}" Height="30" Padding="10,0" FontSize="11.5"
+                                HorizontalAlignment="Left" Background="White"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>
 
-        <!-- 3. Bottom Action Buttons -->
+        <!-- 2. Bottom Action Buttons -->
         <DockPanel Grid.Row="2">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="🌐 공식 웹사이트" Click="OnOpenWebsiteClick" Style="{StaticResource SecondaryButtonStyle}" Height="36" Padding="12,0" FontSize="12" Margin="0,0,6,0"/>
-                <Button Content="⬇️ 최신버전 다운로드" Click="OnOpenDownloadClick" Style="{StaticResource SecondaryButtonStyle}" Height="36" Padding="12,0" FontSize="12"/>
-            </StackPanel>
+            <Button Content="⬇️ 최신버전 다운로드 페이지" Click="OnOpenDownloadClick" Style="{StaticResource SecondaryButtonStyle}" Height="36" Padding="14,0" FontSize="12"/>
             <Button Content="닫기" Click="OnCloseClick" Style="{StaticResource ModernButtonStyle}" HorizontalAlignment="Right" Height="36" Width="80" FontSize="12.5"/>
         </DockPanel>
     </Grid>

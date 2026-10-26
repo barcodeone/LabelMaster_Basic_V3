@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Text.RegularExpressions;
 using BarcodePrint.Model;
 
 namespace BarcodePrint.ViewModel
@@ -16,12 +19,14 @@ namespace BarcodePrint.ViewModel
         public ICommand RecordOnlyCommand { get; private set; }
         public ICommand ExportToExcelCommand { get; private set; }
         public ICommand ImportFromExcelCommand { get; private set; }
+        public ICommand ImportFromExcelForElementCommand { get; private set; }
         public ICommand ImportBackupCommand { get; private set; }
         public ICommand ClearRecordsCommand { get; private set; }
         public ICommand AddNewBlankRecordCommand { get; private set; }
         public ICommand DeleteSelectedRecordCommand { get; private set; }
         public ICommand ReprintSelectedRecordsCommand { get; private set; }
         public ICommand SinglePrintCommand { get; private set; }
+        public ICommand PrintCommand => SinglePrintCommand;
         public ICommand PrintAllRecordsCommand { get; private set; }
         public ICommand PrintUnprintedRecordsCommand { get; private set; }
         public ICommand DuplicateSelectedRecordsCommand { get; private set; }
@@ -53,9 +58,42 @@ namespace BarcodePrint.ViewModel
         public ICommand AlignLeftCommand { get; private set; }
         public ICommand AlignCenterCommand { get; private set; }
         public ICommand AlignRightCommand { get; private set; }
+        public ICommand AlignTopCommand { get; private set; }
+        public ICommand AlignMiddleCommand { get; private set; }
+        public ICommand AlignBottomCommand { get; private set; }
         public ICommand DistributeVerticalCommand { get; private set; }
         public ICommand DistributeHorizontalCommand { get; private set; }
         public ICommand AutoFitTableLayoutCommand { get; private set; }
+
+        // 안드로이드 호환 자유 편집 요소 추가 / 삭제 커맨드
+        public ICommand AddTextElementCommand { get; private set; }
+        public ICommand AddBarcodeElementCommand { get; private set; }
+        public ICommand AddQrElementCommand { get; private set; }
+        public ICommand AddLineElementCommand { get; private set; }
+        public ICommand AddShapeElementCommand { get; private set; }
+        public ICommand AddImageElementCommand { get; private set; }
+        public ICommand AddTableElementCommand { get; private set; }
+        public ICommand AddDateTimeElementCommand { get; private set; }
+        public ICommand ImportPdfCommand { get; private set; }
+        public ICommand DeleteSelectedElementCommand { get; private set; }
+        public ICommand CopySelectedCommand { get; private set; }
+        public ICommand DeselectElementCommand { get; private set; }
+        public ICommand StepXCommand { get; private set; }
+        public ICommand StepYCommand { get; private set; }
+        public ICommand StepWidthCommand { get; private set; }
+        public ICommand StepHeightCommand { get; private set; }
+        public ICommand StepFontSizeCommand { get; private set; }
+        public ICommand StepLineWidthCommand { get; private set; }
+        public ICommand StepLetterSpacingCommand { get; private set; }
+        public ICommand StepFontScaleXCommand { get; private set; }
+        public ICommand StepLineSpacingCommand { get; private set; }
+        public ICommand ResetTextSpacingCommand { get; private set; }
+        public ICommand StepTableRowsCommand { get; private set; }
+        public ICommand StepTableColumnsCommand { get; private set; }
+        public ICommand StepTableLineWidthCommand { get; private set; }
+        public ICommand EvenTableColumnsCommand { get; private set; }
+        public ICommand EvenTableRowsCommand { get; private set; }
+        public ICommand UnlinkExcelCommand { get; private set; }
 
         // 표 제목 및 헤더 제어 커맨드
         public ICommand IncreaseTableTitleSizeCommand { get; private set; }
@@ -78,6 +116,9 @@ namespace BarcodePrint.ViewModel
         public ICommand ScanBluetoothPrintersCommand { get; private set; }
         public ICommand TestTcpConnectionCommand { get; private set; }
         public ICommand TestBluetoothConnectionCommand { get; private set; }
+        public ICommand OpenBluetoothSettingsCommand { get; private set; }
+        public ICommand OpenBluetoothComPortSettingsCommand { get; private set; }
+        public ICommand OpenCommLogCommand { get; private set; }
 
         // 라벨 템플릿 파일 (*.lbm) 내보내기 및 불러오기 커맨드
         public ICommand ExportTemplateCommand { get; private set; }
@@ -112,6 +153,15 @@ namespace BarcodePrint.ViewModel
         public ICommand OpenPrinterSettingsCommand { get; private set; }
         public ICommand OpenAboutCommand { get; private set; }
         public ICommand OpenColumnFormatCommand { get; private set; }
+        public ICommand UnlinkColumnExcelCommand { get; private set; }
+        public ICommand UnlinkSelectedElementExcelCommand { get; private set; }
+        public ICommand UnlinkTableCellCommand { get; private set; }
+        public ICommand ApplyTableRowFontCommand { get; private set; }
+        public ICommand ApplyTableColumnFontCommand { get; private set; }
+        public ICommand ResetTableFontsCommand { get; private set; }
+        public ICommand StepTableTargetFontSizeCommand { get; private set; }
+        public ICommand StepTableCellFontSizeCommand { get; private set; }
+        public ICommand ToggleTableCellBoldCommand { get; private set; }
 
         #endregion
 
@@ -137,6 +187,23 @@ namespace BarcodePrint.ViewModel
             SinglePrintCommand = new RelayCommand(_ => ExecutePrintOnly(), _ => IsCurrentPrinterAuthorized);
             ExportToExcelCommand = new RelayCommand(_ => ExecuteExportToExcel());
             ImportFromExcelCommand = new RelayCommand(_ => ExecuteImportFromExcel());
+            ImportFromExcelForElementCommand = new RelayCommand(_ => ExecuteImportExcelForSelectedElement());
+            UnlinkSelectedElementExcelCommand = new RelayCommand(_ => UnlinkSelectedElementExcel());
+            UnlinkTableCellCommand = new RelayCommand(param => {
+                if (param is TableCellItem cell) cell.SelectedExcelColumn = "0";
+            });
+            ApplyTableRowFontCommand = new RelayCommand(_ => ApplyTableRowFont());
+            ApplyTableColumnFontCommand = new RelayCommand(_ => ApplyTableColumnFont());
+            ResetTableFontsCommand = new RelayCommand(_ => ResetTableFonts());
+            StepTableTargetFontSizeCommand = new RelayCommand(p => StepTableTargetFontSize(ParseStepDelta(p)));
+            StepTableCellFontSizeCommand = new RelayCommand(p =>
+            {
+                if (p is TableCellItem item) StepTableCellFontSize(item, 1.0);
+            });
+            ToggleTableCellBoldCommand = new RelayCommand(p =>
+            {
+                if (p is TableCellItem item) ToggleTableCellBold(item);
+            });
             ImportBackupCommand = new RelayCommand(_ => ExecuteImportBackup());
             ClearRecordsCommand = new RelayCommand(_ => ExecuteClearRecords());
             AddNewBlankRecordCommand = new RelayCommand(_ => AddNewBlankRecord());
@@ -211,12 +278,46 @@ namespace BarcodePrint.ViewModel
             AlignLeftCommand = new RelayCommand(_ => ExecuteAlignLeft());
             AlignCenterCommand = new RelayCommand(_ => ExecuteAlignCenter());
             AlignRightCommand = new RelayCommand(_ => ExecuteAlignRight());
+            AlignTopCommand = new RelayCommand(_ => ExecuteAlignTop());
+            AlignMiddleCommand = new RelayCommand(_ => ExecuteAlignMiddle());
+            AlignBottomCommand = new RelayCommand(_ => ExecuteAlignBottom());
             DistributeVerticalCommand = new RelayCommand(_ => ExecuteDistributeVertical());
             DistributeHorizontalCommand = new RelayCommand(_ => ExecuteDistributeHorizontal());
             AutoFitTableLayoutCommand = new RelayCommand(_ => ExecuteAutoFitTableLayout());
 
-            IncreaseTableTitleSizeCommand = new RelayCommand(_ => { TableTitleSize = Math.Min(36, TableTitleSize + 1); });
-            DecreaseTableTitleSizeCommand = new RelayCommand(_ => { TableTitleSize = Math.Max(6, TableTitleSize - 1); });
+            AddTextElementCommand = new RelayCommand(_ => AddNewElement(ElementType.TEXT));
+            AddBarcodeElementCommand = new RelayCommand(_ => AddNewElement(ElementType.BARCODE));
+            AddQrElementCommand = new RelayCommand(_ => AddNewElement(ElementType.QR_CODE));
+            AddLineElementCommand = new RelayCommand(p => AddNewElement(ElementType.LINE, p?.ToString()));
+            AddShapeElementCommand = new RelayCommand(p => AddNewElement(ElementType.SHAPE, p?.ToString()));
+            AddImageElementCommand = new RelayCommand(_ => AddImageElement());
+            AddTableElementCommand = new RelayCommand(_ => AddNewElement(ElementType.TABLE));
+            AddDateTimeElementCommand = new RelayCommand(_ => AddNewElement(ElementType.DATE_TIME));
+            ImportPdfCommand = new RelayCommand(_ => OpenPdfPrintStudio());
+            DeleteSelectedElementCommand = new RelayCommand(_ => DeleteSelectedElement());
+            CopySelectedCommand = new RelayCommand(_ => DuplicateSelectedElement());
+            DeselectElementCommand = new RelayCommand(_ => DeselectElement());
+
+            StepXCommand = new RelayCommand(p => StepSelectedElementX(ParseStepDelta(p)));
+            StepYCommand = new RelayCommand(p => StepSelectedElementY(ParseStepDelta(p)));
+            StepWidthCommand = new RelayCommand(p => StepSelectedElementWidth(ParseStepDelta(p)));
+            StepHeightCommand = new RelayCommand(p => StepSelectedElementHeight(ParseStepDelta(p)));
+            StepFontSizeCommand = new RelayCommand(p => StepSelectedElementFontSize(ParseStepDelta(p)));
+            StepLineWidthCommand = new RelayCommand(p => StepSelectedElementLineWidth(ParseStepDelta(p)));
+            StepLetterSpacingCommand = new RelayCommand(p => StepSelectedElementLetterSpacing(ParseStepDelta(p)));
+            StepFontScaleXCommand = new RelayCommand(p => StepSelectedElementFontScaleX(ParseStepDelta(p)));
+            StepLineSpacingCommand = new RelayCommand(p => StepSelectedElementLineSpacing(ParseStepDelta(p)));
+            ResetTextSpacingCommand = new RelayCommand(_ => ResetSelectedElementTextSpacing());
+            StepTableRowsCommand = new RelayCommand(p => StepTableRows((int)ParseStepDelta(p)));
+            StepTableColumnsCommand = new RelayCommand(p => StepTableColumns((int)ParseStepDelta(p)));
+            StepTableLineWidthCommand = new RelayCommand(p => StepTableLineWidth((float)ParseStepDelta(p)));
+            EvenTableColumnsCommand = new RelayCommand(_ => EvenTableColumns());
+            EvenTableRowsCommand = new RelayCommand(_ => EvenTableRows());
+            UnlinkExcelCommand = new RelayCommand(_ => ExecuteUnlinkExcel());
+            UnlinkColumnExcelCommand = new RelayCommand(p => { if (p != null && int.TryParse(p.ToString(), out int col)) UnlinkColumnExcel(col); });
+
+            IncreaseTableTitleSizeCommand = new RelayCommand(_ => { TableTitleSize = Math.Min(200, TableTitleSize + 1); });
+            DecreaseTableTitleSizeCommand = new RelayCommand(_ => { TableTitleSize = Math.Max(4, TableTitleSize - 1); });
             SetTableTitleAlignCommand = new RelayCommand(param => { if (param != null) TableTitleAlign = param.ToString(); });
 
             AutoDetectCommand = new RelayCommand(_ => ExecuteAutoDetectUsbPrinters());
@@ -231,6 +332,9 @@ namespace BarcodePrint.ViewModel
             ScanNetworkPrintersCommand = new RelayCommand(async _ => await ExecuteScanNetworkPrintersAsync());
             TestTcpConnectionCommand = new RelayCommand(_ => ExecuteTestTcpConnection());
             TestBluetoothConnectionCommand = new RelayCommand(_ => ExecuteTestBluetoothConnection());
+            OpenBluetoothSettingsCommand = new RelayCommand(_ => ExecuteOpenBluetoothSettings());
+            OpenBluetoothComPortSettingsCommand = new RelayCommand(_ => ExecuteOpenBluetoothComPortSettings());
+            OpenCommLogCommand = new RelayCommand(_ => PrinterSerialLogger.OpenCommLogFile());
 
             IncreaseSinglePrintCopiesCommand = new RelayCommand(_ => SinglePrintCopies = Math.Min(999, SinglePrintCopies + 1));
             DecreaseSinglePrintCopiesCommand = new RelayCommand(_ => SinglePrintCopies = Math.Max(1, SinglePrintCopies - 1));
@@ -353,15 +457,15 @@ namespace BarcodePrint.ViewModel
 
             IncreaseSerialStepCommand = new RelayCommand(_ => SerialStep = Math.Min(100, SerialStep + 1));
             DecreaseSerialStepCommand = new RelayCommand(_ => SerialStep = Math.Max(-100, SerialStep - 1));
-            IncreaseSerialSizeCommand = new RelayCommand(_ => SerialSize = Math.Min(40, SerialSize + 1));
-            DecreaseSerialSizeCommand = new RelayCommand(_ => SerialSize = Math.Max(6, SerialSize - 1));
+            IncreaseSerialSizeCommand = new RelayCommand(_ => SerialSize = Math.Min(200, SerialSize + 1));
+            DecreaseSerialSizeCommand = new RelayCommand(_ => SerialSize = Math.Max(4, SerialSize - 1));
             IncreaseSerialOffsetXCommand = new RelayCommand(_ => SerialOffsetX = Math.Min(200, SerialOffsetX + 1));
             DecreaseSerialOffsetXCommand = new RelayCommand(_ => SerialOffsetX = Math.Max(0, SerialOffsetX - 1));
             IncreaseSerialOffsetYCommand = new RelayCommand(_ => SerialOffsetY = Math.Min(200, SerialOffsetY + 1));
             DecreaseSerialOffsetYCommand = new RelayCommand(_ => SerialOffsetY = Math.Max(0, SerialOffsetY - 1));
 
-            IncreaseDateTimeSizeCommand = new RelayCommand(_ => DateTimeSize = Math.Min(40, DateTimeSize + 1));
-            DecreaseDateTimeSizeCommand = new RelayCommand(_ => DateTimeSize = Math.Max(6, DateTimeSize - 1));
+            IncreaseDateTimeSizeCommand = new RelayCommand(_ => DateTimeSize = Math.Min(200, DateTimeSize + 1));
+            DecreaseDateTimeSizeCommand = new RelayCommand(_ => DateTimeSize = Math.Max(4, DateTimeSize - 1));
             IncreaseDateTimeOffsetXCommand = new RelayCommand(_ => DateTimeOffsetX = Math.Min(200, DateTimeOffsetX + 1));
             DecreaseDateTimeOffsetXCommand = new RelayCommand(_ => DateTimeOffsetX = Math.Max(0, DateTimeOffsetX - 1));
             IncreaseDateTimeOffsetYCommand = new RelayCommand(_ => DateTimeOffsetY = Math.Min(200, DateTimeOffsetY + 1));
@@ -378,7 +482,8 @@ namespace BarcodePrint.ViewModel
             PreviewLastPageCommand = new RelayCommand(_ => NavigatePreviewLast());
             PreviewLiveInputCommand = new RelayCommand(_ => NavigatePreviewLiveInput());
 
-            ReadPrinterHardwareInfoCommand = new RelayCommand(_ => ExecuteReadPrinterHardwareInfo());
+            ConnectPrinterCommand = new RelayCommand(_ => ExecuteConnectPrinter());
+            ReadPrinterHardwareInfoCommand = new RelayCommand(_ => ExecuteConnectPrinter());
             ScanBluetoothPrintersCommand = new RelayCommand(async _ => await ExecuteScanBluetoothPrintersAsync());
             CalibrateCommand = new RelayCommand(_ => ExecutePrinterAction("GAPDETECT"));
         }
@@ -459,13 +564,152 @@ namespace BarcodePrint.ViewModel
         public ICommand DecreaseExcelPrintCopiesCommand { get; private set; }
         public ICommand PrintSelectedRecordsCommand => ReprintSelectedRecordsCommand;
         public ICommand ReadPrinterHardwareInfoCommand { get; private set; }
+        public ICommand ConnectPrinterCommand { get; private set; }
+
+        public async void ExecuteConnectPrinter()
+        {
+            if (string.IsNullOrEmpty(TargetPrinterName))
+            {
+                _dialogService?.ShowWarning("연결할 대상 프린터를 선택해주세요.", "프린터 선택 필요");
+                return;
+            }
+
+            var targetInfo = _cachedPrinters?.FirstOrDefault(p => p.Name.Equals(TargetPrinterName, StringComparison.OrdinalIgnoreCase));
+
+            // 미페어링 또는 가상 포트 미연결 블루투스 장치 선택 시 자동 페어링/포트 생성 안내 및 실행
+            if (targetInfo != null && (!targetInfo.IsPaired || targetInfo.Name.Contains("(페어링 필요)") || targetInfo.Name.Contains("(가상포트 연결 필요)")))
+            {
+                bool isJustPort = targetInfo.Name.Contains("(가상포트 연결 필요)");
+                string promptMsg = isJustPort
+                    ? $"선택하신 [{targetInfo.FriendlyName}] 블루투스 프린터는 Windows에 등록되어 있으나 가상 직렬(COM) 포트가 아직 생성되지 않았습니다.\n\n지금 자동으로 직렬 포트(SPP) 서비스를 활성화하고 COM 포트를 연결하시겠습니까?"
+                    : $"선택하신 [{targetInfo.FriendlyName}] 블루투스 프린터는 아직 Windows에 페어링되지 않았습니다.\n\n지금 자동으로 블루투스 페어링(기본 PIN: 0000 / 1234) 및 가상 직렬(COM) 포트 생성을 진행하시겠습니까?";
+
+                bool confirmed = _dialogService != null && _dialogService.ShowQuestion(promptMsg, isJustPort ? "가상 COM 포트 연결" : "블루투스 페어링 진행");
+
+                if (confirmed)
+                {
+                    StatusMessage = $"⏳ [{targetInfo.FriendlyName}] 블루투스 연결 및 가상 COM 포트 생성 중...";
+
+                    // 고유 MAC 주소(Address/Serial) 또는 장치명 정확히 추출 (MAC 주소 최우선)
+                    string devId = "";
+                    if (!string.IsNullOrEmpty(targetInfo.Address) && !targetInfo.Address.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+                    {
+                        devId = targetInfo.Address;
+                    }
+                    else if (!string.IsNullOrEmpty(targetInfo.Serial) && targetInfo.Serial != "-")
+                    {
+                        devId = targetInfo.Serial;
+                    }
+                    else
+                    {
+                        devId = targetInfo.FriendlyName;
+                    }
+
+                    var pairRes = await UsbPrinterHelper.PairAndSetupBluetoothPrinterAsync(devId);
+
+                    if (pairRes.success)
+                    {
+                        targetInfo.IsPaired = true;
+
+                        if (!string.IsNullOrEmpty(pairRes.portName))
+                        {
+                            targetInfo.PortName = pairRes.portName;
+                            targetInfo.Name = $"[블루투스] {targetInfo.FriendlyName}";
+                            targetInfo.Address = pairRes.portName;
+
+                            ApplyPrinterFilter();
+                            TargetPrinterName = targetInfo.Name;
+                            SelectedPrinterName = targetInfo.Name;
+                            BluetoothPortName = pairRes.portName;
+
+                            _dialogService?.ShowMessage(pairRes.message + "\n\n연결 점검 및 하드웨어 정보 조회를 시작합니다.", "연결 완료", System.Windows.MessageBoxImage.Information);
+                            ExecuteReadPrinterHardwareInfo(showLoadingPopup: true);
+                        }
+                        else
+                        {
+                            targetInfo.PortName = "";
+                            targetInfo.Name = $"[블루투스] {targetInfo.FriendlyName} (가상포트 연결 필요)";
+                            targetInfo.Address = "";
+
+                            ApplyPrinterFilter();
+                            TargetPrinterName = targetInfo.Name;
+                            SelectedPrinterName = targetInfo.Name;
+                            BluetoothPortName = "가상포트 연결 필요";
+
+                            _dialogService?.ShowMessage(pairRes.message, "페어링 완료", System.Windows.MessageBoxImage.Information);
+                        }
+                        return;
+                    }
+                    else
+                    {
+                        _dialogService?.ShowError(pairRes.message, "연결 실패");
+                        return;
+                    }
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            // 블루투스 프린터의 경우 유효한 COM 포트 확인
+            bool isBt = TargetPrinterName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) || TargetPrinterName.Contains("블루투스") || IsFilterBt;
+            if (isBt)
+            {
+                var cached = _cachedPrinters?.FirstOrDefault(p => p.Name.Equals(TargetPrinterName, StringComparison.OrdinalIgnoreCase));
+                string devName = cached?.FriendlyName ?? TargetPrinterName;
+                string cleanDevName = devName.Replace("[블루투스]", "").Trim();
+                string realHardwarePort = UsbPrinterHelper.GetBluetoothPortForDeviceName(cleanDevName);
+                if (string.IsNullOrEmpty(realHardwarePort) && cleanDevName != devName)
+                {
+                    realHardwarePort = UsbPrinterHelper.GetBluetoothPortForDeviceName(devName);
+                }
+                if (string.IsNullOrEmpty(realHardwarePort) && cached != null && !string.IsNullOrEmpty(cached.Address) && !cached.Address.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+                {
+                    realHardwarePort = UsbPrinterHelper.FindComPortForBluetoothMac(cached.Address);
+                }
+
+                // 시스템에 실제 할당된 포트가 있다면 그 포트를 최우선 사용하고 UI와 캐시를 일치시킴
+                string targetPort = !string.IsNullOrEmpty(realHardwarePort) ? realHardwarePort : BluetoothPortName;
+                if (string.IsNullOrEmpty(targetPort) || !Regex.IsMatch(targetPort, @"COM\d+", RegexOptions.IgnoreCase))
+                {
+                    if (!string.IsNullOrEmpty(_settings.BluetoothPortName) && Regex.IsMatch(_settings.BluetoothPortName, @"COM\d+", RegexOptions.IgnoreCase))
+                    {
+                        targetPort = _settings.BluetoothPortName;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(targetPort) || !Regex.IsMatch(targetPort, @"COM\d+", RegexOptions.IgnoreCase))
+                {
+                    _dialogService?.ShowWarning($"선택하신 [{TargetPrinterName}] 블루투스 프린터에 할당된 유효한 직렬(COM) 포트가 없습니다.\n\n먼저 [블루투스 장치 검색]을 눌러 포트를 갱신해주세요.", "COM 포트 미할당");
+                    return;
+                }
+
+                BluetoothPortName = targetPort;
+                if (cached != null)
+                {
+                    cached.PortName = targetPort;
+                    cached.Address = targetPort;
+                }
+                _settings.BluetoothPortName = targetPort;
+                _settings.Save();
+            }
+
+            SelectedPrinterName = TargetPrinterName;
+            ExecuteReadPrinterHardwareInfo(showLoadingPopup: true);
+        }
 
         private bool _isReadingHardwareInfo = false;
+        private System.Threading.CancellationTokenSource _hardwareInfoCts;
 
         public async void ExecuteReadPrinterHardwareInfo(bool showLoadingPopup = true)
         {
             if (_isReadingHardwareInfo) return;
             _isReadingHardwareInfo = true;
+
+            _hardwareInfoCts?.Cancel();
+            _hardwareInfoCts = new System.Threading.CancellationTokenSource();
+            var token = _hardwareInfoCts.Token;
 
             WpfView.ConnectionProgressWindow progressWin = null;
             try
@@ -492,13 +736,47 @@ namespace BarcodePrint.ViewModel
                     {
                         var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
                         progressWin = new WpfView.ConnectionProgressWindow(SelectedPrinterName, owner);
+                        progressWin.Cancelled += () =>
+                        {
+                            try { _hardwareInfoCts?.Cancel(); } catch { }
+                        };
                         progressWin.Show();
                     }
                     catch { }
                 }
 
                 string currentPrinter = SelectedPrinterName;
-                var dict = await System.Threading.Tasks.Task.Run(() => _printerService.GetPrinterHardwareDetails(currentPrinter, _cachedPrinters));
+                // 최대 4초 타임아웃을 적용하여 무한 대기 팝업 프리징 원천 방지
+                var queryTask = System.Threading.Tasks.Task.Run(() => _printerService.GetPrinterHardwareDetails(currentPrinter, _cachedPrinters), token);
+                var completedTask = await System.Threading.Tasks.Task.WhenAny(queryTask, System.Threading.Tasks.Task.Delay(4000, token));
+
+                // 비동기 조회 완료 즉시 안내 팝업을 확실하게 닫아 메인 윈도우 프리징 방지
+                if (progressWin != null)
+                {
+                    try { progressWin.Close(); } catch { }
+                    progressWin = null;
+                }
+
+                if (token.IsCancellationRequested)
+                {
+                    PrinterHardwareSummaryText = $"⏹ [{currentPrinter}] 프린터 연결 시도가 사용자에 의해 취소되었습니다.";
+                    PrinterStatusBadge = "⏹ 연결 취소됨";
+                    PrinterStatusColor = "#64748B";
+                    IsCurrentPrinterAuthorized = false;
+                    return;
+                }
+
+                Dictionary<string, string> dict;
+                if (completedTask == queryTask)
+                {
+                    dict = await queryTask;
+                }
+                else
+                {
+                    dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    dict["상태"] = "⚠️ 통신 응답 시간 초과 (오프라인)";
+                    dict["STATUS"] = "⚠️ 프린터 통신 응답 시간이 초과되었습니다. 전원 및 블루투스 연결을 확인하세요.";
+                }
 
                 PrinterHardwareDetailsList.Clear();
                 string serial = "-";
@@ -511,44 +789,66 @@ namespace BarcodePrint.ViewModel
                     }
                 }
 
-                // 캐시된 프린터 정보에 실제 수신된 하드웨어 시리얼 번호 반영
-                var cachedInfo = _cachedPrinters?.FirstOrDefault(p => p.Name.Equals(currentPrinter, StringComparison.OrdinalIgnoreCase));
-                if (cachedInfo != null && !string.IsNullOrEmpty(serial) && serial != "-")
+                // 네트워크 프린터의 경우 수신된 모델명을 영구 저장하고 표시 이름 자동 승격
+                string modelName = null;
+                if (dict.TryGetValue("모델명", out string mdl) && !string.IsNullOrWhiteSpace(mdl) && mdl != "-")
                 {
-                    cachedInfo.Serial = serial;
+                    modelName = mdl.Trim();
+                    if (_settings != null && (currentPrinter.StartsWith("[네트워크]", StringComparison.OrdinalIgnoreCase) || IsFilterLan))
+                    {
+                        _settings.LastTcpPrinterModel = modelName;
+                        _settings.Save();
+                    }
                 }
 
-                // 하드웨어 시리얼 번호 정품 라이선스 검증
-                bool isAuth = ValidatePrinterAuthorization(serial);
-                IsCurrentPrinterAuthorized = isAuth;
-
-                PrinterSerialLogger.WriteLog($"[프린터 시리얼 검증] 대상: {currentPrinter}, 수신 시리얼: {serial}, 결과: {(isAuth ? "✅ 매칭 성공" : "❌ 매칭 실패 (미등록 장치)")}");
-
-                // UI 인쇄 버튼 상태 강제 즉시 갱신
-                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
-
-                if (isAuth)
+                // 캐시된 프린터 정보에 실제 수신된 하드웨어 시리얼 번호 및 모델명 반영
+                var cachedInfo = _cachedPrinters?.FirstOrDefault(p => p.Name.Equals(currentPrinter, StringComparison.OrdinalIgnoreCase));
+                if (cachedInfo != null)
                 {
-                    PrinterStatusBadge = "🟢 정상 준비 (인증 완료)";
-                    PrinterStatusColor = "#22C55E";
-                    PrinterHardwareSummaryText = $"✅ [{currentPrinter}] 정품 인증 완료 (시리얼: {serial})";
+                    if (!string.IsNullOrEmpty(serial) && serial != "-") cachedInfo.Serial = serial;
+                    if (!string.IsNullOrEmpty(modelName))
+                    {
+                        cachedInfo.FriendlyName = modelName;
+                        if (cachedInfo.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string newDisplayName = $"[네트워크] {modelName}";
+                            if (!cachedInfo.Name.Equals(newDisplayName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                cachedInfo.Name = newDisplayName;
+                                // 콤보박스 목록 갱신 반영
+                                ApplyPrinterFilter();
+                            }
+                        }
+                    }
+                }
+
+                bool isSuccess = dict.TryGetValue("IS_SUCCESS", out string succ) && succ == "true";
+                if (!isSuccess)
+                {
+                    IsCurrentPrinterAuthorized = false;
+                    PrinterHardwareSummaryText = $"🔴 [{currentPrinter}] 통신 응답 없음 (전원 꺼짐 / 케이블 또는 페어링 확인)";
+                    PrinterStatusBadge = "🔴 오프라인 (통신 응답 없음 / 전원 꺼짐)";
+                    PrinterStatusColor = "#DC2626";
+                    PrinterSerialLogger.WriteLog($"[프린터 하드웨어 점검] 대상: {currentPrinter}, 통신 응답 없음 (오프라인)");
                 }
                 else
                 {
-                    IsCurrentPrinterAuthorized = false;
-                    PrinterStatusBadge = "🔴 미등록 프린터 (기기 등록 필요)";
-                    PrinterStatusColor = "#DC2626";
-                    PrinterHardwareSummaryText = $"❌ [{currentPrinter}] 미등록 프린터 (시리얼: {serial}) - 기기 등록이 필요합니다.";
+                    // 하드웨어 시리얼 번호 정품 라이선스 검증
+                    bool isAuth = ValidatePrinterAuthorization(serial);
+                    var licenseMode = TrialLicenseManager.EvaluateLicense(isAuth, serial, currentPrinter);
+                    UpdateTrialLicenseState();
 
-                    // 안내 팝업을 먼저 닫은 후 경고창 표시
-                    if (progressWin != null)
-                    {
-                        try { progressWin.Close(); } catch { }
-                        progressWin = null;
-                    }
+                    PrinterSerialLogger.WriteLog($"[프린터 시리얼 검증] 대상: {currentPrinter}, 수신 시리얼: {serial}, 결과: {(isAuth ? "✅ 매칭 성공" : "❌ 매칭 실패 (미등록 장치)")}, 라이선스 상태: {licenseMode}");
 
-                    _dialogService.ShowWarning($"사용 권한이 등록되지 않은 프린터입니다. (시리얼: {serial})\n\n프로그램 사용을 위해 기기 등록이 필요합니다. 관리자에게 문의해 주세요.", "기기 등록 필요");
+                    IsCurrentPrinterAuthorized = true;
+                    PrinterHardwareSummaryText = $"✅ [{currentPrinter}] 정상 연결됨 (시리얼: {serial})";
+
+                    // UI 스레드 프리징을 방지하기 위해 백그라운드 태스크로 상태 조회 실행
+                    CheckRealtimePrinterStatus();
                 }
+
+                // UI 인쇄 버튼 상태 강제 즉시 갱신
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
             }
             catch (Exception ex)
             {
@@ -562,6 +862,7 @@ namespace BarcodePrint.ViewModel
                     try { progressWin.Close(); } catch { }
                     progressWin = null;
                 }
+                _hardwareInfoCts = null;
                 _isReadingHardwareInfo = false;
             }
         }
@@ -587,6 +888,7 @@ namespace BarcodePrint.ViewModel
         {
             try
             {
+                TargetPrinterName = SelectedPrinterName;
                 var win = new WpfView.PrinterSettingsWindow
                 {
                     DataContext = this,
@@ -777,7 +1079,7 @@ namespace BarcodePrint.ViewModel
             }
         }
 
-        private void ExecuteTestBluetoothConnection()
+        private async void ExecuteTestBluetoothConnection()
         {
             try
             {
@@ -787,26 +1089,45 @@ namespace BarcodePrint.ViewModel
                     return;
                 }
 
-                StatusMessage = $"📶 [{BluetoothPortName}] 통신 테스트 중...";
-                string res = UsbPrinterHelper.QueryTsplSerialViaCom(BluetoothPortName, 9600, 1500);
-                if (!string.IsNullOrEmpty(res) && res != "-")
+                StatusMessage = $"📶 [{BluetoothPortName}] 블루투스 통신 점검 중...";
+                var prevCursor = System.Windows.Input.Mouse.OverrideCursor;
+                System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+
+                string res = null;
+                try
                 {
-                    StatusMessage = $"🟢 블루투스 프린터 통신 성공! (시리얼: {res})";
+                    res = await Task.Run(() => UsbPrinterHelper.QueryTsplSerialViaCom(BluetoothPortName, 9600, 2500));
+                }
+                finally
+                {
+                    System.Windows.Input.Mouse.OverrideCursor = prevCursor;
+                }
+
+                if (!string.IsNullOrEmpty(res))
+                {
+                    string realDevName = UsbPrinterHelper.GetBluetoothDeviceNameForPort(BluetoothPortName);
+                    if (string.IsNullOrEmpty(realDevName) || realDevName == BluetoothPortName)
+                    {
+                        realDevName = (res.StartsWith("XP-") || res.StartsWith("Xprinter")) ? res : "Xprinter (Bluetooth)";
+                    }
+                    string btDeviceName = !string.IsNullOrEmpty(realDevName) ? $"[블루투스] {realDevName}" : "[블루투스] 블루투스 라벨 프린터";
+                    StatusMessage = $"🟢 [{realDevName}] 블루투스 통신 성공! (상태: {res})";
 
                     // 통신 성공한 블루투스 장치를 즉시 캐시 및 인쇄 대상 프린터로 자동 등록 및 선택
-                    string btDeviceName = $"[블루투스] {BluetoothPortName}";
-                    var existing = _cachedPrinters.FirstOrDefault(p => p.Type == "Bluetooth" && p.PortName == BluetoothPortName);
+                    var existing = _cachedPrinters.FirstOrDefault(p => p.Type == "Bluetooth" && (p.PortName == BluetoothPortName || p.FriendlyName == realDevName));
                     if (existing != null)
                     {
+                        existing.Name = btDeviceName;
+                        existing.FriendlyName = realDevName;
                         existing.Serial = res;
-                        btDeviceName = existing.Name;
+                        existing.PortName = BluetoothPortName;
                     }
                     else
                     {
                         _cachedPrinters.Add(new UsbPrinterInfo
                         {
                             Name = btDeviceName,
-                            FriendlyName = "Bluetooth Printer",
+                            FriendlyName = realDevName,
                             PortName = BluetoothPortName,
                             Serial = res,
                             Type = "Bluetooth",
@@ -816,8 +1137,9 @@ namespace BarcodePrint.ViewModel
 
                     ApplyPrinterFilter();
                     SelectedPrinterName = btDeviceName;
+                    TargetPrinterName = btDeviceName;
 
-                    _dialogService?.ShowMessage($"블루투스 프린터 통신 성공!\n\nCOM 포트: {BluetoothPortName}\n수신 시리얼/정보: {res}\n\n해당 프린터가 현재 인쇄 대상으로 자동 선택되었습니다.", "블루투스 통신 테스트 성공", System.Windows.MessageBoxImage.Information);
+                    _dialogService?.ShowMessage($"블루투스 프린터 통신 점검 성공!\n\n• 장치명: {realDevName}\n• COM 포트: {BluetoothPortName}\n• 상태/응답: {res}\n\n해당 프린터가 현재 인쇄 대상으로 자동 선택되었습니다.", "블루투스 연결 확인", System.Windows.MessageBoxImage.Information);
 
                     // 우측 하드웨어 정보 실시간 자동 로드
                     ExecuteReadPrinterHardwareInfo();
@@ -825,12 +1147,53 @@ namespace BarcodePrint.ViewModel
                 else
                 {
                     StatusMessage = $"🔴 [{BluetoothPortName}] 응답 없음";
-                    _dialogService?.ShowWarning($"[{BluetoothPortName}] 연결에 실패했습니다.\n블루투스 페어링 상태 및 COM 포트 번호를 확인해주세요.", "블루투스 통신 실패");
+                    _dialogService?.ShowWarning($"[{BluetoothPortName}] 연결 점검에 실패했습니다.\n\n확인 사항:\n1. 프린터 전원이 켜져 있는지 확인\n2. Windows 설정에서 블루투스 페어링 상태 확인\n3. 올바른 발신 가상 COM 포트 번호인지 확인", "블루투스 연결 실패");
                 }
             }
             catch (Exception ex)
             {
-                _dialogService?.ShowError($"통신 테스트 오류: {ex.Message}", "오류");
+                _dialogService?.ShowError($"통신 점검 오류: {ex.Message}", "오류");
+            }
+        }
+
+        private void ExecuteOpenBluetoothSettings()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("ms-settings:bluetooth") { UseShellExecute = true });
+            }
+            catch
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo("control", "bthprops.cpl") { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    _dialogService?.ShowError($"Windows 블루투스 설정을 열 수 없습니다: {ex.Message}", "오류");
+                }
+            }
+        }
+
+        private void ExecuteOpenBluetoothComPortSettings()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("control", "bthprops.cpl") { UseShellExecute = true });
+                _dialogService?.ShowMessage(
+                    "Windows 블루투스 COM 포트 설정 창이 열렸습니다.\n\n" +
+                    "■ 장치별 COM 포트 추가 방법:\n" +
+                    "1. 상단 [COM 포트] 탭으로 이동합니다.\n" +
+                    "2. [추가...] 버튼을 클릭합니다.\n" +
+                    "3. '발신(이 컴퓨터가 연결 시작)'을 선택하고 원하는 블루투스 프린터를 선택합니다.\n" +
+                    "4. [확인]을 누르면 해당 프린터 전용 COM 포트(예: COM3, COM4 등)가 생성됩니다.\n\n" +
+                    "생성된 포트 번호를 프로그램의 [블루투스 COM]에서 선택하여 연결 점검을 진행하세요.",
+                    "Windows 블루투스 COM 포트 추가 안내",
+                    System.Windows.MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                _dialogService?.ShowError($"Windows 블루투스 COM 설정을 열 수 없습니다: {ex.Message}", "오류");
             }
         }
 
@@ -843,13 +1206,33 @@ namespace BarcodePrint.ViewModel
                 var found = await UsbPrinterHelper.ScanBluetoothPrintersAsync();
                 if (found != null && found.Count > 0)
                 {
+                    Func<string, string> normKey = s => (s ?? "").Replace(":", "").Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
+
                     foreach (var p in found)
                     {
-                        var existing = _cachedPrinters.FirstOrDefault(x => x.Type == "Bluetooth" && x.PortName == p.PortName);
+                        string pMac = normKey(p.Address);
+                        string pSerial = normKey(p.Serial);
+                        string pName = normKey(p.FriendlyName);
+
+                        // 블루투스 장치 동일성 판단: 고유 MAC 주소 일치 우선 -> 유효 포트 일치 -> 이름 일치
+                        // (주의: PortName이 둘 다 빈 문자열 ""인 미페어링 장치들을 동일 장치로 오인해 덮어쓰지 않음)
+                        var existing = _cachedPrinters.FirstOrDefault(x =>
+                            x.Type == "Bluetooth" && (
+                                (!string.IsNullOrEmpty(pMac) && normKey(x.Address) == pMac) ||
+                                (!string.IsNullOrEmpty(pSerial) && normKey(x.Serial) == pSerial && pSerial != "-") ||
+                                (!string.IsNullOrEmpty(p.PortName) && !string.IsNullOrEmpty(x.PortName) && x.PortName.Equals(p.PortName, StringComparison.OrdinalIgnoreCase)) ||
+                                (string.IsNullOrEmpty(p.PortName) && string.IsNullOrEmpty(x.PortName) && normKey(x.FriendlyName) == pName)
+                            )
+                        );
+
                         if (existing != null)
                         {
                             existing.Name = p.Name;
                             existing.FriendlyName = p.FriendlyName;
+                            existing.PortName = p.PortName;
+                            existing.Serial = p.Serial;
+                            existing.Address = p.Address;
+                            existing.IsPaired = p.IsPaired;
                         }
                         else
                         {
@@ -857,18 +1240,22 @@ namespace BarcodePrint.ViewModel
                         }
                     }
                     ApplyPrinterFilter();
-                    SelectedPrinterName = found[0].Name;
-                    BluetoothPortName = found[0].PortName;
-                    StatusMessage = $"📶 블루투스 장치 {found.Count}개 감지 완료! [{found[0].Name}]";
-                    _dialogService?.ShowMessage($"블루투스 프린터 {found.Count}개를 감지했습니다!\n\n선택된 장치: {found[0].Name}", "블루투스 장치 검색 완료", System.Windows.MessageBoxImage.Information);
 
-                    // 하드웨어 정보 즉시 실시간 조회
-                    ExecuteReadPrinterHardwareInfo();
+                    // 자동 연결 및 강제 선택 방지: 기존 선택 유지 및 사용자 직접 연결 유도
+                    if (string.IsNullOrEmpty(SelectedPrinterName) || !AvailablePrinters.Contains(SelectedPrinterName))
+                    {
+                        TargetPrinterName = found[0].Name;
+                    }
+
+                    StatusMessage = $"📶 블루투스 드라이버 프린터 {found.Count}개 검색 완료. 목록에서 프린터를 선택하세요.";
+
+                    var devSummary = string.Join("\n", found.Select(f => $"• {f.Name} (포트: {f.PortName})"));
+                    _dialogService?.ShowMessage($"Windows에 등록된 블루투스 라벨 프린터 {found.Count}개를 검색했습니다!\n\n{devSummary}\n\n목록에서 프린터를 선택하여 사용하세요.", "블루투스 검색 완료", System.Windows.MessageBoxImage.Information);
                 }
                 else
                 {
-                    StatusMessage = "⚠️ 검색된 블루투스 COM 포트가 없습니다.";
-                    _dialogService?.ShowWarning("사용 가능한 블루투스 직렬(COM) 포트가 없습니다.\nWindows 설정에서 블루투스 프린터 페어링을 확인해주세요.", "블루투스 검색 결과");
+                    StatusMessage = "⚠️ Windows에 설치된 블루투스 프린터 드라이버가 없습니다.";
+                    _dialogService?.ShowWarning("Windows에 설치된 블루투스 라벨 프린터 드라이버를 찾지 못했습니다.\n\n블루투스 라벨 프린터를 사용하시려면 제조사(Xprinter) 드라이버를 먼저 설치하고, 포트를 해당 블루투스 COM 포트로 연결해주세요.", "블루투스 드라이버 검색 결과");
                 }
             }
             catch (Exception ex)

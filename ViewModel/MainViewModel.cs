@@ -68,6 +68,42 @@ namespace BarcodePrint.ViewModel
         public string DesignEditModeButtonText => IsDesignEditMode ? "↩️ 인쇄 모드로 복귀" : "🎨 디자인 서식 편집";
         public string DesignEditModeButtonBackground => IsDesignEditMode ? "#0284C7" : "#4F46E5";
 
+        #region Properties - Trial License (체험판 라이선스 관리)
+        public LicenseMode CurrentLicenseMode => TrialLicenseManager.CurrentMode;
+
+        public string AppVersionText
+        {
+            get
+            {
+                return "v1.0";
+            }
+        }
+
+        public string WindowTitle
+        {
+            get
+            {
+                return $"라벨마스터 - LabelMaster ({AppVersionText}) - 간편한 엑셀 연동 라벨 출력 시스템";
+            }
+        }
+
+        public bool IsTrialMode => false;
+        public bool IsTrialBadgeVisible => false;
+        public bool IsFullLicense => true;
+        public string TrialBadgeText => "";
+
+        public void UpdateTrialLicenseState()
+        {
+            OnPropertyChanged(nameof(AppVersionText));
+            OnPropertyChanged(nameof(WindowTitle));
+            OnPropertyChanged(nameof(CurrentLicenseMode));
+            OnPropertyChanged(nameof(IsTrialMode));
+            OnPropertyChanged(nameof(IsTrialBadgeVisible));
+            OnPropertyChanged(nameof(IsFullLicense));
+            OnPropertyChanged(nameof(TrialBadgeText));
+        }
+        #endregion
+
         public void AddNewBlankRecord()
         {
             _recordCounter++;
@@ -164,7 +200,7 @@ namespace BarcodePrint.ViewModel
             {
                 if (_settings.DateTimeSize != value)
                 {
-                    _settings.DateTimeSize = Math.Max(6, Math.Min(40, value));
+                    _settings.DateTimeSize = Math.Max(4, Math.Min(200, value));
                     OnPropertyChanged();
                     _settings.Save();
                     UpdatePreview();
@@ -266,7 +302,7 @@ namespace BarcodePrint.ViewModel
             get => _settings.ActiveColumnCount > 0 ? _settings.ActiveColumnCount : 5;
             set
             {
-                int clamped = Math.Max(1, Math.Min(8, value));
+                int clamped = Math.Max(1, Math.Min(100, value));
                 if (_settings.ActiveColumnCount != clamped)
                 {
                     _settings.ActiveColumnCount = clamped;
@@ -459,7 +495,7 @@ namespace BarcodePrint.ViewModel
             {
                 if (_settings.TableTitleSize != value)
                 {
-                    _settings.TableTitleSize = Math.Max(6, Math.Min(36, value));
+                    _settings.TableTitleSize = Math.Max(4, Math.Min(200, value));
                     OnPropertyChanged();
                     _settings.Save();
                     UpdatePreview();
@@ -800,7 +836,7 @@ namespace BarcodePrint.ViewModel
             {
                 if (_settings.SerialSize != value)
                 {
-                    _settings.SerialSize = Math.Max(5, Math.Min(36, value));
+                    _settings.SerialSize = Math.Max(4, Math.Min(200, value));
                     OnPropertyChanged();
                     _settings.Save();
                     UpdatePreview();
@@ -884,7 +920,27 @@ namespace BarcodePrint.ViewModel
         public int SelectedItemIndex
         {
             get => _selectedItemIndex;
-            set { _selectedItemIndex = value; OnPropertyChanged(); }
+            set
+            {
+                if (_selectedItemIndex != value)
+                {
+                    _selectedItemIndex = value;
+                    OnPropertyChanged();
+
+                    if (_selectedItemIndex >= 0 && CurrentTemplate?.Elements != null)
+                    {
+                        int targetColNum = (_selectedItemIndex == 99 || _selectedItemIndex == 101) ? _selectedItemIndex : _selectedItemIndex + 1;
+                        var matching = CurrentTemplate.Elements.FirstOrDefault(el =>
+                            (_selectedItemIndex == 99 && el.Id == "DATETIME_ELEMENT") ||
+                            (_selectedItemIndex == 101 && el.Id == "SERIAL_ELEMENT") ||
+                            (el.IsVariable && el.InputOrder == targetColNum));
+                        if (matching != null && SelectedElement != matching)
+                        {
+                            SelectedElement = matching;
+                        }
+                    }
+                }
+            }
         }
 
         #endregion
@@ -1121,10 +1177,16 @@ namespace BarcodePrint.ViewModel
                 if (SetProperty(ref _loadedExcelFileName, value))
                 {
                     OnPropertyChanged(nameof(IsExcelFileLoaded));
+                    OnPropertyChanged(nameof(IsExcelFileNotLoaded));
+                    OnPropertyChanged(nameof(IsSelectedElementExcelLinked));
+                    OnPropertyChanged(nameof(IsSelectedElementExcelPending));
+                    OnPropertyChanged(nameof(AvailableExcelColumnOptions));
+                    OnPropertyChanged(nameof(SelectedElementContent));
                 }
             }
         }
         public bool IsExcelFileLoaded => !string.IsNullOrWhiteSpace(LoadedExcelFileName);
+        public bool IsExcelFileNotLoaded => string.IsNullOrWhiteSpace(LoadedExcelFileName);
 
         #endregion
 
@@ -1140,10 +1202,18 @@ namespace BarcodePrint.ViewModel
                 int clamped = Math.Max(0, Math.Min(maxIdx, value));
                 if (SetProperty(ref _currentPreviewIndex, clamped))
                 {
+                    if (clamped > 0 && Records != null && clamped <= Records.Count)
+                    {
+                        _selectedRecord = Records[clamped - 1];
+                        OnPropertyChanged(nameof(SelectedRecord));
+                    }
                     OnPropertyChanged(nameof(PreviewPageText));
                     OnPropertyChanged(nameof(IsLiveInputMode));
                     OnPropertyChanged(nameof(HasPreviousPreviewPage));
                     OnPropertyChanged(nameof(HasNextPreviewPage));
+                    OnPropertyChanged(nameof(SelectedElementEffectivePreviewText));
+                    NotifyAllColumnsEffectiveTextChanged();
+                    RefreshTableCellPreviews();
                     UpdatePreview();
                 }
             }
@@ -1429,14 +1499,14 @@ namespace BarcodePrint.ViewModel
         public bool DateTimeBold { get => _settings.DateTimeBold; set { _settings.DateTimeBold = value; OnPropertyChanged(); _settings.Save(); UpdatePreview(); } }
         public bool DateTimeItalic { get => _settings.DateTimeItalic; set { _settings.DateTimeItalic = value; OnPropertyChanged(); _settings.Save(); UpdatePreview(); } }
 
-        public int Col1Size { get => _settings.Col1Size; set { _settings.Col1Size = Math.Max(6, Math.Min(40, value)); OnPropertyChanged(); UpdatePreview(); } }
-        public int Col2Size { get => _settings.Col2Size; set { _settings.Col2Size = Math.Max(6, Math.Min(40, value)); OnPropertyChanged(); UpdatePreview(); } }
-        public int Col3Size { get => _settings.Col3Size; set { _settings.Col3Size = Math.Max(6, Math.Min(40, value)); OnPropertyChanged(); UpdatePreview(); } }
-        public int Col4Size { get => _settings.Col4Size; set { _settings.Col4Size = Math.Max(6, Math.Min(40, value)); OnPropertyChanged(); UpdatePreview(); } }
-        public int Col5Size { get => _settings.Col5Size; set { _settings.Col5Size = Math.Max(6, Math.Min(40, value)); OnPropertyChanged(); UpdatePreview(); } }
-        public int Col6Size { get => _settings.Col6Size; set { _settings.Col6Size = Math.Max(6, Math.Min(40, value)); OnPropertyChanged(); UpdatePreview(); } }
-        public int Col7Size { get => _settings.Col7Size; set { _settings.Col7Size = Math.Max(6, Math.Min(40, value)); OnPropertyChanged(); UpdatePreview(); } }
-        public int Col8Size { get => _settings.Col8Size; set { _settings.Col8Size = Math.Max(6, Math.Min(40, value)); OnPropertyChanged(); UpdatePreview(); } }
+        public int Col1Size { get => _settings.Col1Size; set { _settings.Col1Size = Math.Max(4, Math.Min(200, value)); OnPropertyChanged(); UpdatePreview(); } }
+        public int Col2Size { get => _settings.Col2Size; set { _settings.Col2Size = Math.Max(4, Math.Min(200, value)); OnPropertyChanged(); UpdatePreview(); } }
+        public int Col3Size { get => _settings.Col3Size; set { _settings.Col3Size = Math.Max(4, Math.Min(200, value)); OnPropertyChanged(); UpdatePreview(); } }
+        public int Col4Size { get => _settings.Col4Size; set { _settings.Col4Size = Math.Max(4, Math.Min(200, value)); OnPropertyChanged(); UpdatePreview(); } }
+        public int Col5Size { get => _settings.Col5Size; set { _settings.Col5Size = Math.Max(4, Math.Min(200, value)); OnPropertyChanged(); UpdatePreview(); } }
+        public int Col6Size { get => _settings.Col6Size; set { _settings.Col6Size = Math.Max(4, Math.Min(200, value)); OnPropertyChanged(); UpdatePreview(); } }
+        public int Col7Size { get => _settings.Col7Size; set { _settings.Col7Size = Math.Max(4, Math.Min(200, value)); OnPropertyChanged(); UpdatePreview(); } }
+        public int Col8Size { get => _settings.Col8Size; set { _settings.Col8Size = Math.Max(4, Math.Min(200, value)); OnPropertyChanged(); UpdatePreview(); } }
 
         #endregion
 
@@ -1482,28 +1552,28 @@ namespace BarcodePrint.ViewModel
         #region Properties - Inputs & State
 
         private string _inputCol1 = "";
-        public string InputCol1 { get => _inputCol1; set { if (SetProperty(ref _inputCol1, value)) UpdatePreview(); } }
+        public string InputCol1 { get => _inputCol1; set { if (SetProperty(ref _inputCol1, value)) { OnPropertyChanged(nameof(Col1EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol2 = "";
-        public string InputCol2 { get => _inputCol2; set { if (SetProperty(ref _inputCol2, value)) UpdatePreview(); } }
+        public string InputCol2 { get => _inputCol2; set { if (SetProperty(ref _inputCol2, value)) { OnPropertyChanged(nameof(Col2EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol3 = "";
-        public string InputCol3 { get => _inputCol3; set { if (SetProperty(ref _inputCol3, value)) UpdatePreview(); } }
+        public string InputCol3 { get => _inputCol3; set { if (SetProperty(ref _inputCol3, value)) { OnPropertyChanged(nameof(Col3EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol4 = "";
-        public string InputCol4 { get => _inputCol4; set { if (SetProperty(ref _inputCol4, value)) UpdatePreview(); } }
+        public string InputCol4 { get => _inputCol4; set { if (SetProperty(ref _inputCol4, value)) { OnPropertyChanged(nameof(Col4EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol5 = "";
-        public string InputCol5 { get => _inputCol5; set { if (SetProperty(ref _inputCol5, value)) UpdatePreview(); } }
+        public string InputCol5 { get => _inputCol5; set { if (SetProperty(ref _inputCol5, value)) { OnPropertyChanged(nameof(Col5EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol6 = "";
-        public string InputCol6 { get => _inputCol6; set { if (SetProperty(ref _inputCol6, value)) UpdatePreview(); } }
+        public string InputCol6 { get => _inputCol6; set { if (SetProperty(ref _inputCol6, value)) { OnPropertyChanged(nameof(Col6EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol7 = "";
-        public string InputCol7 { get => _inputCol7; set { if (SetProperty(ref _inputCol7, value)) UpdatePreview(); } }
+        public string InputCol7 { get => _inputCol7; set { if (SetProperty(ref _inputCol7, value)) { OnPropertyChanged(nameof(Col7EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol8 = "";
-        public string InputCol8 { get => _inputCol8; set { if (SetProperty(ref _inputCol8, value)) UpdatePreview(); } }
+        public string InputCol8 { get => _inputCol8; set { if (SetProperty(ref _inputCol8, value)) { OnPropertyChanged(nameof(Col8EffectiveText)); UpdatePreview(); } } }
 
         public bool IsCol1Keep { get => _settings.IsCol1Keep; set { _settings.IsCol1Keep = value; OnPropertyChanged(); } }
         public bool IsCol2Keep { get => _settings.IsCol2Keep; set { _settings.IsCol2Keep = value; OnPropertyChanged(); } }
@@ -1620,8 +1690,92 @@ namespace BarcodePrint.ViewModel
         public string PrinterStatusBadge { get => _printerStatusBadge; set => SetProperty(ref _printerStatusBadge, value); }
 
         private bool _isInitializing = false;
+        private bool _isFilteringPrinters = false;
         private string _printerStatusColor = "#D32F2F";
         public string PrinterStatusColor { get => _printerStatusColor; set => SetProperty(ref _printerStatusColor, value); }
+
+        private void SyncSelectedPrinterConnectionDetails(string printerName)
+        {
+            if (string.IsNullOrEmpty(printerName)) return;
+
+            Func<string, string> norm = s => (s ?? "")
+                .Replace("[블루투스]", "")
+                .Replace("[네트워크]", "")
+                .Replace("(페어링 필요)", "")
+                .Replace("(가상포트 연결 필요)", "")
+                .Replace("-", "")
+                .Replace(" ", "")
+                .Trim()
+                .ToUpperInvariant();
+
+            string key = norm(printerName);
+
+            // 1. 블루투스 프린터 포트 동기화
+            if (printerName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) || printerName.Contains("블루투스") || IsFilterBt)
+            {
+                var info = _cachedPrinters?.FirstOrDefault(p => norm(p.Name).Equals(key) || norm(p.FriendlyName).Equals(key));
+
+                string devName = info?.FriendlyName ?? printerName;
+                // 시스템 레지스트리/WMI에 매핑된 실제 하드웨어 COM 포트를 최우선 조회하여 오염된 캐시 자동 교정
+                string hardwarePort = UsbPrinterHelper.GetBluetoothPortForDeviceName(devName);
+                if (string.IsNullOrEmpty(hardwarePort) && info != null && !string.IsNullOrEmpty(info.Address) && !info.Address.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+                {
+                    hardwarePort = UsbPrinterHelper.FindComPortForBluetoothMac(info.Address);
+                }
+
+                string resolvedPort = null;
+                if (!string.IsNullOrEmpty(hardwarePort))
+                {
+                    resolvedPort = hardwarePort;
+                }
+                else if (info != null && !string.IsNullOrEmpty(info.PortName) && !info.PortName.StartsWith("USB", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(info.PortName, @"COM\d+", RegexOptions.IgnoreCase))
+                {
+                    resolvedPort = info.PortName;
+                }
+                else if (!string.IsNullOrEmpty(BluetoothPortName) && Regex.IsMatch(BluetoothPortName, @"COM\d+", RegexOptions.IgnoreCase))
+                {
+                    resolvedPort = BluetoothPortName;
+                }
+                else if (!string.IsNullOrEmpty(_settings.BluetoothPortName) && Regex.IsMatch(_settings.BluetoothPortName, @"COM\d+", RegexOptions.IgnoreCase))
+                {
+                    resolvedPort = _settings.BluetoothPortName;
+                }
+
+                if (!string.IsNullOrEmpty(resolvedPort))
+                {
+                    if (info != null)
+                    {
+                        info.PortName = resolvedPort;
+                        info.Address = resolvedPort;
+                    }
+                    BluetoothPortName = resolvedPort;
+                }
+                else if (printerName.Contains("(페어링 필요)") || (info != null && !info.IsPaired))
+                {
+                    BluetoothPortName = "미할당 (페어링 필요)";
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(BluetoothPortName))
+                    {
+                        BluetoothPortName = "미할당 (페어링 필요)";
+                    }
+                }
+            }
+            // 2. 네트워크 프린터 IP 주소 동기화
+            else if (printerName.StartsWith("[네트워크]", StringComparison.OrdinalIgnoreCase) || IsFilterLan)
+            {
+                var info = _cachedPrinters?.FirstOrDefault(p => norm(p.Name).Equals(key) || norm(p.FriendlyName).Equals(key));
+                if (info != null && !string.IsNullOrEmpty(info.Address))
+                {
+                    var match = Regex.Match(info.Address, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b");
+                    if (match.Success)
+                    {
+                        TcpPrinterIp = match.Value;
+                    }
+                }
+            }
+        }
 
         private string _selectedPrinterName = "";
         public string SelectedPrinterName
@@ -1631,16 +1785,42 @@ namespace BarcodePrint.ViewModel
             {
                 if (SetProperty(ref _selectedPrinterName, value))
                 {
-                    if (!_isInitializing)
+                    if (_targetPrinterName != value)
                     {
-                        if (!string.IsNullOrEmpty(value))
+                        _targetPrinterName = value;
+                        OnPropertyChanged(nameof(TargetPrinterName));
+                    }
+
+                    SyncSelectedPrinterConnectionDetails(value);
+
+                    if (!_isInitializing && !_isFilteringPrinters)
+                    {
+                        CheckRealtimePrinterStatus();
+                    }
+                }
+            }
+        }
+
+        private string _targetPrinterName = "";
+        /// <summary>
+        /// 프린터 설정창에서 콤보박스 선택 대상 프린터명 (선택 시 SelectedPrinterName 및 하드웨어 타이틀과 즉시 동기화)
+        /// </summary>
+        public string TargetPrinterName
+        {
+            get => _targetPrinterName;
+            set
+            {
+                if (SetProperty(ref _targetPrinterName, value))
+                {
+                    if (!string.IsNullOrEmpty(value))
+                    {
+                        if (_selectedPrinterName != value)
                         {
-                            ExecuteReadPrinterHardwareInfo(showLoadingPopup: true);
+                            _selectedPrinterName = value;
+                            OnPropertyChanged(nameof(SelectedPrinterName));
                         }
-                        else
-                        {
-                            CheckRealtimePrinterStatus();
-                        }
+
+                        SyncSelectedPrinterConnectionDetails(value);
                     }
                 }
             }
@@ -1682,11 +1862,43 @@ namespace BarcodePrint.ViewModel
 
         public string BluetoothPortName
         {
-            get => _settings.BluetoothPortName ?? "COM3";
-            set { _settings.BluetoothPortName = value; OnPropertyChanged(); _settings.Save(); }
+            get => _settings.BluetoothPortName ?? "";
+            set
+            {
+                if (_settings.BluetoothPortName != value)
+                {
+                    _settings.BluetoothPortName = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(AvailableComPorts));
+                    _settings.Save();
+
+                    // 현재 선택된 블루투스 프린터의 내부 PortName도 함께 갱신하여 장치별 포트 매핑 유지
+                    var curTarget = !string.IsNullOrEmpty(TargetPrinterName) ? TargetPrinterName : SelectedPrinterName;
+                    if (!string.IsNullOrEmpty(curTarget) && (curTarget.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) || curTarget.Contains("블루투스")))
+                    {
+                        var info = _cachedPrinters.FirstOrDefault(p => p.Name.Equals(curTarget, StringComparison.OrdinalIgnoreCase));
+                        if (info != null)
+                        {
+                            info.PortName = value;
+                            info.Address = value;
+                        }
+                    }
+                }
+            }
         }
 
-        public List<string> AvailableComPorts => UsbPrinterHelper.GetAvailableComPorts();
+        public List<string> AvailableComPorts
+        {
+            get
+            {
+                var ports = UsbPrinterHelper.GetAvailableComPorts();
+                if (!string.IsNullOrEmpty(BluetoothPortName) && !ports.Contains(BluetoothPortName, StringComparer.OrdinalIgnoreCase))
+                {
+                    ports.Insert(0, BluetoothPortName);
+                }
+                return ports;
+            }
+        }
 
         private bool _isScanningNetwork = false;
         public bool IsScanningNetwork
@@ -1769,6 +1981,8 @@ namespace BarcodePrint.ViewModel
                 _settings.Load();
 
                 LoadAuthenticationSerials();
+                TrialLicenseManager.EvaluateLicense(false);
+                UpdateTrialLicenseState();
                 LoadHistoryRecords();
 
                 InitializeCommands();
@@ -1838,7 +2052,20 @@ namespace BarcodePrint.ViewModel
         {
             try
             {
-                _settings.Save();
+                int w = (int)PaperWidth;
+                int h = (int)PaperHeight;
+                if (w > 0 && h > 0)
+                {
+                    string paperType = _currentTemplate?.PaperType ?? "GAP";
+                    int rot = _currentTemplate?.Rotation ?? LabelRotationAngle;
+                    _settings.AddRecentWork($"라벨 {w}×{h} mm", w, h, paperType, rot);
+                }
+                else
+                {
+                    _settings.HasRecentWork = true;
+                    _settings.LastWorkedDate = DateTime.Now.ToString("yyyy.MM.dd");
+                    _settings.Save();
+                }
                 SaveHistoryRecords();
             }
             catch (Exception ex)
@@ -1851,7 +2078,20 @@ namespace BarcodePrint.ViewModel
         {
             try
             {
-                _settings.Save();
+                int w = (int)PaperWidth;
+                int h = (int)PaperHeight;
+                if (w > 0 && h > 0)
+                {
+                    string paperType = _currentTemplate?.PaperType ?? "GAP";
+                    int rot = _currentTemplate?.Rotation ?? LabelRotationAngle;
+                    _settings.AddRecentWork($"라벨 {w}×{h} mm", w, h, paperType, rot);
+                }
+                else
+                {
+                    _settings.HasRecentWork = true;
+                    _settings.LastWorkedDate = DateTime.Now.ToString("yyyy.MM.dd");
+                    _settings.Save();
+                }
                 StatusMessage = "모든 설정 파일이 성공적으로 저장되었습니다.";
                 _dialogService.ShowMessage("설정 내용이 저장되었습니다.", "저장 완료", MessageBoxImage.Information);
             }
@@ -1950,6 +2190,7 @@ namespace BarcodePrint.ViewModel
             }
 
             _settings.Save();
+            OnPropertyChanged("");
             StatusMessage = $"[{colIndex}번 컬럼 '{targetName}']이(가) 삭제되었습니다. (남은 컬럼: {ActiveColumnCount}개)";
             UpdatePreview();
         }
@@ -1985,6 +2226,13 @@ namespace BarcodePrint.ViewModel
                 int tempX = GetOffsetXByIndex(a);
                 int tempY = GetOffsetYByIndex(a);
                 string tempInput = GetInputByIndex(a);
+                string tempFont = GetFontByIndex(a);
+                bool tempBold = GetBoldByIndex(a);
+                bool tempItalic = GetItalicByIndex(a);
+                string tempAlign = GetAlignByIndex(a);
+                int tempWidth = GetWidthByIndex(a);
+                int tempRowH = GetRowHeightByIndex(a);
+                string tempHeaderAlign = GetHeaderAlignByIndex(a);
 
                 SetColumnDataByIndex(a, 
                     GetHeaderByIndex(b), 
@@ -1996,7 +2244,14 @@ namespace BarcodePrint.ViewModel
                     GetSizeByIndex(b), 
                     GetOffsetXByIndex(b), 
                     GetOffsetYByIndex(b), 
-                    GetInputByIndex(b));
+                    GetInputByIndex(b),
+                    GetFontByIndex(b),
+                    GetBoldByIndex(b),
+                    GetItalicByIndex(b),
+                    GetAlignByIndex(b),
+                    GetWidthByIndex(b),
+                    GetRowHeightByIndex(b),
+                    GetHeaderAlignByIndex(b));
 
                 SetColumnDataByIndex(b, 
                     tempHeader, 
@@ -2008,7 +2263,14 @@ namespace BarcodePrint.ViewModel
                     tempSize, 
                     tempX, 
                     tempY, 
-                    tempInput);
+                    tempInput,
+                    tempFont,
+                    tempBold,
+                    tempItalic,
+                    tempAlign,
+                    tempWidth,
+                    tempRowH,
+                    tempHeaderAlign);
 
                 if (Records != null && Records.Count > 0)
                 {
@@ -2025,12 +2287,13 @@ namespace BarcodePrint.ViewModel
             }
 
             _settings.Save();
+            OnPropertyChanged("");
             UpdatePreview();
         }
 
         public void AddNewColumn()
         {
-            if (ActiveColumnCount >= 8) return;
+            if (ActiveColumnCount >= 100) return;
             int newIndex = ActiveColumnCount + 1;
 
             // 1. 헤더명을 항목{newIndex}로 확실히 지정
@@ -2040,7 +2303,22 @@ namespace BarcodePrint.ViewModel
                 SetColumnHeaderByIndex(newIndex, $"항목{newIndex}");
             }
 
-            // 2. Y 오프셋을 용지 인쇄 영역 내부로 안전하게 배치
+            // 2. 기본 폰트 크기 및 글꼴 안전 보정
+            if (GetSizeByIndex(newIndex) <= 0)
+            {
+                SetSizeByIndex(newIndex, 12);
+            }
+            if (string.IsNullOrWhiteSpace(GetFontByIndex(newIndex)))
+            {
+                SetFontByIndex(newIndex, "맑은 고딕");
+            }
+
+            // 3. 새로 추가되는 컬럼의 바코드/금액/입력값 잔여 상태 안전 초기화
+            SetBarcodeByIndex(newIndex, false);
+            SetPriceByIndex(newIndex, false);
+            SetInputByIndex(newIndex, "");
+
+            // 4. Y 오프셋을 용지 인쇄 영역 내부로 안전하게 배치
             int paperH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 40;
             int lastY = GetOffsetYByIndex(ActiveColumnCount);
             int newY = Math.Min(paperH - 6, lastY + 5);
@@ -2048,7 +2326,22 @@ namespace BarcodePrint.ViewModel
             {
                 newY = Math.Max(2, (newIndex - 1) * (paperH / Math.Max(2, newIndex + 1)));
             }
-            SetItemOffsetDirect(newIndex - 1, 2, newY, triggerPreview: false);
+            if (newIndex <= 8)
+            {
+                SetItemOffsetDirect(newIndex - 1, 2, newY, triggerPreview: false);
+            }
+
+            // 5. 스튜디오 템플릿 요소 자동 추가 및 동기화 (8개 초과 컬럼도 캔버스에 즉시 반영)
+            if (CurrentTemplate != null && !CurrentTemplate.Elements.Any(e => e.IsVariable && e.InputOrder == newIndex))
+            {
+                var newElem = TemplateMigrationHelper.CreateElement(ElementType.TEXT, 2.0, Math.Min(paperH - 6, newY));
+                newElem.InputOrder = newIndex;
+                newElem.HeaderName = GetHeaderByIndex(newIndex);
+                newElem.Content = $"항목{newIndex}";
+                newElem.IsVariable = true;
+                CurrentTemplate.Elements.Add(newElem);
+                OnPropertyChanged(nameof(TemplateElements));
+            }
 
             ActiveColumnCount = newIndex;
 
@@ -2057,6 +2350,7 @@ namespace BarcodePrint.ViewModel
                 ApplyTableAutoFitLayoutInternal();
             }
 
+            OnPropertyChanged("");
             StatusMessage = $"[컬럼 {newIndex} ('{GetHeaderByIndex(newIndex)}')]이(가) 추가되었습니다.";
             UpdatePreview();
         }
@@ -2073,14 +2367,21 @@ namespace BarcodePrint.ViewModel
                 GetSizeByIndex(from), 
                 GetOffsetXByIndex(from), 
                 GetOffsetYByIndex(from), 
-                GetInputByIndex(from));
+                GetInputByIndex(from),
+                GetFontByIndex(from),
+                GetBoldByIndex(from),
+                GetItalicByIndex(from),
+                GetAlignByIndex(from),
+                GetWidthByIndex(from),
+                GetRowHeightByIndex(from),
+                GetHeaderAlignByIndex(from));
         }
 
         private void ResetColumnData(int idx)
         {
             int paperH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 40;
             int safeY = Math.Max(2, Math.Min(paperH - 6, (idx - 1) * 4 + 2));
-            SetColumnDataByIndex(idx, $"항목{idx}", false, false, false, "CODE128", true, 12, 2, safeY, "");
+            SetColumnDataByIndex(idx, $"항목{idx}", false, false, false, "CODE128", true, 12, 2, safeY, "", "맑은 고딕", true, false, "LEFT", 0, 0, "CENTER");
         }
 
         private void ShiftRecordColumns(PrintRecordModel rec, int fromColIndex)
@@ -2142,12 +2443,36 @@ namespace BarcodePrint.ViewModel
                 case 6: Column6Header = name; break;
                 case 7: Column7Header = name; break;
                 case 8: Column8Header = name; break;
+                default:
+                    if (_settings.ExtendedColumnHeaders == null) _settings.ExtendedColumnHeaders = new System.Collections.Generic.Dictionary<string, string>();
+                    _settings.ExtendedColumnHeaders[idx.ToString()] = name;
+                    var elem = CurrentTemplate?.Elements?.FirstOrDefault(e => e.IsVariable && e.InputOrder == idx);
+                    if (elem != null) elem.HeaderName = name;
+                    break;
             }
             _settings.Save();
             UpdatePreview();
         }
 
-        public void SetColumnDataByIndex(int idx, string header, bool isPrice, bool isIncludeHeader, bool isBarcode, string bType, bool bText, int size, int x, int y, string input)
+        public void SetColumnDataByIndex(
+            int idx, 
+            string header, 
+            bool isPrice, 
+            bool isIncludeHeader, 
+            bool isBarcode, 
+            string bType, 
+            bool bText, 
+            int size, 
+            int x, 
+            int y, 
+            string input,
+            string font = "맑은 고딕",
+            bool isBold = true,
+            bool isItalic = false,
+            string align = "LEFT",
+            int width = 0,
+            int rowHeight = 0,
+            string headerAlign = "CENTER")
         {
             switch (idx)
             {
@@ -2155,41 +2480,65 @@ namespace BarcodePrint.ViewModel
                     _settings.Column1Name = header; _settings.IsColumn1PriceFormat = isPrice; _settings.IsColumn1IncludeHeader = isIncludeHeader;
                     _settings.IsColumn1Barcode = isBarcode; _settings.Col1BarcodeType = bType; _settings.Col1ShowBarcodeText = bText;
                     _settings.Col1Size = size; _settings.Col1OffsetX = x; _settings.Col1OffsetY = y; _inputCol1 = input;
+                    _settings.Col1Font = font; _settings.Col1Bold = isBold; _settings.Col1Italic = isItalic;
+                    _settings.Col1Align = align; _settings.Col1Width = width; _settings.Col1RowHeight = rowHeight;
+                    _settings.Col1HeaderAlign = headerAlign;
                     break;
                 case 2:
                     _settings.Column2Name = header; _settings.IsColumn2PriceFormat = isPrice; _settings.IsColumn2IncludeHeader = isIncludeHeader;
                     _settings.IsColumn2Barcode = isBarcode; _settings.Col2BarcodeType = bType; _settings.Col2ShowBarcodeText = bText;
                     _settings.Col2Size = size; _settings.Col2OffsetX = x; _settings.Col2OffsetY = y; _inputCol2 = input;
+                    _settings.Col2Font = font; _settings.Col2Bold = isBold; _settings.Col2Italic = isItalic;
+                    _settings.Col2Align = align; _settings.Col2Width = width; _settings.Col2RowHeight = rowHeight;
+                    _settings.Col2HeaderAlign = headerAlign;
                     break;
                 case 3:
                     _settings.Column3Name = header; _settings.IsColumn3PriceFormat = isPrice; _settings.IsColumn3IncludeHeader = isIncludeHeader;
                     _settings.IsColumn3Barcode = isBarcode; _settings.Col3BarcodeType = bType; _settings.Col3ShowBarcodeText = bText;
                     _settings.Col3Size = size; _settings.Col3OffsetX = x; _settings.Col3OffsetY = y; _inputCol3 = input;
+                    _settings.Col3Font = font; _settings.Col3Bold = isBold; _settings.Col3Italic = isItalic;
+                    _settings.Col3Align = align; _settings.Col3Width = width; _settings.Col3RowHeight = rowHeight;
+                    _settings.Col3HeaderAlign = headerAlign;
                     break;
                 case 4:
                     _settings.Column4Name = header; _settings.IsColumn4PriceFormat = isPrice; _settings.IsColumn4IncludeHeader = isIncludeHeader;
                     _settings.IsColumn4Barcode = isBarcode; _settings.Col4BarcodeType = bType; _settings.Col4ShowBarcodeText = bText;
                     _settings.Col4Size = size; _settings.Col4OffsetX = x; _settings.Col4OffsetY = y; _inputCol4 = input;
+                    _settings.Col4Font = font; _settings.Col4Bold = isBold; _settings.Col4Italic = isItalic;
+                    _settings.Col4Align = align; _settings.Col4Width = width; _settings.Col4RowHeight = rowHeight;
+                    _settings.Col4HeaderAlign = headerAlign;
                     break;
                 case 5:
                     _settings.Column5Name = header; _settings.IsColumn5PriceFormat = isPrice; _settings.IsColumn5IncludeHeader = isIncludeHeader;
                     _settings.IsColumn5Barcode = isBarcode; _settings.Col5BarcodeType = bType; _settings.Col5ShowBarcodeText = bText;
                     _settings.Col5Size = size; _settings.Col5OffsetX = x; _settings.Col5OffsetY = y; _inputCol5 = input;
+                    _settings.Col5Font = font; _settings.Col5Bold = isBold; _settings.Col5Italic = isItalic;
+                    _settings.Col5Align = align; _settings.Col5Width = width; _settings.Col5RowHeight = rowHeight;
+                    _settings.Col5HeaderAlign = headerAlign;
                     break;
                 case 6:
                     _settings.Column6Name = header; _settings.IsColumn6PriceFormat = isPrice; _settings.IsColumn6IncludeHeader = isIncludeHeader;
                     _settings.IsColumn6Barcode = isBarcode; _settings.Col6BarcodeType = bType; _settings.Col6ShowBarcodeText = bText;
                     _settings.Col6Size = size; _settings.Col6OffsetX = x; _settings.Col6OffsetY = y; _inputCol6 = input;
+                    _settings.Col6Font = font; _settings.Col6Bold = isBold; _settings.Col6Italic = isItalic;
+                    _settings.Col6Align = align; _settings.Col6Width = width; _settings.Col6RowHeight = rowHeight;
+                    _settings.Col6HeaderAlign = headerAlign;
                     break;
                 case 7:
                     _settings.Column7Name = header; _settings.IsColumn7PriceFormat = isPrice; _settings.IsColumn7IncludeHeader = isIncludeHeader;
                     _settings.IsColumn7Barcode = isBarcode; _settings.Col7BarcodeType = bType; _settings.Col7ShowBarcodeText = bText;
                     _settings.Col7Size = size; _settings.Col7OffsetX = x; _settings.Col7OffsetY = y; _inputCol7 = input;
+                    _settings.Col7Font = font; _settings.Col7Bold = isBold; _settings.Col7Italic = isItalic;
+                    _settings.Col7Align = align; _settings.Col7Width = width; _settings.Col7RowHeight = rowHeight;
+                    _settings.Col7HeaderAlign = headerAlign;
                     break;
                 case 8:
                     _settings.Column8Name = header; _settings.IsColumn8PriceFormat = isPrice; _settings.IsColumn8IncludeHeader = isIncludeHeader;
                     _settings.IsColumn8Barcode = isBarcode; _settings.Col8BarcodeType = bType; _settings.Col8ShowBarcodeText = bText;
                     _settings.Col8Size = size; _settings.Col8OffsetX = x; _settings.Col8OffsetY = y; _inputCol8 = input;
+                    _settings.Col8Font = font; _settings.Col8Bold = isBold; _settings.Col8Italic = isItalic;
+                    _settings.Col8Align = align; _settings.Col8Width = width; _settings.Col8RowHeight = rowHeight;
+                    _settings.Col8HeaderAlign = headerAlign;
                     break;
             }
 
@@ -2202,7 +2551,24 @@ namespace BarcodePrint.ViewModel
 
         public string GetHeaderByIndex(int idx)
         {
-            switch (idx) { case 1: return Column1Header; case 2: return Column2Header; case 3: return Column3Header; case 4: return Column4Header; case 5: return Column5Header; case 6: return Column6Header; case 7: return Column7Header; case 8: return Column8Header; default: return ""; }
+            switch (idx)
+            {
+                case 1: return Column1Header;
+                case 2: return Column2Header;
+                case 3: return Column3Header;
+                case 4: return Column4Header;
+                case 5: return Column5Header;
+                case 6: return Column6Header;
+                case 7: return Column7Header;
+                case 8: return Column8Header;
+                default:
+                    if (_settings.ExtendedColumnHeaders != null && _settings.ExtendedColumnHeaders.TryGetValue(idx.ToString(), out string extH) && !string.IsNullOrWhiteSpace(extH))
+                        return extH;
+                    var elem = CurrentTemplate?.Elements?.FirstOrDefault(e => e.IsVariable && e.InputOrder == idx);
+                    if (elem != null && !string.IsNullOrWhiteSpace(elem.HeaderName))
+                        return elem.HeaderName;
+                    return $"{idx}열";
+            }
         }
         public bool GetPriceByIndex(int idx)
         {
@@ -2637,6 +3003,21 @@ namespace BarcodePrint.ViewModel
             }
         }
 
+        public void SetInputByIndex(int idx, string val)
+        {
+            switch (idx)
+            {
+                case 1: InputCol1 = val; break;
+                case 2: InputCol2 = val; break;
+                case 3: InputCol3 = val; break;
+                case 4: InputCol4 = val; break;
+                case 5: InputCol5 = val; break;
+                case 6: InputCol6 = val; break;
+                case 7: InputCol7 = val; break;
+                case 8: InputCol8 = val; break;
+            }
+        }
+
         public string GetInputByIndex(int idx)
         {
             switch (idx) { case 1: return InputCol1; case 2: return InputCol2; case 3: return InputCol3; case 4: return InputCol4; case 5: return InputCol5; case 6: return InputCol6; case 7: return InputCol7; case 8: return InputCol8; default: return ""; }
@@ -2652,7 +3033,41 @@ namespace BarcodePrint.ViewModel
             if (forceAll || !IsCol6Keep) InputCol6 = "";
             if (forceAll || !IsCol7Keep) InputCol7 = "";
             if (forceAll || !IsCol8Keep) InputCol8 = "";
+
+            // 템플릿 가변 요소 중 IsKeep이 꺼져 있는 요소(바코드 스캔/임시입력 등) 초기화
+            if (CurrentTemplate?.Elements != null)
+            {
+                foreach (var el in CurrentTemplate.Elements)
+                {
+                    if (el.IsVariable && (forceAll || !el.IsKeep))
+                    {
+                        el.Content = "";
+                    }
+                }
+            }
+
             UpdatePreview();
+        }
+
+        public void ClearColumnData(int idx)
+        {
+            if (idx < 1 || idx > 8) return;
+            SetHeaderByIndex(idx, $"{idx}열");
+            SetInputByIndex(idx, "");
+            SetBarcodeByIndex(idx, false);
+            SetPriceByIndex(idx, false);
+            SetIncludeHeaderByIndex(idx, false);
+            SetWidthByIndex(idx, 0);
+        }
+
+        public void ClearAllColumnsData()
+        {
+            for (int i = 1; i <= 8; i++)
+            {
+                ClearColumnData(i);
+            }
+            InputCol1 = "";
+            Column1Header = "상품명 또는 텍스트 입력";
         }
 
         public bool IsAllInputsEmpty()

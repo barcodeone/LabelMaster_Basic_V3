@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabelMaster - 고객지원 및 앱 통합 안내 (Multi-Platform Support)</title>
+    <meta name="description" content="LabelMaster 공식 고객지원 센터 (iOS, Android, macOS) - FAQ, 기기 연결 가이드, 개인정보처리방침">
+    <meta name="keywords" content="LabelMaster, 라벨마스터, Xprinter, 엑스프린터, 라벨프린터, iOS, Android, macOS, Mac, 앱스토어 지원, 플레이스토어, 고객지원, FAQ, 개인정보처리방침">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary: #0066FF;
+            --primary-dark: #0052CC;
+            --primary-light: #EBF3FF;
+            --secondary: #10B981;
+            --text-main: #1E293B;
+            --text-sub: #64748B;
+            --text-light: #94A3B8;
+            --bg-page: #F8FAFC;
+            --bg-card: #FFFFFF;
+            --border-color: #E2E8F0;
+            --radius-md: 12px;
+            --radius-lg: 20px;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Top Header */
+        header {
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-container {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .app-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #0066FF, #00D2FF);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 800;
+            box-shadow: 0 4px 12px rgba(0, 102, 255, 0.25);
+        }
+
+        .brand-text h1 {
+            font-size: 19px;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.5px;
+        }
+
+        .brand-text span {
+            font-size: 12px;
+            color: var(--text-sub);
+            font-weight: 500;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-sub);
+            font-size: 14px;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        /* Hero Banner */
+        .hero {
+            background: linear-gradient(180deg, #FFFFFF 0%, #F1F5F9 100%);
+            padding: 56px 24px 44px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .platform-badges {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .platform-badge {
+            background-color: var(--primary-light);
+            color: var(--primary);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12.5px;
+            font-weight: 700;
+        }
+
+        .hero h2 {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--text-main);
+            letter-spacing: -1px;
+            margin-bottom: 12px;
+        }
+
+        .hero p {
+            font-size: 16px;
+            color: var(--text-sub);
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 20px;
+            background-color: var(--primary);
+            border-radius: 2px;
+        }
+
+        /* Contact Box */
+        .contact-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 36px 24px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 48px;
+        }
+
+        .contact-icon {
+            width: 56px;
+            height: 56px;
+            background-color: var(--primary-light);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin: 0 auto 16px;
+        }
+
+        .contact-box h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .contact-box p {
+            font-size: 14.5px;
+            color: var(--text-sub);
+            max-width: 520px;
+            margin: 0 auto 20px;
+        }
+
+        .contact-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background-color: var(--primary);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 700;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .contact-btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        /* Platform Selection Tabs */
+        .tabs-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 8px;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            outline: none;
+            padding: 10px 20px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-sub);
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: var(--primary);
+            background-color: var(--primary-light);
+        }
+
+        .tab-btn.active {
+            color: white;
+            background-color: var(--primary);
+        }
+
+        /* Tab Contents */
+        .tab-pane {
+            display: none;
+        }
+
+        .tab-pane.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* FAQ Card */
+        .faq-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 48px;
+        }
+
+        .faq-item {
+            border-bottom: 1px solid var(--border-color);
+            padding: 18px 0;
+        }
+
+        .faq-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .faq-question {
+            font-size: 15.5px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .faq-q-badge {
+            color: var(--primary);
+            font-weight: 800;
+        }
+
+        .faq-answer {
+            font-size: 14px;
+            color: var(--text-sub);
+            line-height: 1.7;
+            padding-left: 24px;
+        }
+
+        /* Policy Section */
+        .policy-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 32px 28px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .policy-content {
+            font-size: 13.5px;
+            color: var(--text-sub);
+            line-height: 1.8;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 16px;
+            background: #F8FAFC;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .policy-content h5 {
+            color: var(--text-main);
+            font-size: 14px;
+            margin: 14px 0 4px;
+        }
+
+        .policy-content ul {
+            margin-left: 18px;
+            margin-bottom: 10px;
+        }
+
+        /* Footer */
+        footer {
+            background-color: #0F172A;
+            color: #94A3B8;
+            padding: 40px 24px;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .footer-content {
+            max-width: 1080px;
+            margin: 0 auto;
+            line-height: 1.8;
+        }
+
+        @media (max-width: 768px) {
+            .hero h2 { font-size: 24px; }
+            .header-container { flex-direction: column; gap: 12px; }
+            .nav-links { font-size: 13px; }
+            .container { padding: 24px 16px 60px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="header-container">
+            <a href="#" class="logo-area">
+                <div class="app-icon">LM</div>
+                <div class="brand-text">
+                    <h1>LabelMaster Support</h1>
+                    <span>통합 고객지원 센터 (iOS · Android · macOS)</span>
+                </div>
+            </a>
+            <nav class="nav-links">
+                <a href="#contact">문의하기</a>
+                <a href="#faq">OS별 FAQ</a>
+                <a href="#privacy">개인정보처리방침</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="platform-badges">
+            <span class="platform-badge">📱 iOS (iPhone/iPad)</span>
+            <span class="platform-badge">🤖 Android</span>
+            <span class="platform-badge">💻 macOS</span>
+            <span class="platform-badge">🖥️ Windows</span>
+        </div>
+        <h2>LabelMaster 공식 고객지원 센터</h2>
+        <p>LabelMaster는 모든 플랫폼에서 고품질 라벨 출력과 편리한 디자인 환경을 제공합니다. 사용 중 궁금하신 점이나 기술 지원이 필요하시면 언제든 문의해 주세요.</p>
+    </section>
+
+    <!-- Main Container -->
+    <main class="container">
+
+        <!-- 1. 단일 이메일 고객지원 배너 -->
+        <h2 id="contact" class="section-title">고객지원 및 기술 문의 (Contact Us)</h2>
+        <div class="contact-box">
+            <div class="contact-icon">✉️</div>
+            <h3>전담 기술 지원 이메일 (Technical Support)</h3>
+            <p>
+                앱 사용 오류, 프린터(Bluetooth / Wi-Fi / USB) 무선 연결, 기능 제안 등 문의사항을 보내주시면 개발팀에서 신속하게 확인 후 안내해 드립니다.
+            </p>
+            <a href="mailto:endreaminc@gmail.com?subject=[LabelMaster%20Support]" class="contact-btn">
+                ✉️ endreaminc@gmail.com 문의 메일 보내기
+            </a>
+        </div>
+
+        <!-- 2. 플랫폼별 FAQ (Tabs) -->
+        <h2 id="faq" class="section-title">자주 묻는 질문 (FAQ by Platform)</h2>
+        
+        <div class="tabs-container">
+            <button class="tab-btn active" onclick="switchTab('tab-ios')">🍎 iOS (Apple)</button>
+            <button class="tab-btn" onclick="switchTab('tab-android')">🤖 Android</button>
+            <button class="tab-btn" onclick="switchTab('tab-macos')">💻 macOS (Mac)</button>
+            <button class="tab-btn" onclick="switchTab('tab-common')">⚙️ 공통 (용지/프린터)</button>
+        </div>
+
+        <!-- Tab 1: iOS -->
+        <div id="tab-ios" class="tab-pane active">
+            <div class="faq-section">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span class="faq-q-badge">Q.</span>
+                        <span>[iOS] 블루투스 프린터가 검색되지 않거나 연결이 실패합니다.</span>
+                    </div>
+                    <div class="faq-answer">
+                        1. 프린터의 전원이 켜져 있고 블루투스 대기 모드인지 확인하세요.<br>
+                        2. iPhone/iPad <strong>[설정] ➔ [LabelMaster]</strong>에서 <strong>[블루투스]</strong> 및 <strong>[로컬 네트워크]</strong> 권한이 켜져 있는지 확인해 주세요.<br>
+                        3. 프린터가 다른 기기에 이미 연결되어 있다면 기존 페어링을 해제한 후 다시 연결해 주세요.
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span class="faq-q-badge">Q.</span>
+                        <span>[iOS] 라벨에 로고/이미지를 삽입할 때 사진을 선택할 수 없습니다.</span>
+                    </div>
+                    <div class="faq-answer">
+                        iOS 기기의 <strong>[설정] ➔ [LabelMaster]</strong>에서 <strong>[사진]</strong> 접근 권한을 '전체 접근 허용' 또는 '선택한 사진'으로 변경해 주십시오.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Android -->
+        <div id="tab-android" class="tab-pane">
+            <div class="faq-section">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span class="faq-q-badge">Q.</span>
+                        <span>[Android] 안드로이드 12 이상에서 블루투스 프린터 검색이 안 됩니다.</span>
+                    </div>
+                    <div class="faq-answer">
+                        안드로이드 최신 버전에서는 <strong>[근처 기기(Nearby Devices)]</strong> 권한이 필요합니다. 스마트폰의 <strong>[설정] ➔ [애플리케이션] ➔ [LabelMaster] ➔ [권한]</strong>에서 <strong>근처 기기 허용</strong>을 체크해 주세요.
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span class="faq-q-badge">Q.</span>
+                        <span>[Android] OTG 케이블(USB)로 직접 연결하여 출력할 수 있나요?</span>
+                    </div>
+                    <div class="faq-answer">
+                        네, OTG 젠더를 통해 USB 라벨 프린터를 연결한 후 나타나는 'USB 장치 연결 허용' 팝업에서 승인을 누르시면 즉시 유선 출력이 가능합니다.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: macOS -->
+        <div id="tab-macos" class="tab-pane">
+            <div class="faq-section">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span class="faq-q-badge">Q.</span>
+                        <span>[macOS] Mac에서 라벨 프린터를 어떻게 연결하나요?</span>
+                    </div>
+                    <div class="faq-answer">
+                        1. <strong>USB 연결</strong>: USB 케이블 연결 후 Mac <strong>[시스템 설정] ➔ [프린터 및 스캐너]</strong>에서 프린터가 등록되어 있는지 확인합니다.<br>
+                        2. <strong>네트워크/Wi-Fi 연결</strong>: 프린터의 IP 주소를 확인한 후 앱 내 네트워크 프린터 설정에서 IP와 포트(기본 9100)를 입력하여 연결합니다.
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span class="faq-q-badge">Q.</span>
+                        <span>[macOS] Mac App Store 버전과 PC 버전의 호환성은 어떤가요?</span>
+                    </div>
+                    <div class="faq-answer">
+                        제작된 라벨 템플릿과 데이터 형식은 모든 OS 버전에서 동일하게 호환되며 자유롭게 공유하여 출력할 수 있습니다.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 4: 공통 -->
+        <div id="tab-common" class="tab-pane">
+            <div class="faq-section">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span class="faq-q-badge">Q.</span>
+                        <span>[공통] 인쇄 위치가 어긋나거나 백지가 계속 배출됩니다 (갭 센서 보정).</span>
+                    </div>
+                    <div class="faq-answer">
+                        프린터의 <strong>용지 간격 센서 캘리브레이션</strong>이 필요합니다. 프린터 전원을 끈 뒤, 피드(FEED) 버튼을 누른 상태로 전원을 켜고 신호음(삐-)이 울린 후 손을 떼시면 용지 크기가 자동으로 감지됩니다.
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span class="faq-q-badge">Q.</span>
+                        <span>[공통] 지원하는 라벨 프린터 모델은 어떤 것이 있나요?</span>
+                    </div>
+                    <div class="faq-answer">
+                        한국Xprinter 전 기종(XP-420B, XP-460B, XP-DT108B, XP-365B, XP-TT424B 등) 및 표준 <strong>TSPL 명령어</strong>를 지원하는 모든 블루투스 / Wi-Fi / USB 라벨 프린터를 완벽 지원합니다.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 개인정보처리방침 (통합 Privacy Policy) -->
+        <h2 id="privacy" class="section-title">개인정보처리방침 (Privacy Policy)</h2>
+        <div class="policy-section">
+            <div class="policy-content">
+                <h5>1. 개인정보의 수집 및 이용 목적</h5>
+                <p>LabelMaster(이하 '앱')는 iOS, Android, macOS, Windows 등 모든 플랫폼에서 사용자의 개인 식별 정보(이름, 연락처, 주민번호, 금융정보 등)를 서버에 일절 수집하거나 전송하지 않습니다. 모든 라벨 디자인과 데이터는 사용자의 로컬 기기에만 안전하게 보관됩니다.</p>
+
+                <h5>2. 플랫폼별 접근 권한의 목적</h5>
+                <ul>
+                    <li><strong>블루투스 / 근처 기기 / 로컬 네트워크</strong>: 라벨 프린터 장치 탐색 및 인쇄 데이터 전송 목적으로만 사용됩니다.</li>
+                    <li><strong>사진 보관함 / 저장소 파일 읽기</strong>: 사용자가 라벨에 직접 삽입하고자 선택한 이미지 및 엑셀 데이터를 불러오기 위한 목적으로만 사용되며, 외부 서버로 전송되지 않습니다.</li>
+                </ul>
+
+                <h5>3. 개인정보의 제3자 제공 및 처리 위탁</h5>
+                <p>앱은 사용자의 개인정보를 수집하지 않으므로 어떠한 제3자에게도 정보를 제공하거나 외부에 처리를 위탁하지 않습니다.</p>
+
+                <h5>4. 고객 지원 및 문의</h5>
+                <p>개인정보 처리방침 및 앱 사용에 관한 모든 문의사항은 전담 이메일(endreaminc@gmail.com)로 문의해 주시기 바랍니다.</p>
+                <p style="margin-top: 8px; font-size: 12px; color: #94A3B8;">본 방침은 2026년 9월 29일부터 적용됩니다.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <p><strong>한국Xprinter (Xprinter Korea)</strong> | 기술 지원: endreaminc@gmail.com</p>
+            <p style="margin-top: 6px; font-size: 12px; color: #64748B;">
+                © 2026 LabelMaster. All rights reserved. iOS, macOS, App Store are trademarks of Apple Inc. Android, Google Play are trademarks of Google LLC.
+            </p>
+        </div>
+    </footer>
+
+    <!-- Tab Script -->
+    <script>
+        function switchTab(tabId) {
+            // 버튼 활성화 토글
+            const buttons = document.querySelectorAll('.tab-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            // 탭 내용 토글
+            const panes = document.querySelectorAll('.tab-pane');
+            panes.forEach(pane => pane.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+        }
+    </script>
+
+</body>
+</html>

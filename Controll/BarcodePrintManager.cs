@@ -5591,6 +5591,11 @@ namespace BarcodePrint.Controll
 
 
 
+                    else if (command.Contains("FEED"))
+                    {
+                        tsplCommandBytes = PrintManager.Command_FEED();
+                        commandType = "FEED";
+                    }
                     else if (command.Contains("INIT"))
 
 

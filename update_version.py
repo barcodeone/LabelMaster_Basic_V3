@@ -3,56 +3,47 @@ import re
 
 def update_version():
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    version_file = os.path.join(base_dir, "version.txt")
     assembly_info_path = os.path.join(base_dir, "Properties", "AssemblyInfo.cs")
     
+    # 1. version.txt에서 버전 읽기
+    ver_str = "1.0.1"
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    ver_str = content
+        except Exception as ex:
+            print(f"[!] version.txt 읽기 실패: {ex}", flush=True)
+            
+    # 세 자리 (예: 1.0.1) -> 네 자리 (예: 1.0.1.0)
+    parts = ver_str.split('.')
+    while len(parts) < 4:
+        parts.append('0')
+    four_part_ver = '.'.join(parts[:4])
+    short_ver = '.'.join(parts[:3])
+
     if not os.path.exists(assembly_info_path):
         print(f"[-] AssemblyInfo.cs 파일을 찾을 수 없습니다: {assembly_info_path}", flush=True)
         return False
         
     try:
-        # AssemblyInfo.cs 읽기 (UTF-8)
         with open(assembly_info_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+            code = f.read()
             
-        # AssemblyVersion("1.0.0.0") 매칭 검색
-        version_match = re.search(r'\[assembly:\s*AssemblyVersion\(\s*"(\d+)\.(\d+)\.(\d+)\.(\d+)"\s*\)\]', content)
-        if version_match:
-            major, minor, build, revision = map(int, version_match.groups())
-            new_build = build + 1
-            new_version_4 = f"{major}.{minor}.{new_build}.{revision}"
-            new_version_3 = f"{major}.{minor}.{new_build}"
-            
-            # AssemblyVersion 및 AssemblyFileVersion 업데이트
-            content = re.sub(
-                r'\[assembly:\s*AssemblyVersion\(\s*".*?"\s*\)\]', 
-                f'[assembly: AssemblyVersion("{new_version_4}")]', 
-                content
-            )
-            content = re.sub(
-                r'\[assembly:\s*AssemblyFileVersion\(\s*".*?"\s*\)\]', 
-                f'[assembly: AssemblyFileVersion("{new_version_4}")]', 
-                content
-            )
-            
-            # AssemblyInformationalVersion("1.0.0") 업데이트 (존재하는 경우)
-            if re.search(r'\[assembly:\s*AssemblyInformationalVersion\(\s*".*?"\s*\)\]', content):
-                content = re.sub(
-                    r'\[assembly:\s*AssemblyInformationalVersion\(\s*".*?"\s*\)\]', 
-                    f'[assembly: AssemblyInformationalVersion("{new_version_3}")]', 
-                    content
-                )
-            
-            with open(assembly_info_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-                
-            print(f"[+] AssemblyInfo.cs 버전 자동 업데이트 완료: {major}.{minor}.{build}.{revision} -> {new_version_4}", flush=True)
-            return True
-        else:
-            print("[-] AssemblyInfo.cs에서 AssemblyVersion 태그를 찾을 수 없습니다.", flush=True)
-    except Exception as e:
-        print(f"[-] 버전 업데이트 중 에러 발생: {e}", flush=True)
+        code = re.sub(r'\[assembly:\s*AssemblyVersion\("[^"]+"\)', f'[assembly: AssemblyVersion("{four_part_ver}")', code)
+        code = re.sub(r'\[assembly:\s*AssemblyFileVersion\("[^"]+"\)', f'[assembly: AssemblyFileVersion("{four_part_ver}")', code)
+        code = re.sub(r'\[assembly:\s*AssemblyInformationalVersion\("[^"]+"\)', f'[assembly: AssemblyInformationalVersion("{short_ver}")', code)
         
-    return False
+        with open(assembly_info_path, 'w', encoding='utf-8') as f:
+            f.write(code)
+            
+        print(f"[+] 버전 동기화 완료: v{short_ver} (어셈블리: {four_part_ver})", flush=True)
+        return True
+    except Exception as e:
+        print(f"[-] 버전 검사 중 에러 발생: {e}", flush=True)
+        return False
 
 if __name__ == '__main__':
     update_version()

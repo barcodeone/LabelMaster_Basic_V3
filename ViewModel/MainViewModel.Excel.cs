@@ -36,7 +36,7 @@ namespace BarcodePrint.ViewModel
             }
         }
 
-        public void ExecuteImportFromExcel(string specifiedFilePath = null)
+        public void ExecuteImportExcelForSelectedElement(string specifiedFilePath = null)
         {
             string filePath = specifiedFilePath;
             if (string.IsNullOrWhiteSpace(filePath))
@@ -53,76 +53,13 @@ namespace BarcodePrint.ViewModel
                 return;
             }
 
-            // 엑셀 모드(탭 2)로 자동 전환
-            SelectedWorkMode = 1;
+            // 팝업 없이 첫 번째 시트의 전체 데이터 직접 로드
+            var sheets = _excelService.GetSheetNames(filePath);
+            string sheetName = (sheets != null && sheets.Count > 0) ? sheets[0] : "";
 
-            // 시트 및 컬럼 선택 팝업 다이얼로그 표시
-            var dlg = new BarcodePrint.WpfView.ExcelImportDialog(filePath, _excelService, _settings);
-            if (System.Windows.Application.Current != null && System.Windows.Application.Current.MainWindow != null)
-            {
-                dlg.Owner = System.Windows.Application.Current.MainWindow;
-            }
-
-            if (dlg.ShowDialog() != true)
-            {
-                return;
-            }
-
-            string sheetName = dlg.SelectedSheetName;
-            var selectedColIndices = dlg.SelectedColumnIndices;
-            var customHeaders = dlg.SelectedCustomHeaders;
-
-            bool success = _excelService.ImportFromExcelWithMapping(filePath, sheetName, selectedColIndices, out List<string> headers, out List<PrintRecordModel> importedRecords, out string err);
+            bool success = _excelService.ImportFromExcelWithMapping(filePath, sheetName, null, out List<string> headers, out List<PrintRecordModel> importedRecords, out string err);
             if (success)
             {
-                // 1. 헤더 자동 매핑 (사용자가 콤보박스로 매핑한 컬럼명 및 활성 컬럼 수 설정)
-                var finalHeaders = (customHeaders != null && customHeaders.Count > 0) ? customHeaders : headers;
-                if (finalHeaders != null && finalHeaders.Count > 0)
-                {
-                    int lastMappedIndex = 0;
-                    if (selectedColIndices != null)
-                    {
-                        for (int i = 0; i < selectedColIndices.Count && i < 8; i++)
-                        {
-                            if (selectedColIndices[i] > 0)
-                            {
-                                lastMappedIndex = i + 1;
-                            }
-                        }
-                    }
-                    int activeCount = Math.Max(1, Math.Min(8, lastMappedIndex > 0 ? lastMappedIndex : finalHeaders.Count));
-
-                    _isBatchUpdating = true;
-                    try
-                    {
-                        for (int i = 0; i < 8; i++)
-                        {
-                            if (i < finalHeaders.Count && !string.IsNullOrWhiteSpace(finalHeaders[i]))
-                            {
-                                SetColumnHeaderByIndex(i + 1, finalHeaders[i]);
-                            }
-                        }
-                        ActiveColumnCount = activeCount;
-                    }
-                    finally
-                    {
-                        _isBatchUpdating = false;
-                    }
-                    _settings.Save();
-                    
-                    OnPropertyChanged(nameof(Column1Header));
-                    OnPropertyChanged(nameof(Column2Header));
-                    OnPropertyChanged(nameof(Column3Header));
-                    OnPropertyChanged(nameof(Column4Header));
-                    OnPropertyChanged(nameof(Column5Header));
-                    OnPropertyChanged(nameof(Column6Header));
-                    OnPropertyChanged(nameof(Column7Header));
-                    OnPropertyChanged(nameof(Column8Header));
-                    ActiveColumnCountChanged?.Invoke(ActiveColumnCount);
-                    UpdatePreview();
-                }
-
-                // 2. 데이터그리드 레코드 로드
                 Records.Clear();
                 int idx = 0;
                 foreach (var rec in importedRecords)
@@ -133,33 +70,43 @@ namespace BarcodePrint.ViewModel
                 }
                 _recordCounter = idx;
 
-                SaveHistoryRecords();
-
-                // 첫 번째 행 데이터를 입력창으로 로드
+                LoadedExcelHeaders = headers != null ? new List<string>(headers) : new List<string>();
+                LoadedExcelFileName = Path.GetFileName(filePath);
+                CurrentPreviewIndex = Records.Count > 0 ? 1 : 0;
                 if (Records.Count > 0)
                 {
-                    var first = Records[0];
-                    InputCol1 = first.Col1 ?? "";
-                    InputCol2 = first.Col2 ?? "";
-                    InputCol3 = first.Col3 ?? "";
-                    InputCol4 = first.Col4 ?? "";
-                    InputCol5 = first.Col5 ?? "";
-                    InputCol6 = first.Col6 ?? "";
-                    InputCol7 = first.Col7 ?? "";
-                    InputCol8 = first.Col8 ?? "";
-                    SelectedRecord = first;
+                    SelectedRecord = Records[0];
                 }
 
-                LoadedExcelFileName = Path.GetFileName(filePath);
-                StatusMessage = $"엑셀 로드 완료: {LoadedExcelFileName} ({Records.Count}건)";
-                _dialogService.ShowMessage($"엑셀 파일에서 총 {Records.Count}건의 데이터를 성공적으로 불러왔습니다.", "엑셀 가져오기 완료", MessageBoxImage.Information);
+                // 엑셀 로드 시 요소들을 임의로 자동 매핑하지 않고, 사용자가 선택한 매핑만 유지하도록 함
+                RefreshTableCells();
+
+                OnPropertyChanged(nameof(AvailableExcelColumnOptions));
+                OnPropertyChanged(nameof(IsExcelFileLoaded));
+                OnPropertyChanged(nameof(LoadedExcelFileName));
+                OnPropertyChanged(nameof(Records));
+                OnPropertyChanged(nameof(SelectedElementExcelColumn));
+                OnPropertyChanged(nameof(IsSelectedElementExcelLinked));
+                OnPropertyChanged(nameof(IsSelectedElementExcelNotLinked));
+                OnPropertyChanged(nameof(IsSelectedElementExcelPending));
+                OnPropertyChanged(nameof(SelectedElementContent));
+                NotifyAllColumnsEffectiveTextChanged();
                 UpdatePreview();
+
+                StatusMessage = $"엑셀 로드 완료: {LoadedExcelFileName} (총 {Records.Count}행, {LoadedExcelHeaders.Count}개 열)";
+                _dialogService.ShowMessage($"엑셀 파일에서 총 {Records.Count}건의 데이터와 {LoadedExcelHeaders.Count}개 열을 성공적으로 불러왔습니다.\n각 요소를 클릭한 후 우측 '데이터 소스'에서 원하는 엑셀 열을 각각 연결해 주세요.", "엑셀 로드 완료", MessageBoxImage.Information);
             }
             else
             {
                 StatusMessage = $"엑셀 로드 실패: {err}";
                 _dialogService.ShowError($"엑셀 파일 열기 실패: {err}", "오류");
             }
+        }
+
+        public void ExecuteImportFromExcel(string specifiedFilePath = null)
+        {
+            // 요소가 선택되어 있든 아니든 동일하게 팝업 없이 엑셀 전체 데이터 로드
+            ExecuteImportExcelForSelectedElement(specifiedFilePath);
         }
 
         public void ExecuteImportBackup()

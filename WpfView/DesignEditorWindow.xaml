@@ -398,9 +398,9 @@
                                             <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="1열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
                                             <TextBox Text="{Binding Column1Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="1열 항목명"/>
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col1Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
-                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="0" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                            <TextBox Text="{Binding Col1Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="0" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col1Size, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
                                             <ToggleButton IsChecked="{Binding Col1Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                             <ToggleButton IsChecked="{Binding Col1Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                         </StackPanel>
@@ -428,9 +428,9 @@
                                             <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="2열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
                                              <TextBox Text="{Binding Column2Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="2열 항목명"/>
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col2Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
-                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                            <TextBox Text="{Binding Col2Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="2" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col2Size, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="2" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
                                             <ToggleButton IsChecked="{Binding Col2Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                             <ToggleButton IsChecked="{Binding Col2Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                         </StackPanel>
@@ -458,9 +458,9 @@
                                             <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="3열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
                                             <TextBox Text="{Binding Column3Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="3열 항목명"/>
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col3Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
-                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="2" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                            <TextBox Text="{Binding Col3Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="2" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="3" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col3Size, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="3" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
                                             <ToggleButton IsChecked="{Binding Col3Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                             <ToggleButton IsChecked="{Binding Col3Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                         </StackPanel>
@@ -488,9 +488,9 @@
                                             <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="4열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
                                             <TextBox Text="{Binding Column4Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="4열 항목명"/>
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col4Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
-                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="3" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                            <TextBox Text="{Binding Col4Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="3" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="4" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col4Size, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="4" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
                                             <ToggleButton IsChecked="{Binding Col4Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                             <ToggleButton IsChecked="{Binding Col4Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                         </StackPanel>
@@ -518,9 +518,9 @@
                                             <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="5열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
                                             <TextBox Text="{Binding Column5Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="5열 항목명"/>
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col5Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
-                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="4" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                            <TextBox Text="{Binding Col5Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="4" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col5Size, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
                                             <ToggleButton IsChecked="{Binding Col5Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                             <ToggleButton IsChecked="{Binding Col5Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                         </StackPanel>
@@ -548,9 +548,9 @@
                                             <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="6열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
                                             <TextBox Text="{Binding Column6Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="6열 항목명"/>
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col6Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
-                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                            <TextBox Text="{Binding Col6Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="6" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col6Size, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="6" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
                                             <ToggleButton IsChecked="{Binding Col6Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                             <ToggleButton IsChecked="{Binding Col6Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                         </StackPanel>
@@ -578,9 +578,9 @@
                                             <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="7열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
                                             <TextBox Text="{Binding Column7Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="7열 항목명"/>
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col7Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
-                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="6" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                            <TextBox Text="{Binding Col7Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="6" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="7" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col7Size, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="7" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
                                             <ToggleButton IsChecked="{Binding Col7Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                             <ToggleButton IsChecked="{Binding Col7Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                         </StackPanel>
@@ -608,9 +608,9 @@
                                             <Border Background="#2563EB" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="8열" FontWeight="Bold" FontSize="11.5" Foreground="White"/></Border>
                                             <TextBox Text="{Binding Column8Header, UpdateSourceTrigger=PropertyChanged}" FontWeight="Bold" FontSize="12.5" Width="92" Height="28" VerticalContentAlignment="Center" Padding="5,1" Margin="0,0,6,0" ToolTip="8열 항목명"/>
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding Col8Font}" Width="92" Height="28" FontSize="11" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
-                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="7" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                            <TextBox Text="{Binding Col8Size, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="7" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
+                                            <Button Content="-" Command="{Binding DecreaseItemSizeCommand}" CommandParameter="8" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
+                                            <TextBox Text="{Binding Col8Size, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                            <Button Content="+" Command="{Binding IncreaseItemSizeCommand}" CommandParameter="8" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,5,0"/>
                                             <ToggleButton IsChecked="{Binding Col8Bold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                             <ToggleButton IsChecked="{Binding Col8Italic}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,6,0" ToolTip="기울임"><TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
                                         </StackPanel>
@@ -690,7 +690,9 @@
                                             <ComboBox ItemsSource="{Binding AvailableFontFamilies}" SelectedItem="{Binding TableTitleFont}" IsEnabled="{Binding IsTableTitleEnabled}" Width="92" Height="26" FontSize="11.5" VerticalContentAlignment="Center" Margin="0,2,8,2"/>
 
                                             <TextBlock Text="크기:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
-                                            <TextBox Text="{Binding TableTitleSize, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsTableTitleEnabled}" Width="28" Height="24" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="0,2,8,2"/>
+                                            <Button Content="-" Command="{Binding DecreaseTableTitleSizeCommand}" IsEnabled="{Binding IsTableTitleEnabled}" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="24" Margin="0,2,1,2"/>
+                                            <TextBox Text="{Binding TableTitleSize, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsTableTitleEnabled}" Width="32" Height="24" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="0,2,1,2"/>
+                                            <Button Content="+" Command="{Binding IncreaseTableTitleSizeCommand}" IsEnabled="{Binding IsTableTitleEnabled}" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="24" Margin="0,2,8,2"/>
 
                                             <TextBlock Text="정렬:" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Margin="0,2,4,2"/>
                                             <ComboBox SelectedValue="{Binding TableTitleAlign}" SelectedValuePath="Tag" IsEnabled="{Binding IsTableTitleEnabled}" Width="65" Height="26" FontSize="11.5" VerticalContentAlignment="Center" Margin="0,2,8,2">
@@ -740,7 +742,7 @@
 
                                                 <TextBlock Text="크기:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                                 <Button Content="-" Command="{Binding DecreaseSerialSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                                <TextBox Text="{Binding SerialSize, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                                <TextBox Text="{Binding SerialSize, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
                                                 <Button Content="+" Command="{Binding IncreaseSerialSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,6,0"/>
 
                                                 <ToggleButton IsChecked="{Binding SerialBold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>
@@ -783,7 +785,7 @@
 
                                                 <TextBlock Text="크기:" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                                 <Button Content="-" Command="{Binding DecreaseDateTimeSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26"/>
-                                                <TextBox Text="{Binding DateTimeSize, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                                <TextBox Text="{Binding DateTimeSize, UpdateSourceTrigger=PropertyChanged}" Width="32" Height="26" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
                                                 <Button Content="+" Command="{Binding IncreaseDateTimeSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="26" Margin="0,0,6,0"/>
 
                                                 <ToggleButton IsChecked="{Binding DateTimeBold}" Style="{StaticResource ModernToggleBtnStyle}" Width="24" Height="26" Margin="0,0,3,0" ToolTip="굵게"><TextBlock Text="B" FontWeight="Bold" FontSize="11.5"/></ToggleButton>

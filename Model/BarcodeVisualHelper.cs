@@ -15,9 +15,9 @@ namespace BarcodePrint.Model
     public static class BarcodeVisualHelper
     {
         /// <summary>
-        /// 실제 표준 바코드 및 QR코드 그래픽 UIElement 생성 (ZXing 기반 정밀 렌더링 & 하단 텍스트 중앙정렬)
+        /// 실제 표준 바코드 및 QR코드 그래픽 UIElement 생성 (ZXing 기반 정밀 렌더링 & 바코드 위/아래/미표시 텍스트 위치 지원)
         /// </summary>
-        public static FrameworkElement CreateBarcodeVisual(string content, string barcodeType, double fontSize, bool isSelected, bool showText = true)
+        public static FrameworkElement CreateBarcodeVisual(string content, string barcodeType, double fontSize, bool isSelected, bool showText = true, double widthPx = 0, double heightPx = 0, string textPosition = "BELOW")
         {
             if (string.IsNullOrEmpty(content))
             {
@@ -30,15 +30,15 @@ namespace BarcodePrint.Model
 
                 if (format == BarcodeFormat.QR_CODE)
                 {
-                    return CreateQrCodeVisual(content, fontSize, isSelected, showText);
+                    return CreateQrCodeVisual(content, fontSize, isSelected, showText, widthPx, heightPx, textPosition);
                 }
-                else if (format == BarcodeFormat.DATA_MATRIX)
+                else if (format == BarcodeFormat.DATA_MATRIX || format == BarcodeFormat.AZTEC || format == BarcodeFormat.PDF_417)
                 {
-                    return Create2DVisual(content, format, fontSize, isSelected);
+                    return Create2DVisual(content, format, fontSize, isSelected, showText, widthPx, heightPx, textPosition);
                 }
                 else
                 {
-                    return Create1DBarcodeVisual(content, format, fontSize, isSelected, showText);
+                    return Create1DBarcodeVisual(content, format, fontSize, isSelected, showText, widthPx, heightPx, textPosition);
                 }
             }
             catch
@@ -54,111 +54,143 @@ namespace BarcodePrint.Model
             }
         }
 
-        private static BarcodeFormat MapBarcodeFormat(string barcodeType)
+        public static BarcodeFormat MapBarcodeFormat(string barcodeType)
         {
             switch (barcodeType?.ToUpper())
             {
-                case "QR_CODE": return BarcodeFormat.QR_CODE;
+                case "QR_CODE":
+                case "QR": return BarcodeFormat.QR_CODE;
                 case "DATAMATRIX":
                 case "DATA_MATRIX": return BarcodeFormat.DATA_MATRIX;
-                case "PDF417": return BarcodeFormat.PDF_417;
-                case "CODE39": return BarcodeFormat.CODE_39;
-                case "CODE93": return BarcodeFormat.CODE_93;
-                case "EAN13": return BarcodeFormat.EAN_13;
-                case "EAN8": return BarcodeFormat.EAN_8;
+                case "PDF417":
+                case "PDF-417": return BarcodeFormat.PDF_417;
+                case "AZTEC": return BarcodeFormat.AZTEC;
+                case "CODE39":
+                case "CODE-39": return BarcodeFormat.CODE_39;
+                case "CODE93":
+                case "CODE-93": return BarcodeFormat.CODE_93;
+                case "EAN13":
+                case "EAN-13": return BarcodeFormat.EAN_13;
+                case "EAN8":
+                case "EAN-8": return BarcodeFormat.EAN_8;
                 case "UPC-A":
                 case "UPCA": return BarcodeFormat.UPC_A;
                 case "UPC-E":
                 case "UPCE": return BarcodeFormat.UPC_E;
-                case "ITF": return BarcodeFormat.ITF;
+                case "ITF":
+                case "ITF-14": return BarcodeFormat.ITF;
                 case "CODABAR": return BarcodeFormat.CODABAR;
                 default: return BarcodeFormat.CODE_128;
             }
         }
 
-        private static FrameworkElement CreateQrCodeVisual(string content, double fontSize, bool isSelected, bool showText)
+        private static FrameworkElement CreateQrCodeVisual(string content, double fontSize, bool isSelected, bool showText, double widthPx = 0, double heightPx = 0, string textPosition = "BELOW")
         {
-            double displaySize = Math.Max(52, fontSize * 4.2);
+            bool isTextVisible = showText && !string.Equals(textPosition, "NONE", StringComparison.OrdinalIgnoreCase);
+            double availableW = (widthPx > 0) ? widthPx : Math.Max(52, fontSize * 4.2);
+            double availableH = (heightPx > 0) ? heightPx : availableW;
+            double textH = isTextVisible ? Math.Max(12.0, Math.Min(20.0, availableH * 0.22)) : 0.0;
+            double displaySize = isTextVisible ? Math.Min(availableW, Math.Max(10.0, availableH - textH)) : Math.Min(availableW, availableH);
 
             var rootPanel = new StackPanel
             {
                 Orientation = Orientation.Vertical,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Width = displaySize
+                VerticalAlignment = VerticalAlignment.Center,
+                Width = availableW,
+                Height = availableH
             };
 
-            // ZXing QR 코드 비트맵 생성 (여백 0, 표준 오류 복원 레벨 M)
             var qrWriter = new ZXing.Presentation.BarcodeWriter
             {
                 Format = BarcodeFormat.QR_CODE,
                 Options = new QrCodeEncodingOptions
                 {
-                    Width = (int)(displaySize * 2),
-                    Height = (int)(displaySize * 2),
+                    Width = (int)Math.Max(32, displaySize * 2),
+                    Height = (int)Math.Max(32, displaySize * 2),
                     Margin = 1,
                     ErrorCorrection = ErrorCorrectionLevel.M,
                     CharacterSet = "UTF-8"
                 }
             };
 
-            var bitmapSource = qrWriter.Write(content);
-
-            var qrImage = new Image
+            Image qrImage = null;
+            try
             {
-                Source = bitmapSource,
-                Width = displaySize,
-                Height = displaySize,
-                Stretch = Stretch.Uniform,
-                HorizontalAlignment = HorizontalAlignment.Center
-            };
-            RenderOptions.SetBitmapScalingMode(qrImage, BitmapScalingMode.NearestNeighbor);
+                var bitmapSource = qrWriter.Write(content);
+                qrImage = new Image
+                {
+                    Source = bitmapSource,
+                    Width = displaySize,
+                    Height = displaySize,
+                    Stretch = Stretch.Uniform,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                RenderOptions.SetBitmapScalingMode(qrImage, BitmapScalingMode.NearestNeighbor);
+            }
+            catch { }
 
-            rootPanel.Children.Add(qrImage);
-
-            if (showText)
+            TextBlock textBlock = null;
+            if (isTextVisible)
             {
-                var textBlock = new TextBlock
+                textBlock = new TextBlock
                 {
                     Text = content,
                     FontFamily = new FontFamily("Consolas, Malgun Gothic, Segoe UI"),
-                    FontSize = Math.Max(8.5, fontSize * 0.75),
+                    FontSize = Math.Max(8.0, textH * 0.75),
                     FontWeight = FontWeights.SemiBold,
                     Foreground = Brushes.Black,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     TextAlignment = TextAlignment.Center,
-                    Margin = new Thickness(0, 2, 0, 0),
+                    Margin = string.Equals(textPosition, "ABOVE", StringComparison.OrdinalIgnoreCase)
+                        ? new Thickness(0, 0, 0, 2)
+                        : new Thickness(0, 2, 0, 0),
                     TextTrimming = TextTrimming.CharacterEllipsis,
-                    MaxWidth = displaySize + 30
+                    MaxWidth = availableW
                 };
-                rootPanel.Children.Add(textBlock);
+            }
+
+            if (string.Equals(textPosition, "ABOVE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (textBlock != null) rootPanel.Children.Add(textBlock);
+                if (qrImage != null) rootPanel.Children.Add(qrImage);
+            }
+            else
+            {
+                if (qrImage != null) rootPanel.Children.Add(qrImage);
+                if (textBlock != null) rootPanel.Children.Add(textBlock);
             }
 
             return rootPanel;
         }
 
-        private static FrameworkElement Create1DBarcodeVisual(string content, BarcodeFormat format, double fontSize, bool isSelected, bool showText)
+        private static FrameworkElement Create1DBarcodeVisual(string content, BarcodeFormat format, double fontSize, bool isSelected, bool showText, double widthPx = 0, double heightPx = 0, string textPosition = "BELOW")
         {
             string safeContent = GetSafe1DContent(content, format);
+            bool isTextVisible = showText && !string.Equals(textPosition, "NONE", StringComparison.OrdinalIgnoreCase);
 
-            // 1D 바코드 높이 및 너비 계산
-            double targetHeight = Math.Max(26, fontSize * 2.2);
-            double targetWidth = Math.Max(80, (safeContent?.Length ?? 8) * 11);
+            double targetWidth = (widthPx > 0) ? widthPx : Math.Max(80.0, (safeContent?.Length ?? 8) * 11.0);
+            double totalHeight = (heightPx > 0) ? heightPx : Math.Max(26.0, fontSize * 2.2);
+            double textH = isTextVisible ? Math.Max(12.0, Math.Min(22.0, totalHeight * 0.25)) : 0.0;
+            double targetHeight = isTextVisible ? Math.Max(8.0, totalHeight - textH) : totalHeight;
 
             var rootPanel = new StackPanel
             {
                 Orientation = Orientation.Vertical,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Width = targetWidth
+                VerticalAlignment = VerticalAlignment.Center,
+                Width = targetWidth,
+                Height = totalHeight
             };
 
-            // ZXing을 통해 바코드 흑백 이미지 생성 (여백 0으로 바코드가 전체 폭을 꽉 채움)
             var writer = new ZXing.Presentation.BarcodeWriter
             {
                 Format = format,
                 Options = new EncodingOptions
                 {
-                    Width = (int)(targetWidth * 2),
-                    Height = (int)(targetHeight * 2),
+                    Width = (int)Math.Max(60, targetWidth * 2),
+                    Height = (int)Math.Max(20, targetHeight * 2),
                     Margin = 0,
                     PureBarcode = true
                 }
@@ -171,7 +203,6 @@ namespace BarcodePrint.Model
             }
             catch
             {
-                // 실패 시 가장 안전한 CODE128 + 12345678 로 비트맵 생성
                 try
                 {
                     writer.Format = BarcodeFormat.CODE_128;
@@ -180,35 +211,50 @@ namespace BarcodePrint.Model
                 catch { }
             }
 
+            Image barcodeImage = null;
             if (bitmapSource != null)
             {
-                var barcodeImage = new Image
+                barcodeImage = new Image
                 {
                     Source = bitmapSource,
                     Width = targetWidth,
                     Height = targetHeight,
                     Stretch = Stretch.Fill,
-                    HorizontalAlignment = HorizontalAlignment.Center
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
                 };
                 RenderOptions.SetBitmapScalingMode(barcodeImage, BitmapScalingMode.NearestNeighbor);
-                rootPanel.Children.Add(barcodeImage);
             }
 
-            // 하단 가독 텍스트: 사용자가 입력한 원래의 content를 정중앙(TextAlignment.Center) 정렬
-            if (showText)
+            TextBlock textBlock = null;
+            if (isTextVisible)
             {
-                var textBlock = new TextBlock
+                textBlock = new TextBlock
                 {
                     Text = content,
                     FontFamily = new FontFamily("Consolas, Malgun Gothic, Segoe UI"),
-                    FontSize = Math.Max(9, fontSize * 0.85),
+                    FontSize = Math.Max(8.0, textH * 0.75),
                     FontWeight = FontWeights.Bold,
                     Foreground = Brushes.Black,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     TextAlignment = TextAlignment.Center,
-                    Margin = new Thickness(0, 2, 0, 0)
+                    Margin = string.Equals(textPosition, "ABOVE", StringComparison.OrdinalIgnoreCase)
+                        ? new Thickness(0, 0, 0, 1)
+                        : new Thickness(0, 1, 0, 0),
+                    MaxWidth = targetWidth,
+                    TextTrimming = TextTrimming.CharacterEllipsis
                 };
-                rootPanel.Children.Add(textBlock);
+            }
+
+            if (string.Equals(textPosition, "ABOVE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (textBlock != null) rootPanel.Children.Add(textBlock);
+                if (barcodeImage != null) rootPanel.Children.Add(barcodeImage);
+            }
+            else
+            {
+                if (barcodeImage != null) rootPanel.Children.Add(barcodeImage);
+                if (textBlock != null) rootPanel.Children.Add(textBlock);
             }
 
             return rootPanel;
@@ -235,35 +281,45 @@ namespace BarcodePrint.Model
                     if (digitsUpc.Length == 11 || digitsUpc.Length == 12) return digitsUpc;
                     return "012345678905";
 
+                case BarcodeFormat.UPC_E:
+                    string digitsUpcE = new string(raw.Where(char.IsDigit).ToArray());
+                    if (digitsUpcE.Length == 6 || digitsUpcE.Length == 7 || digitsUpcE.Length == 8) return digitsUpcE;
+                    return "01234565";
+
                 case BarcodeFormat.ITF:
                     string digitsItf = new string(raw.Where(char.IsDigit).ToArray());
-                    if (digitsItf.Length > 0 && digitsItf.Length % 2 == 0) return digitsItf;
+                    if (digitsItf.Length >= 2)
+                    {
+                        if (digitsItf.Length % 2 != 0) digitsItf = "0" + digitsItf;
+                        return digitsItf;
+                    }
                     return "12345678";
 
-                case BarcodeFormat.CODE_39:
-                    // CODE39 지원 문자: 대문자, 숫자, - . $ / + % 공백
-                    string upper = raw.ToUpper();
-                    bool allValid39 = upper.All(c => (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || "-.$/+% ".Contains(c));
-                    return allValid39 ? upper : "12345678";
+                case BarcodeFormat.CODABAR:
+                    string clean = new string(raw.Where(c => char.IsDigit(c) || "-$:/.+".Contains(c)).ToArray());
+                    if (string.IsNullOrEmpty(clean)) clean = "123456";
+                    return "A" + clean.Trim('A', 'B', 'C', 'D') + "B";
 
-                case BarcodeFormat.CODE_93:
-                case BarcodeFormat.CODE_128:
                 default:
-                    // ASCII 범위(0~127)만 지원
-                    bool allAscii = raw.All(c => c < 128);
-                    return allAscii ? raw : "12345678";
+                    return raw;
             }
         }
 
-        private static FrameworkElement Create2DVisual(string content, BarcodeFormat format, double fontSize, bool isSelected)
+        private static FrameworkElement Create2DVisual(string content, BarcodeFormat format, double fontSize, bool isSelected, bool showText = true, double widthPx = 0, double heightPx = 0, string textPosition = "BELOW")
         {
-            double displaySize = Math.Max(48, fontSize * 3.6);
+            bool isTextVisible = showText && !string.Equals(textPosition, "NONE", StringComparison.OrdinalIgnoreCase);
+            double availableW = (widthPx > 0) ? widthPx : Math.Max(52, fontSize * 4.2);
+            double availableH = (heightPx > 0) ? heightPx : availableW;
+            double textH = isTextVisible ? Math.Max(12.0, Math.Min(20.0, availableH * 0.22)) : 0.0;
+            double displaySize = isTextVisible ? Math.Min(availableW, Math.Max(10.0, availableH - textH)) : Math.Min(availableW, availableH);
 
             var rootPanel = new StackPanel
             {
                 Orientation = Orientation.Vertical,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Width = displaySize
+                VerticalAlignment = VerticalAlignment.Center,
+                Width = availableW,
+                Height = availableH
             };
 
             var writer = new ZXing.Presentation.BarcodeWriter
@@ -271,41 +327,74 @@ namespace BarcodePrint.Model
                 Format = format,
                 Options = new EncodingOptions
                 {
-                    Width = (int)(displaySize * 2),
-                    Height = (int)(displaySize * 2),
+                    Width = (int)Math.Max(32, displaySize * 2),
+                    Height = (int)Math.Max(32, displaySize * 2),
                     Margin = 1
                 }
             };
 
+            Image image = null;
             try
             {
                 string safeContent = string.IsNullOrWhiteSpace(content) ? "12345678" : content;
                 var bitmapSource = writer.Write(safeContent);
-                var image = new Image
+                image = new Image
                 {
                     Source = bitmapSource,
                     Width = displaySize,
                     Height = displaySize,
                     Stretch = Stretch.Uniform,
-                    HorizontalAlignment = HorizontalAlignment.Center
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
                 };
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-                rootPanel.Children.Add(image);
             }
             catch { }
+
+            TextBlock textBlock = null;
+            if (isTextVisible)
+            {
+                textBlock = new TextBlock
+                {
+                    Text = content,
+                    FontFamily = new FontFamily("Consolas, Malgun Gothic, Segoe UI"),
+                    FontSize = Math.Max(8.0, textH * 0.75),
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Brushes.Black,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    TextAlignment = TextAlignment.Center,
+                    Margin = string.Equals(textPosition, "ABOVE", StringComparison.OrdinalIgnoreCase)
+                        ? new Thickness(0, 0, 0, 2)
+                        : new Thickness(0, 2, 0, 0),
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxWidth = availableW
+                };
+            }
+
+            if (string.Equals(textPosition, "ABOVE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (textBlock != null) rootPanel.Children.Add(textBlock);
+                if (image != null) rootPanel.Children.Add(image);
+            }
+            else
+            {
+                if (image != null) rootPanel.Children.Add(image);
+                if (textBlock != null) rootPanel.Children.Add(textBlock);
+            }
 
             return rootPanel;
         }
 
         /// <summary>
-        /// 203 DPI 등 인쇄용 비트맵 생성 시 DrawingContext에 화면과 100% 동일한 고화질 바코드/QR코드 비트맵 및 가독 텍스트 렌더링 (WYSIWYG)
+        /// 203 DPI / 300 DPI 등 인쇄용 비트맵 생성 시 DrawingContext에 화면과 100% 동일한 고화질 바코드/QR코드 비트맵 및 가독 텍스트 렌더링 (WYSIWYG)
         /// </summary>
-        public static void RenderBarcodeOnDc(DrawingContext dc, string content, string barcodeType, double fontSize, double offsetXMm, double offsetYMm, double dotsPerMm, bool showText = true)
+        public static void RenderBarcodeOnDc(DrawingContext dc, string content, string barcodeType, double fontSize, double offsetXMm, double offsetYMm, double dotsPerMm, bool showText = true, string textPosition = "BELOW", double widthMm = 0, double heightMm = 0)
         {
             if (string.IsNullOrEmpty(content)) content = "12345678";
 
-            // 화면 96 DPI(1mm=3.7795px) 기준 수치를 인쇄 해상도(1mm=dotsPerMm px)로 비례 환산
-            double scale = dotsPerMm / 3.7795;
+            bool isTextVisible = showText && !string.Equals(textPosition, "NONE", StringComparison.OrdinalIgnoreCase);
+            bool isAbove = string.Equals(textPosition, "ABOVE", StringComparison.OrdinalIgnoreCase);
+
             double leftPx = offsetXMm * dotsPerMm;
             double topPx = offsetYMm * dotsPerMm;
 
@@ -313,15 +402,24 @@ namespace BarcodePrint.Model
 
             if (format == BarcodeFormat.QR_CODE)
             {
-                double displaySize = Math.Max(52, fontSize * 4.2) * scale;
+                // 화면 미리보기(CreateQrCodeVisual)와 100% 일치하는 정밀 규격 계산
+                double defaultMm = 18.0;
+                double effWMm = (widthMm > 0) ? widthMm : defaultMm;
+                double effHMm = (heightMm > 0) ? heightMm : effWMm;
+
+                double availW = effWMm * dotsPerMm;
+                double availH = effHMm * dotsPerMm;
+                double textH = isTextVisible ? Math.Max(12.0 * (dotsPerMm / 3.7795), Math.Min(20.0 * (dotsPerMm / 3.7795), availH * 0.22)) : 0.0;
+                double displaySize = isTextVisible ? Math.Min(availW, Math.Max(10.0, availH - textH)) : Math.Min(availW, availH);
+                double textFontSize = Math.Max(8.0 * (dotsPerMm / 3.7795), textH * 0.75);
 
                 var qrWriter = new ZXing.Presentation.BarcodeWriter
                 {
                     Format = BarcodeFormat.QR_CODE,
                     Options = new QrCodeEncodingOptions
                     {
-                        Width = (int)displaySize,
-                        Height = (int)displaySize,
+                        Width = (int)Math.Max(32, displaySize * 2),
+                        Height = (int)Math.Max(32, displaySize * 2),
                         Margin = 1,
                         ErrorCorrection = ErrorCorrectionLevel.M,
                         CharacterSet = "UTF-8"
@@ -331,36 +429,47 @@ namespace BarcodePrint.Model
                 try
                 {
                     var bmp = qrWriter.Write(content);
-                    dc.DrawImage(bmp, new Rect(leftPx, topPx, displaySize, displaySize));
+                    double qrLeftPx = leftPx + Math.Max(0, (availW - displaySize) / 2.0);
+                    double qrTopPx = (isTextVisible && isAbove) ? topPx + textH : (topPx + Math.Max(0, (availH - (isTextVisible ? displaySize + textH : displaySize)) / 2.0));
+                    dc.DrawImage(bmp, new Rect(qrLeftPx, qrTopPx, displaySize, displaySize));
 
-                    if (showText)
+                    if (isTextVisible)
                     {
-                        double textFontSize = Math.Max(8.5, fontSize * 0.75) * scale;
                         var ft = new FormattedText(
                             content,
                             System.Globalization.CultureInfo.CurrentCulture,
                             FlowDirection.LeftToRight,
-                            new Typeface("Consolas"),
+                            new Typeface("Consolas, 맑은 고딕, Segoe UI"),
                             textFontSize,
                             Brushes.Black,
                             1.0);
                         ft.TextAlignment = TextAlignment.Center;
-                        ft.MaxTextWidth = displaySize;
-                        dc.DrawText(ft, new Point(leftPx, topPx + displaySize + (2 * scale)));
+                        ft.MaxTextWidth = availW;
+
+                        double textTopPx = isAbove ? topPx : (qrTopPx + displaySize + (2.0 * (dotsPerMm / 3.7795)));
+                        dc.DrawText(ft, new Point(leftPx, textTopPx));
                     }
                 }
                 catch { }
             }
-            else if (format == BarcodeFormat.DATA_MATRIX)
+            else if (format == BarcodeFormat.DATA_MATRIX || format == BarcodeFormat.AZTEC || format == BarcodeFormat.PDF_417)
             {
-                double displaySize = Math.Max(48, fontSize * 3.6) * scale;
+                double defaultMm = 18.0;
+                double effWMm = (widthMm > 0) ? widthMm : defaultMm;
+                double effHMm = (heightMm > 0) ? heightMm : effWMm;
+                double availW = effWMm * dotsPerMm;
+                double availH = effHMm * dotsPerMm;
+                double textH = isTextVisible ? Math.Max(12.0 * (dotsPerMm / 3.7795), Math.Min(20.0 * (dotsPerMm / 3.7795), availH * 0.22)) : 0.0;
+                double displaySize = isTextVisible ? Math.Min(availW, Math.Max(10.0, availH - textH)) : Math.Min(availW, availH);
+                double textFontSize = Math.Max(8.0 * (dotsPerMm / 3.7795), textH * 0.75);
+
                 var writer = new ZXing.Presentation.BarcodeWriter
                 {
                     Format = format,
                     Options = new EncodingOptions
                     {
-                        Width = (int)displaySize,
-                        Height = (int)displaySize,
+                        Width = (int)Math.Max(32, displaySize * 2),
+                        Height = (int)Math.Max(32, displaySize * 2),
                         Margin = 1
                     }
                 };
@@ -368,23 +477,52 @@ namespace BarcodePrint.Model
                 {
                     string safeContent = string.IsNullOrWhiteSpace(content) ? "12345678" : content;
                     var bmp = writer.Write(safeContent);
-                    dc.DrawImage(bmp, new Rect(leftPx, topPx, displaySize, displaySize));
+                    double codeLeftPx = leftPx + Math.Max(0, (availW - displaySize) / 2.0);
+                    double codeTopPx = (isTextVisible && isAbove) ? topPx + textH : topPx;
+                    dc.DrawImage(bmp, new Rect(codeLeftPx, codeTopPx, displaySize, displaySize));
+
+                    if (isTextVisible)
+                    {
+                        var ft = new FormattedText(
+                            content,
+                            System.Globalization.CultureInfo.CurrentCulture,
+                            FlowDirection.LeftToRight,
+                            new Typeface("Consolas, 맑은 고딕, Segoe UI"),
+                            textFontSize,
+                            Brushes.Black,
+                            1.0);
+                        ft.TextAlignment = TextAlignment.Center;
+                        ft.MaxTextWidth = availW;
+
+                        double textTopPx = isAbove ? topPx : (codeTopPx + displaySize + (2.0 * (dotsPerMm / 3.7795)));
+                        dc.DrawText(ft, new Point(leftPx, textTopPx));
+                    }
                 }
                 catch { }
             }
             else
             {
+                // 화면 미리보기(Create1DBarcodeVisual)와 100% 일치하는 정밀 규격 계산
                 string safeContent = GetSafe1DContent(content, format);
-                double targetHeight = Math.Max(26, fontSize * 2.2) * scale;
-                double targetWidth = Math.Max(80, (safeContent?.Length ?? 8) * 11) * scale;
+                double defaultWMm = 45.0;
+                double defaultHMm = 15.0;
+                double effWMm = (widthMm > 0) ? widthMm : defaultWMm;
+                double effHMm = (heightMm > 0) ? heightMm : defaultHMm;
+
+                double totalWidth = effWMm * dotsPerMm;
+                double totalHeight = effHMm * dotsPerMm;
+                double textH = isTextVisible ? Math.Max(12.0 * (dotsPerMm / 3.7795), Math.Min(22.0 * (dotsPerMm / 3.7795), totalHeight * 0.25)) : 0.0;
+                double targetHeight = isTextVisible ? Math.Max(8.0 * (dotsPerMm / 3.7795), totalHeight - textH) : totalHeight;
+                double targetWidth = totalWidth;
+                double textFontSize = Math.Max(8.0 * (dotsPerMm / 3.7795), textH * 0.75);
 
                 var writer = new ZXing.Presentation.BarcodeWriter
                 {
                     Format = format,
                     Options = new EncodingOptions
                     {
-                        Width = (int)targetWidth,
-                        Height = (int)targetHeight,
+                        Width = (int)Math.Max(60, targetWidth),
+                        Height = (int)Math.Max(20, targetHeight),
                         Margin = 0,
                         PureBarcode = true
                     }
@@ -407,22 +545,24 @@ namespace BarcodePrint.Model
 
                 if (bmp != null)
                 {
-                    dc.DrawImage(bmp, new Rect(leftPx, topPx, targetWidth, targetHeight));
+                    double barTopPx = (isTextVisible && isAbove) ? topPx + textH : topPx;
+                    dc.DrawImage(bmp, new Rect(leftPx, barTopPx, targetWidth, targetHeight));
 
-                    if (showText)
+                    if (isTextVisible)
                     {
-                        double textFontSize = Math.Max(9, fontSize * 0.85) * scale;
                         var ft = new FormattedText(
                             content,
                             System.Globalization.CultureInfo.CurrentCulture,
                             FlowDirection.LeftToRight,
-                            new Typeface("Consolas"),
+                            new Typeface("Consolas, 맑은 고딕, Segoe UI"),
                             textFontSize,
                             Brushes.Black,
                             1.0);
                         ft.TextAlignment = TextAlignment.Center;
                         ft.MaxTextWidth = targetWidth;
-                        dc.DrawText(ft, new Point(leftPx, topPx + targetHeight + (2 * scale)));
+
+                        double textTopPx = isAbove ? topPx : (barTopPx + targetHeight + (1.5 * (dotsPerMm / 3.7795)));
+                        dc.DrawText(ft, new Point(leftPx, textTopPx));
                     }
                 }
             }

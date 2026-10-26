@@ -11,30 +11,26 @@ namespace BarcodePrint.Model
     public static class PriceFormatHelper
     {
         /// <summary>
-        /// 가격 데이터를 원화 포맷으로 변환
+        /// 가격 데이터를 원화 포맷으로 변환 (3자리 콤마 및 ₩ 기호)
         /// </summary>
         /// <param name="value">변환할 값</param>
         /// <param name="addWonSymbol">₩ 기호 추가 여부 (기본값: true)</param>
-        /// <returns>포맷된 가격 문자열</returns>
-        public static string FormatPrice(string value, bool addWonSymbol = false)
+        /// <returns>포맷된 가격 문자열 (예: 15000 -> ₩15,000)</returns>
+        public static string FormatPrice(string value, bool addWonSymbol = true)
         {
             if (string.IsNullOrWhiteSpace(value))
                 return value;
 
-            System.Diagnostics.Debug.WriteLine($"[FormatPrice] 입력값: '{value}'");
-
-            // ₩, \, 쉼표 제거하여 순수 숫자 추출
+            // ₩, \, 쉼표, '원' 제거하여 순수 숫자 추출
             string cleanValue = value.Replace("₩", "")
                                      .Replace("\\", "")
                                      .Replace(",", "")
+                                     .Replace("원", "")
                                      .Trim();
-
-            System.Diagnostics.Debug.WriteLine($"[FormatPrice] 정제된 값: '{cleanValue}'");
 
             // 숫자가 없으면 빈 문자열 반환
             if (string.IsNullOrWhiteSpace(cleanValue))
             {
-                System.Diagnostics.Debug.WriteLine($"[FormatPrice] 숫자 없음, 빈 문자열 반환");
                 return "";
             }
 
@@ -47,28 +43,20 @@ namespace BarcodePrint.Model
                 // 천단위 구분 기호 적용 (N0 포맷: 천단위 구분 기호 포함, 소수점 없음)
                 string formatted = intValue.ToString("N0", CultureInfo.InvariantCulture);
                 
-                // 원화 기호 제거 요청으로 항상 기호 없이 포맷된 숫자만 반환
-                if (addWonSymbol)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[FormatPrice] 원화 기호 추가 요청이 무시됨: '{cleanValue}' → '{formatted}'");
-                }
-                
-                return formatted;
+                return addWonSymbol ? $"₩{formatted}" : formatted;
             }
 
-            // 숫자가 아닌 경우 빈 문자열 반환 (숫자만 입력받도록 했으므로)
-            System.Diagnostics.Debug.WriteLine($"[FormatPrice] 숫자 파싱 실패, 빈 문자열 반환: '{value}'");
-            return "";
+            return value;
         }
 
         /// <summary>
         /// 간편 가격 입력 변환
-        /// 예: '1' 입력시 '₩10,000원', '0.7' 입력시 '₩7,000원', '15000' 입력시 '₩15,000원'
+        /// 예: '1' 입력시 '₩10,000', '0.7' 입력시 '₩7,000', '15000' 입력시 '₩15,000'
         /// </summary>
         /// <param name="value">입력값</param>
-        /// <param name="includeWonPrefixAndSuffix">₩ 기호 및 '원' 접미사 포함 여부 (기본: true)</param>
+        /// <param name="includeWonPrefix">₩ 기호 포함 여부 (기본: true)</param>
         /// <returns>포맷팅된 원화 가격 문자열</returns>
-        public static string FormatShortPriceInput(string value, bool includeWonPrefixAndSuffix = true)
+        public static string FormatShortPriceInput(string value, bool includeWonPrefix = true)
         {
             if (string.IsNullOrWhiteSpace(value))
                 return value;
@@ -94,14 +82,7 @@ namespace BarcodePrint.Model
                 long intVal = (long)Math.Truncate(val);
                 string numStr = intVal.ToString("N0", CultureInfo.InvariantCulture);
 
-                if (includeWonPrefixAndSuffix)
-                {
-                    return $"₩{numStr}원";
-                }
-                else
-                {
-                    return $"{numStr}원";
-                }
+                return includeWonPrefix ? $"₩{numStr}" : numStr;
             }
 
             return value;

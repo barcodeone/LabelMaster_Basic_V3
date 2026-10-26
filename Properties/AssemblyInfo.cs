@@ -5,13 +5,13 @@ using System.Runtime.InteropServices;
 // 어셈블리에 대한 일반 정보는 다음 특성 집합을 통해 
 // 제어됩니다. 어셈블리와 관련된 정보를 수정하려면
 // 이러한 특성 값을 변경하세요.
-[assembly: AssemblyTitle("LabelMaster_Basic_v2")]
-[assembly: AssemblyDescription("바코드 & 라벨 인쇄 시스템 - Xprinter TSPL 지원")]
+[assembly: AssemblyTitle("라벨마스터")]
+[assembly: AssemblyDescription("바코드 & 라벨 인쇄 시스템 - TSPL 스튜디오 에디션")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("한국Xprinter")]
-[assembly: AssemblyProduct("LabelMaster_Basic_v2")]
-[assembly: AssemblyCopyright("Copyright © 한국Xprinter 2026")]
-[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCompany("이엔드림 주식회사")]
+[assembly: AssemblyProduct("라벨마스터")]
+[assembly: AssemblyCopyright("Copyright © 2026 이엔드림 주식회사 (Endream Inc). All rights reserved.")]
+[assembly: AssemblyTrademark("LabelMaster")]
 [assembly: AssemblyCulture("")]
 
 // ComVisible을 false로 설정하면 이 어셈블리의 형식이 COM 구성 요소에 
@@ -31,7 +31,7 @@ using System.Runtime.InteropServices;
 //
 // 모든 값을 지정하거나 아래와 같이 '*'를 사용하여 빌드 번호 및 수정 번호를
 // 기본값으로 할 수 있습니다.
-// [assembly: AssemblyVersion("2.0.17.0")]
-[assembly: AssemblyVersion("2.0.17.0")]
-[assembly: AssemblyFileVersion("2.0.17.0")]
-[assembly: AssemblyInformationalVersion("2.0.17")]
+// [assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyInformationalVersion("1.0.1")]

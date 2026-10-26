@@ -9,7 +9,7 @@
     <ProjectGuid>{FAE6A36D-50B3-47B4-997C-B4BE52E25868}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <RootNamespace>BarcodePrint</RootNamespace>
-    <AssemblyName>LabelMaster_Basic_v2</AssemblyName>
+    <AssemblyName>LabelMaster</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -29,9 +29,9 @@
     <UpdatePeriodically>false</UpdatePeriodically>
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
-    <ProductName>LabelMaster_Basic_v2</ProductName>
-    <PublisherName>BarcodeOne</PublisherName>
-    <SuiteName>XQuickLabel</SuiteName>
+    <ProductName>라벨마스터 스튜디오</ProductName>
+    <PublisherName>이엔드림 주식회사</PublisherName>
+    <SuiteName>LabelMaster Studio</SuiteName>
     <AutorunEnabled>true</AutorunEnabled>
     <ApplicationRevision>4</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
@@ -242,19 +242,37 @@
     <Reference Include="XPrinterAuth">
       <HintPath>XPrinterAuth.dll</HintPath>
     </Reference>
+    <Reference Include="Windows">
+      <HintPath Condition="Exists('$(MSBuildProgramFiles32)\Windows Kits\10\UnionMetadata\10.0.26100.0\Windows.winmd')">$(MSBuildProgramFiles32)\Windows Kits\10\UnionMetadata\10.0.26100.0\Windows.winmd</HintPath>
+      <HintPath Condition="!Exists('$(MSBuildProgramFiles32)\Windows Kits\10\UnionMetadata\10.0.26100.0\Windows.winmd')">lib\Windows.winmd</HintPath>
+      <IsWinMDFile>true</IsWinMDFile>
+    </Reference>
+    <Reference Include="System.Runtime.WindowsRuntime" />
+    <Reference Include="System.Runtime" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Model\AddressData.cs" />
     <Compile Include="Model\AddressSettings.cs" />
     <Compile Include="Model\AppSettings.cs" />
+    <Compile Include="Model\PresetLabelItem.cs" />
+    <Compile Include="Model\PdfRenderHelper.cs" />
+    <Compile Include="Model\PrinterOnlineDetector.cs" />
+    <Compile Include="Model\ElementType.cs" />
+    <Compile Include="Model\TemplateElement.cs" />
+    <Compile Include="Model\TableCellItem.cs" />
+    <Compile Include="Model\LabelTemplateModel.cs" />
+    <Compile Include="Model\TemplateMigrationHelper.cs" />
     <Compile Include="Model\MultiColumnData.cs" />
     <Compile Include="Model\BarcodeSettings.cs" />
     <Compile Include="Model\BarcodeVisualHelper.cs" />
+    <Compile Include="Model\ShapeGeometryHelper.cs" />
+    <Compile Include="Model\NameCodePair.cs" />
     <Compile Include="Model\ExcelSettings.cs" />
     <Compile Include="Model\LayoutData.cs" />
     <Compile Include="Model\PrinterSerialLogger.cs" />
     <Compile Include="Model\SecureFileNameHelper.cs" />
     <Compile Include="Model\SerialCryptoManager.cs" />
+    <Compile Include="Model\TrialLicenseManager.cs" />
     <Compile Include="Model\Item_Mode.cs" />
     <Compile Include="Model\PDFReader\BarcodeData.cs" />
     <Compile Include="Model\PDFReader\BarcodeExtractor.cs" />
@@ -281,6 +299,7 @@
     <Compile Include="Services\ExcelService.cs" />
     <Compile Include="Services\IPrinterService.cs" />
     <Compile Include="Services\PrinterService.cs" />
+    <Compile Include="Services\NativeSerialStream.cs" />
     <Compile Include="ViewModel\ViewModelBase.cs" />
     <Compile Include="ViewModel\RelayCommand.cs" />
     <Compile Include="ViewModel\MainViewModel.cs" />
@@ -288,6 +307,7 @@
     <Compile Include="ViewModel\MainViewModel.Canvas.cs" />
     <Compile Include="ViewModel\MainViewModel.Excel.cs" />
     <Compile Include="ViewModel\MainViewModel.Printing.cs" />
+    <Compile Include="ViewModel\MainViewModel.Template.cs" />
     <Page Include="WpfView\WpfMainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -351,6 +371,64 @@
     <Compile Include="WpfView\ConnectionProgressWindow.xaml.cs">
       <DependentUpon>ConnectionProgressWindow.xaml</DependentUpon>
     </Compile>
+    <Page Include="WpfView\StartWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\StartWindow.xaml.cs">
+      <DependentUpon>StartWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="WpfView\WindowLocationHelper.cs" />
+    <Page Include="WpfView\LabelSetupWizardDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\LabelSetupWizardDialog.xaml.cs">
+      <DependentUpon>LabelSetupWizardDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="WpfView\PrinterSetupWizardDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\PrinterSetupWizardDialog.xaml.cs">
+      <DependentUpon>PrinterSetupWizardDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="WpfView\PdfPrintDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\PdfPrintDialog.xaml.cs">
+      <DependentUpon>PdfPrintDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="WpfView\PresetEditDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\PresetEditDialog.xaml.cs">
+      <DependentUpon>PresetEditDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="WpfView\PresetManagerDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\PresetManagerDialog.xaml.cs">
+      <DependentUpon>PresetManagerDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="WpfView\PresetSelectDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\PresetSelectDialog.xaml.cs">
+      <DependentUpon>PresetSelectDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="WpfView\PdfPaperPresetManagerDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\PdfPaperPresetManagerDialog.xaml.cs">
+      <DependentUpon>PdfPaperPresetManagerDialog.xaml</DependentUpon>
+    </Compile>
+    <Resource Include="resource\Logo_LM.jpg" />
 
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

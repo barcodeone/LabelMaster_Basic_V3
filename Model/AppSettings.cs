@@ -5,6 +5,43 @@ using Argon;
 
 namespace BarcodePrint.Model
 {
+    public class RecentWorkItem
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Title { get; set; } = "이전 작업";
+        public int Width { get; set; } = 70;
+        public int Height { get; set; } = 28;
+        public string PaperType { get; set; } = "GAP";
+        public int Rotation { get; set; } = 0;
+        public string LastModified { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string TemplateFilePath { get; set; } = "";
+    }
+
+    /// <summary>
+    /// PDF 인쇄 전용 자주 쓰는 용지 규격 프리셋 항목
+    /// </summary>
+    public class PdfPaperPresetItem
+    {
+        public string Name { get; set; } = "";
+        public double Width { get; set; } = 100.0;
+        public double Height { get; set; } = 100.0;
+
+        public PdfPaperPresetItem() { }
+
+        public PdfPaperPresetItem(string name, double width, double height)
+        {
+            Name = name;
+            Width = width;
+            Height = height;
+        }
+
+        public override string ToString()
+        {
+            return string.IsNullOrEmpty(Name) ? $"{Width}x{Height}" : Name;
+        }
+    }
+
     /// <summary>
     /// 통합 애플리케이션 설정 (ExcelSettings + AddressSettings + ColumnPositionSettings 통합)
     /// </summary>
@@ -12,6 +49,20 @@ namespace BarcodePrint.Model
     {
         // 설정 파일 경로 (평문 JSON 사용: Info/app_settings.json)
         private static readonly string SettingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info", "app_settings.json");
+
+        private static AppSettings _default;
+        public static AppSettings Default
+        {
+            get
+            {
+                if (_default == null)
+                {
+                    _default = new AppSettings();
+                    _default.Load();
+                }
+                return _default;
+            }
+        }
 
         // 엑셀 관련 설정
         public string ExcelFilePath { get; set; } = "";
@@ -24,6 +75,10 @@ namespace BarcodePrint.Model
         public string LastTcpPrinterIp { get; set; } = "";
         public int LastTcpPrinterPort { get; set; } = 9100;
         public string LastBluetoothPortName { get; set; } = "";
+        public string LastTcpPrinterModel { get; set; } = "";
+
+        // 시작화면 하단 배너 HTML 외부 링크 URL (비어있으면 Info/quick_tools.html 사용)
+        public string QuickToolsBannerUrl { get; set; } = "";
 
         // 주소 라벨 설정
 
@@ -67,12 +122,88 @@ namespace BarcodePrint.Model
 
         public string CurrentMode { get; set; } = "Manual"; // "Manual" 또는 "Excel"
 
+        // 최근 작업 내역 플래그 및 최대 4개 이력 목록
+        public bool HasRecentWork { get; set; } = false;
+        public string LastWorkedDate { get; set; } = "";
+        public string LastWorkedTitle { get; set; } = "";
+        public List<RecentWorkItem> RecentWorks { get; set; } = new List<RecentWorkItem>();
+
+        public void AddRecentWork(string title, int width, int height, string paperType = "GAP", int rotation = 0, string templatePath = "")
+        {
+            if (width <= 0 || height <= 0) return;
+            if (RecentWorks == null) RecentWorks = new List<RecentWorkItem>();
+
+            // 동일 템플릿 파일 또는 동일 규격이 이미 있으면 제거 후 최신순으로 맨 앞에 재삽입
+            RecentWorks.RemoveAll(x =>
+                (!string.IsNullOrEmpty(templatePath) && x.TemplateFilePath == templatePath) ||
+                (string.IsNullOrEmpty(templatePath) && x.Width == width && x.Height == height && (string.IsNullOrEmpty(title) || x.Title == title)));
+
+            string displayTitle = !string.IsNullOrEmpty(title) ? title : $"{width}×{height} mm 라벨";
+            string dateStr = DateTime.Now.ToString("yyyy.MM.dd HH:mm");
+
+            RecentWorks.Insert(0, new RecentWorkItem
+            {
+                Id = Guid.NewGuid().ToString(),
+                Title = displayTitle,
+                Width = width,
+                Height = height,
+                PaperType = paperType ?? "GAP",
+                Rotation = rotation,
+                LastModified = dateStr,
+                Description = $"{width}×{height} mm · {dateStr}",
+                TemplateFilePath = templatePath ?? ""
+            });
+
+            // 최대 4개까지만 보관
+            if (RecentWorks.Count > 4)
+            {
+                RecentWorks = new List<RecentWorkItem>(RecentWorks.GetRange(0, 4));
+            }
+
+            HasRecentWork = true;
+            LastWorkedDate = DateTime.Now.ToString("yyyy.MM.dd");
+            LastWorkedTitle = displayTitle;
+            PaperWidth = width;
+            PaperHeight = height;
+            Save();
+        }
+
         // 용지 및 바코드 기본 설정 (SelectedPaperType 대신 사용)
-        public int PaperWidth { get; set; } = 70;
-        public int PaperHeight { get; set; } = 28;
+        public int PaperWidth { get; set; } = 80;
+        public int PaperHeight { get; set; } = 60;
         public string BarcodeType { get; set; } = "QR_CODE";
         public bool IsRotated { get => LabelRotationAngle == 180; set => LabelRotationAngle = value ? 180 : 0; }
         public int LabelRotationAngle { get; set; } = 0; // 0, 90, 180, 270 도 회전
+
+        // 메인 뷰 자주 사용하는 라벨 규격 프리셋
+        public List<PresetLabelItem> FavoritePresets { get; set; } = GetDefaultPresets();
+
+        public static List<PresetLabelItem> GetDefaultPresets()
+        {
+            return new List<PresetLabelItem>
+            {
+                new PresetLabelItem("preset_1", "택배 송장", 100, 100, "쇼핑몰 택배 송장 및 대형 물류 라벨", "#2563EB"),
+                new PresetLabelItem("preset_2", "상품 라벨", 80, 50, "식품 표기사항 및 박스 부착용 라벨", "#059669"),
+                new PresetLabelItem("preset_3", "바코드 라벨", 50, 30, "제품 바코드, 부품 식별 및 재고 관리", "#7C3AED"),
+                new PresetLabelItem("preset_4", "소형 부품", 40, 20, "전자부품, 약품 및 소형 가격표 라벨", "#D97706")
+            };
+        }
+
+        // PDF 인쇄 전용 자주 쓰는 라벨 용지 규격 프리셋 리스트
+        public List<PdfPaperPresetItem> PdfPaperPresets { get; set; } = GetDefaultPdfPaperPresets();
+
+        public static List<PdfPaperPresetItem> GetDefaultPdfPaperPresets()
+        {
+            return new List<PdfPaperPresetItem>
+            {
+                new PdfPaperPresetItem("100x100", 100, 100),
+                new PdfPaperPresetItem("100x150", 100, 150),
+                new PdfPaperPresetItem("80x50", 80, 50),
+                new PdfPaperPresetItem("70x100", 70, 100),
+                new PdfPaperPresetItem("70x30", 70, 30),
+                new PdfPaperPresetItem("50x30", 50, 30)
+            };
+        }
 
         // 사용자 지정 5개 컬럼 명칭 및 가격 서식 적용 옵션
         // 활성화된 컬럼 개수 (1 ~ 8개 동적 조절)
@@ -87,6 +218,7 @@ namespace BarcodePrint.Model
         public string Column6Name { get; set; } = "컬럼6";
         public string Column7Name { get; set; } = "컬럼7";
         public string Column8Name { get; set; } = "컬럼8";
+        public Dictionary<string, string> ExtendedColumnHeaders { get; set; } = new Dictionary<string, string>();
 
         public bool IsColumn1PriceFormat { get; set; } = false;
         public bool IsColumn2PriceFormat { get; set; } = false;
@@ -250,7 +382,7 @@ namespace BarcodePrint.Model
         public string PrinterConnectionType { get; set; } = "USB"; // "USB", "LAN", "BLUETOOTH"
         public string TcpPrinterIp { get; set; } = "192.168.0.50"; // TCP/IP 프린터 IP 주소
         public int TcpPrinterPort { get; set; } = 9100; // TCP/IP 프린터 포트
-        public string BluetoothPortName { get; set; } = "COM3"; // 블루투스 직렬 COM 포트
+        public string BluetoothPortName { get; set; } = ""; // 블루투스 직렬 COM 포트 (장치 선택 시 자동 매핑)
 
         // 프린터 하드웨어 설정 (기존 프로젝트 이식)
         public int PrintDarkness { get; set; } = 8; // 인쇄 농도 (1~15)
@@ -271,6 +403,8 @@ namespace BarcodePrint.Model
         public string PostPrintCutTrigger { get; set; } = "EVERY_PAGE"; // EVERY_PAGE: 모든 페이지 뒤, AFTER_COPIES: 동일한 사본 뒤, AFTER_JOB: 작업 뒤, CUSTOM_INTERVAL: 지정한 간격 뒤
         public int PostPrintCutInterval { get; set; } = 1; // 지정한 간격 매수
         public int PostPrintOffset { get; set; } = 0; // 인쇄 후 동작 오프셋 (mm)
+        // 사용자 정의 맞춤 라벨 규격 목록 (예: "70x40;90x60")
+        public string CustomPaperSizes { get; set; } = "";
 
         // 구간 인쇄 설정
         public int PrintRangeStart { get; set; } = 1;
@@ -435,11 +569,34 @@ namespace BarcodePrint.Model
                             this.LastPrintCopies = loadedSettings.LastPrintCopies;
                             this.MultiColumnSettingsData = loadedSettings.MultiColumnSettingsData ?? "";
                             this.CurrentMode = loadedSettings.CurrentMode ?? "Manual";
-                            this.PaperWidth = loadedSettings.PaperWidth > 0 ? loadedSettings.PaperWidth : 70;
-                            this.PaperHeight = loadedSettings.PaperHeight > 0 ? loadedSettings.PaperHeight : 28;
+                            this.HasRecentWork = loadedSettings.HasRecentWork;
+                            this.LastWorkedDate = loadedSettings.LastWorkedDate ?? "";
+                            this.LastWorkedTitle = loadedSettings.LastWorkedTitle ?? "";
+                            this.PaperWidth = loadedSettings.PaperWidth > 0 ? loadedSettings.PaperWidth : 80;
+                            this.PaperHeight = loadedSettings.PaperHeight > 0 ? loadedSettings.PaperHeight : 60;
                             this.BarcodeType = loadedSettings.BarcodeType ?? "QR_CODE";
                             this.IsRotated = loadedSettings.IsRotated;
                             this.LabelRotationAngle = loadedSettings.LabelRotationAngle;
+                            this.FavoritePresets = (loadedSettings.FavoritePresets != null && loadedSettings.FavoritePresets.Count > 0)
+                                ? loadedSettings.FavoritePresets
+                                : GetDefaultPresets();
+                            this.PdfPaperPresets = (loadedSettings.PdfPaperPresets != null && loadedSettings.PdfPaperPresets.Count > 0)
+                                ? loadedSettings.PdfPaperPresets
+                                : GetDefaultPdfPaperPresets();
+                            this.RecentWorks = (loadedSettings.RecentWorks != null && loadedSettings.RecentWorks.Count > 0)
+                                ? loadedSettings.RecentWorks
+                                : new List<RecentWorkItem>();
+                            if (this.RecentWorks.Count == 0 && this.PaperWidth > 0 && this.PaperHeight > 0 && this.HasRecentWork)
+                            {
+                                this.RecentWorks.Add(new RecentWorkItem
+                                {
+                                    Title = !string.IsNullOrEmpty(this.LastWorkedTitle) ? this.LastWorkedTitle : "이전 작업 이어서 하기",
+                                    Width = this.PaperWidth,
+                                    Height = this.PaperHeight,
+                                    LastModified = !string.IsNullOrEmpty(this.LastWorkedDate) ? this.LastWorkedDate : DateTime.Now.ToString("yyyy.MM.dd"),
+                                    Description = $"{this.PaperWidth}×{this.PaperHeight} mm 기본 라벨"
+                                });
+                            }
                             this.LastPrinterName = loadedSettings.LastPrinterName ?? "";
                             this.LastPrinterPort = loadedSettings.LastPrinterPort ?? "";
                             this.LastPrinterSerial = loadedSettings.LastPrinterSerial ?? "";
@@ -677,7 +834,7 @@ namespace BarcodePrint.Model
                             this.PrinterConnectionType = string.IsNullOrEmpty(loadedSettings.PrinterConnectionType) ? "USB" : loadedSettings.PrinterConnectionType;
                             this.TcpPrinterIp = string.IsNullOrEmpty(loadedSettings.TcpPrinterIp) ? "192.168.0.50" : loadedSettings.TcpPrinterIp;
                             this.TcpPrinterPort = loadedSettings.TcpPrinterPort > 0 ? loadedSettings.TcpPrinterPort : 9100;
-                            this.BluetoothPortName = string.IsNullOrEmpty(loadedSettings.BluetoothPortName) ? "COM3" : loadedSettings.BluetoothPortName;
+                            this.BluetoothPortName = loadedSettings.BluetoothPortName ?? "";
                             this.EnterActionType = string.IsNullOrEmpty(loadedSettings.EnterActionType) ? "PRINT_AND_RECORD" : loadedSettings.EnterActionType;
                             this.CopyCount = loadedSettings.CopyCount > 0 ? loadedSettings.CopyCount : 1;
                         }
@@ -688,6 +845,23 @@ namespace BarcodePrint.Model
                     // 레거시 텍스트 포맷으로 파싱 시도 (Fallback)
                     System.Diagnostics.Debug.WriteLine("[AppSettings] 레거시 텍스트 포맷 감지, Fallback 로드 시도");
                     ParseLegacySettings(content);
+                }
+
+                if (this.FavoritePresets == null || this.FavoritePresets.Count == 0)
+                {
+                    this.FavoritePresets = GetDefaultPresets();
+                }
+
+                if (this.PdfPaperPresets == null || this.PdfPaperPresets.Count == 0)
+                {
+                    this.PdfPaperPresets = GetDefaultPdfPaperPresets();
+                }
+
+                // 구버전 기본 규격(70x28) 또는 유효하지 않은 크기는 80x60 표준으로 자동 승격
+                if ((this.PaperWidth == 70 && this.PaperHeight == 28) || this.PaperWidth <= 0 || this.PaperHeight <= 0)
+                {
+                    this.PaperWidth = 80;
+                    this.PaperHeight = 60;
                 }
 
                 System.Diagnostics.Debug.WriteLine($"통합 설정 로드 완료: ExcelMode={IsExcelModeEnabled}, SenderReceiverLabel={SenderReceiverLabel}");

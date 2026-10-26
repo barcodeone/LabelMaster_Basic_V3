@@ -47,7 +47,7 @@ namespace BarcodePrint.View
                 splash.Show();
                 splash.UpdateProgress(15, "시스템 구성 요소 및 폰트 엔진 초기화 중...");
 
-                WpfMainWindow mainWindow = null;
+                StartWindow startWindow = null;
 
                 Task.Run(() =>
                 {
@@ -57,12 +57,12 @@ namespace BarcodePrint.View
                         splash.UpdateProgress(35, "USB 프린터 통신 및 드라이버 검색 중...");
 
                         Thread.Sleep(250);
-                        splash.UpdateProgress(60, "메인 작업 공간 및 미리보기 캔버스 로드 중...");
+                        splash.UpdateProgress(60, "홈 대시보드 및 시스템 컴포넌트 로드 중...");
 
-                        // 메인 UI 스레드에서 WpfMainWindow 생성
+                        // 메인 UI 스레드에서 StartWindow 생성
                         app.Dispatcher.Invoke(() =>
                         {
-                            mainWindow = new WpfMainWindow();
+                            startWindow = new StartWindow();
                         });
 
                         Thread.Sleep(200);
@@ -70,15 +70,15 @@ namespace BarcodePrint.View
 
                         Thread.Sleep(200);
                         splash.UpdateProgress(100, "준비 완료! 프로그램을 시작합니다.");
-                        Thread.Sleep(250);
+                        Thread.Sleep(200);
 
-                        // 메인 창 표시 및 스플래시 종료
+                        // 홈 대시보드 창 표시 및 스플래시 종료
                         app.Dispatcher.Invoke(() =>
                         {
-                            if (mainWindow != null)
+                            if (startWindow != null)
                             {
-                                app.MainWindow = mainWindow;
-                                mainWindow.Show();
+                                app.MainWindow = startWindow;
+                                startWindow.Show();
                             }
                             splash.Close();
                         });
@@ -88,9 +88,9 @@ namespace BarcodePrint.View
                         System.Diagnostics.Debug.WriteLine($"Splash Loading Error: {ex.Message}");
                         app.Dispatcher.Invoke(() =>
                         {
-                            if (mainWindow != null)
+                            if (startWindow != null)
                             {
-                                mainWindow.Show();
+                                startWindow.Show();
                             }
                             splash.Close();
                         });

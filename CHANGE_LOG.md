@@ -55,3 +55,24 @@
 - **MSBuild 컴파일 검증**:
   - `MSBuild.exe BarcodePrint.csproj /p:Configuration=Debug /p:Platform=AnyCPU` -> **성공 (경고 0, 오류 0)**
   - `MSBuild.exe BarcodePrint.csproj /p:Configuration=Release /p:Platform=AnyCPU` -> **성공 (Obfuscar 난독화 및 패키징 완료)**
+
+---
+
+## 📌 [2026-09-08] TSPL 센서 보정(Calibration/Detect), 원점(HOME), 피드(FEED) 열전사 리본(Ribbon) 제어 동기화
+
+### 1. 주요 기능 추가 및 변경 사항
+- **열전사(Ribbon / IsRibbon) 모드 연동 안정화**:
+  - 감열(Direct Thermal, 리본 미사용)일 경우: `SET RIBBON OFF\r\n` 주입
+  - 열전사(Thermal Transfer, 리본/먹지 사용)일 경우: `SET RIBBON ON\r\nSET ENCODER OFF\r\nSET RIBBONEND OFF\r\n` 주입
+  - 라벨 이송 시 리본 구동 모터가 동기화되어 공회전 또는 헛돌지 않고, 엔코더 센서 오류에 따른 멈춤/오작동을 원천 차단.
+- **WPF ViewModel 제어(`MainViewModel.Printing.cs`)**:
+  - `ExecutePrinterAction`의 `CALIBRATE`, `GAPDETECT`, `AUTODETECT`, `HOME`, `FEED` 명령어 빌드 시 `IsRibbon` 설정에 따른 리본 제어 명령 헤더 자동 주입.
+  - `HOME` 실행 시 용지 규격(`SIZE`), 갭/블랙마크(`GAP`/`BLINE`) 및 리본 설정을 먼저 세팅 후 원점 정렬(`HOME\r\nCLS\r\n`) 수행.
+- **Model 레거시/엔진 제어(`PrintManager.cs`, `BarcodePrintManager.cs`)**:
+  - `PrintManager.Command_CALIBRATION()`: `PRINT_INFO_CLASS.PrinterInfo.bRibbon`에 맞춰 `SET RIBBON` 블록 주입.
+  - `PrintManager.Command_HOME()`: 기존 `GAPDETECT`로 잘못 덮어쓰던 복사 오류를 수정하고 규격, 갭, 리본 설정 및 `HOME\r\nCLS\r\n` 정상 주입.
+  - `PrintManager.Command_FEED()`: 신규 메서드 추가 및 `BarcodePrintManager.SendPrintCommand` 연동 지원.
+
+### 2. 검증 결과
+- **MSBuild 컴파일 검증**: `MSBuild.exe BarcodePrint.csproj -t:Build -p:Configuration=Debug` -> **빌드 성공 (오류 0개)**
+

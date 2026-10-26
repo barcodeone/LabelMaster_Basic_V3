@@ -21,25 +21,31 @@ namespace BarcodePrint.Services
                     var worksheet = workbook.Worksheets.Add("인쇄기록");
 
                     // 1. 헤더 작성
-                    int activeCols = Math.Max(1, Math.Min(8, settings.ActiveColumnCount));
+                    int activeCols = Math.Max(1, settings.ActiveColumnCount);
                     worksheet.Cell(1, 1).Value = "순번";
                     worksheet.Cell(1, 2).Value = "인쇄일시";
 
-                    string[] headers = new string[]
-                    {
-                        settings.Column1Name,
-                        settings.Column2Name,
-                        settings.Column3Name,
-                        settings.Column4Name,
-                        settings.Column5Name,
-                        settings.Column6Name,
-                        settings.Column7Name,
-                        settings.Column8Name
-                    };
-
                     for (int i = 0; i < activeCols; i++)
                     {
-                        worksheet.Cell(1, 3 + i).Value = string.IsNullOrWhiteSpace(headers[i]) ? $"항목{i + 1}" : headers[i];
+                        string header = "";
+                        switch (i + 1)
+                        {
+                            case 1: header = settings.Column1Name; break;
+                            case 2: header = settings.Column2Name; break;
+                            case 3: header = settings.Column3Name; break;
+                            case 4: header = settings.Column4Name; break;
+                            case 5: header = settings.Column5Name; break;
+                            case 6: header = settings.Column6Name; break;
+                            case 7: header = settings.Column7Name; break;
+                            case 8: header = settings.Column8Name; break;
+                            default:
+                                if (settings.ExtendedColumnHeaders != null && settings.ExtendedColumnHeaders.TryGetValue((i + 1).ToString(), out string extH))
+                                {
+                                    header = extH;
+                                }
+                                break;
+                        }
+                        worksheet.Cell(1, 3 + i).Value = string.IsNullOrWhiteSpace(header) ? $"항목{i + 1}" : header;
                     }
                     worksheet.Cell(1, 3 + activeCols).Value = "상태";
 
@@ -57,15 +63,9 @@ namespace BarcodePrint.Services
                         worksheet.Cell(row, 1).Value = rec.Index;
                         worksheet.Cell(row, 2).Value = rec.Timestamp;
 
-                        string[] rowVals = new string[]
-                        {
-                            rec.Col1, rec.Col2, rec.Col3, rec.Col4,
-                            rec.Col5, rec.Col6, rec.Col7, rec.Col8
-                        };
-
                         for (int c = 0; c < activeCols; c++)
                         {
-                            worksheet.Cell(row, 3 + c).Value = rowVals[c] ?? "";
+                            worksheet.Cell(row, 3 + c).Value = rec.GetValueByColumn((c + 1).ToString()) ?? "";
                         }
                         worksheet.Cell(row, 3 + activeCols).Value = rec.Status ?? "";
                         row++;
@@ -137,7 +137,7 @@ namespace BarcodePrint.Services
         {
             var sheetHeaders = GetSheetHeaders(filePath, "");
             var defaultIndices = new List<int>();
-            for (int i = 1; i <= Math.Min(8, sheetHeaders.Count); i++) defaultIndices.Add(i);
+            for (int i = 1; i <= sheetHeaders.Count; i++) defaultIndices.Add(i);
             return ImportFromExcelWithMapping(filePath, "", defaultIndices, out headers, out records, out errorMessage);
         }
 
@@ -165,18 +165,33 @@ namespace BarcodePrint.Services
                         return false;
                     }
 
-                    // 1. 선택된 헤더 추출 (1-based index, 0은 미사용)
-                    foreach (int colIdx in selectedColIndices)
+                    int lastColNumber = firstRow.LastCellUsed()?.Address.ColumnNumber ?? 0;
+                    var allSheetHeaders = new List<string>();
+                    for (int c = 1; c <= lastColNumber; c++)
                     {
-                        if (colIdx > 0)
+                        string headerText = firstRow.Cell(c).GetString().Trim();
+                        allSheetHeaders.Add(string.IsNullOrWhiteSpace(headerText) ? $"열 {c}" : headerText);
+                    }
+
+                    // 1. 선택된 헤더 추출 (1-based index, 0은 미사용)
+                    if (selectedColIndices != null && selectedColIndices.Count > 0)
+                    {
+                        foreach (int colIdx in selectedColIndices)
                         {
-                            string headerText = firstRow.Cell(colIdx).GetString().Trim();
-                            selectedHeaders.Add(string.IsNullOrWhiteSpace(headerText) ? $"열 {colIdx}" : headerText);
+                            if (colIdx > 0 && colIdx <= allSheetHeaders.Count)
+                            {
+                                selectedHeaders.Add(allSheetHeaders[colIdx - 1]);
+                            }
+                            else
+                            {
+                                selectedHeaders.Add("");
+                            }
                         }
-                        else
-                        {
-                            selectedHeaders.Add("");
-                        }
+                    }
+                    else
+                    {
+                        // 선택된 인덱스가 없을 경우 시트 전체 헤더 사용
+                        selectedHeaders.AddRange(allSheetHeaders);
                     }
 
                     // 2. 데이터 레코드 추출
@@ -193,20 +208,36 @@ namespace BarcodePrint.Services
                             IsChecked = false
                         };
 
-                        for (int i = 0; i < selectedColIndices.Count && i < 8; i++)
+                        // 모든 열의 셀 값을 CellValues에 키(컬럼번호, 열문자, 헤더명)별로 보관
+                        for (int c = 1; c <= lastColNumber; c++)
                         {
-                            int excelCol = selectedColIndices[i];
-                            string val = excelCol > 0 ? r.Cell(excelCol).GetString() : "";
-                            switch (i + 1)
+                            string cellVal = r.Cell(c).GetString();
+                            string colLetter = GetColumnLetter(c);
+                            string header = (c - 1 < allSheetHeaders.Count) ? allSheetHeaders[c - 1] : $"열 {c}";
+
+                            model.CellValues[c.ToString()] = cellVal;
+                            model.CellValues[colLetter] = cellVal;
+                            if (!string.IsNullOrWhiteSpace(header))
                             {
-                                case 1: model.Col1 = val; break;
-                                case 2: model.Col2 = val; break;
-                                case 3: model.Col3 = val; break;
-                                case 4: model.Col4 = val; break;
-                                case 5: model.Col5 = val; break;
-                                case 6: model.Col6 = val; break;
-                                case 7: model.Col7 = val; break;
-                                case 8: model.Col8 = val; break;
+                                model.CellValues[header] = cellVal;
+                            }
+                        }
+
+                        // 컬럼 매핑 (선택 인덱스 기준 또는 시트 전체 열 매핑 - 제한 해제)
+                        if (selectedColIndices != null && selectedColIndices.Count > 0)
+                        {
+                            for (int i = 0; i < selectedColIndices.Count; i++)
+                            {
+                                int excelCol = selectedColIndices[i];
+                                string val = excelCol > 0 ? r.Cell(excelCol).GetString() : "";
+                                SetModelColumn(model, i + 1, val);
+                            }
+                        }
+                        else
+                        {
+                            for (int c = 1; c <= lastColNumber; c++)
+                            {
+                                SetModelColumn(model, c, r.Cell(c).GetString());
                             }
                         }
 
@@ -220,6 +251,36 @@ namespace BarcodePrint.Services
                 errorMessage = ex.Message;
                 return false;
             }
+        }
+
+        private static void SetModelColumn(PrintRecordModel model, int colNum, string val)
+        {
+            switch (colNum)
+            {
+                case 1: model.Col1 = val; break;
+                case 2: model.Col2 = val; break;
+                case 3: model.Col3 = val; break;
+                case 4: model.Col4 = val; break;
+                case 5: model.Col5 = val; break;
+                case 6: model.Col6 = val; break;
+                case 7: model.Col7 = val; break;
+                case 8: model.Col8 = val; break;
+                default:
+                    model.SetValueByColumn(colNum.ToString(), val);
+                    break;
+            }
+        }
+
+        public static string GetColumnLetter(int colIndex)
+        {
+            string colLetter = "";
+            while (colIndex > 0)
+            {
+                int rem = (colIndex - 1) % 26;
+                colLetter = (char)('A' + rem) + colLetter;
+                colIndex = (colIndex - 1) / 26;
+            }
+            return string.IsNullOrEmpty(colLetter) ? "A" : colLetter;
         }
 
         public bool SaveBackup(IEnumerable<PrintRecordModel> records, AppSettings settings, out string todayBakPath, out string lastBakPath, out string txtBakPath)

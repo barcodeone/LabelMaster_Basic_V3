@@ -26,8 +26,8 @@ namespace BarcodePrint.Model
 
         // 추가 설정
         public string BarcodeType { get; set; } = "QR_CODE";
-        public int PaperWidth { get; set; } = 70;
-        public int PaperHeight { get; set; } = 28;
+        public int PaperWidth { get; set; } = 80;
+        public int PaperHeight { get; set; } = 60;
         public string PaperTypeName { get; set; } = ""; // 용지 타입 이름 (예: 105x145(블랙마크))
         public bool IsRotated { get; set; } = false;
         public string MultiColumnSettingsData { get; set; } = "";

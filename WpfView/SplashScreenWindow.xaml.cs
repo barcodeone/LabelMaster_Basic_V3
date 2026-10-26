@@ -9,13 +9,22 @@ namespace BarcodePrint.WpfView
         public SplashScreenWindow()
         {
             InitializeComponentSafely();
+            try
+            {
+                var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+                if (ver != null && TxtSplashVersion != null)
+                {
+                    TxtSplashVersion.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
+                }
+            }
+            catch { }
         }
 
         private void InitializeComponentSafely()
         {
             try
             {
-                var resourceLocater = new Uri("/LabelMaster_Basic_v2;component/wpfview/splashscreenwindow.xaml", UriKind.Relative);
+                var resourceLocater = new Uri("/LabelMaster;component/wpfview/splashscreenwindow.xaml", UriKind.Relative);
                 System.Windows.Application.LoadComponent(this, resourceLocater);
             }
             catch (Exception ex)

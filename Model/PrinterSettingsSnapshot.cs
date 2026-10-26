@@ -16,8 +16,8 @@ namespace BarcodePrint.Model
         public bool Ribbon { get; set; } = false;
         public string PaperType { get; set; } = PAPER_TYPE.GAP;
         public bool PaperRotated { get; set; } = false;
-        public int PaperWidth { get; set; } = 70;
-        public int PaperHeight { get; set; } = 28;
+        public int PaperWidth { get; set; } = 80;
+        public int PaperHeight { get; set; } = 60;
         public int OffsetX { get; set; } = 0;
         public int OffsetY { get; set; } = 0;
         public int CorrectionX { get; set; } = 0;

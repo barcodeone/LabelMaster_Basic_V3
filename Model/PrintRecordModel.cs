@@ -22,6 +22,93 @@ namespace BarcodePrint.Model
         private string _col7 = "";
         private string _col8 = "";
         private string _status = "";
+        private System.Collections.Generic.Dictionary<string, string> _cellValues = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        public System.Collections.Generic.Dictionary<string, string> CellValues
+        {
+            get => _cellValues;
+            set => _cellValues = value ?? new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        public string GetValueByColumn(string colIdentifier)
+        {
+            if (string.IsNullOrWhiteSpace(colIdentifier)) return "";
+            string key = colIdentifier.Trim();
+
+            if (_cellValues != null && _cellValues.TryGetValue(key, out string val) && !string.IsNullOrEmpty(val))
+            {
+                return val;
+            }
+
+            if (int.TryParse(key, out int num))
+            {
+                switch (num)
+                {
+                    case 1: return Col1 ?? "";
+                    case 2: return Col2 ?? "";
+                    case 3: return Col3 ?? "";
+                    case 4: return Col4 ?? "";
+                    case 5: return Col5 ?? "";
+                    case 6: return Col6 ?? "";
+                    case 7: return Col7 ?? "";
+                    case 8: return Col8 ?? "";
+                    default:
+                        if (_cellValues != null && _cellValues.TryGetValue(key, out string extraVal))
+                        {
+                            return extraVal ?? "";
+                        }
+                        return "";
+                }
+            }
+            return "";
+        }
+
+        public void SetValueByColumn(string colIdentifier, string value)
+        {
+            if (string.IsNullOrWhiteSpace(colIdentifier)) return;
+            string key = colIdentifier.Trim();
+            string val = value ?? "";
+
+            if (int.TryParse(key, out int num))
+            {
+                switch (num)
+                {
+                    case 1: Col1 = val; break;
+                    case 2: Col2 = val; break;
+                    case 3: Col3 = val; break;
+                    case 4: Col4 = val; break;
+                    case 5: Col5 = val; break;
+                    case 6: Col6 = val; break;
+                    case 7: Col7 = val; break;
+                    case 8: Col8 = val; break;
+                    default:
+                        if (_cellValues == null) _cellValues = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        _cellValues[key] = val;
+                        OnPropertyChanged("Item[]");
+                        OnPropertyChanged(nameof(CellValues));
+                        break;
+                }
+            }
+            else
+            {
+                if (_cellValues == null) _cellValues = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                _cellValues[key] = val;
+                OnPropertyChanged("Item[]");
+                OnPropertyChanged(nameof(CellValues));
+            }
+        }
+
+        public string this[int colIndex]
+        {
+            get => GetValueByColumn(colIndex.ToString());
+            set => SetValueByColumn(colIndex.ToString(), value);
+        }
+
+        public string this[string colName]
+        {
+            get => GetValueByColumn(colName);
+            set => SetValueByColumn(colName, value);
+        }
 
         public bool IsChecked
         {

@@ -3,18 +3,24 @@ LabelMaster Basic v2 - 프로그램 라이선스 및 오픈소스 고지 (Licens
 ================================================================================
 
 [ 프로그램 기본 정보 ]
-- 프로그램명: LabelMaster Basic v2
-- 버전 (Version): 2.0.0 (Release Build)
-- 개발 및 공급: 한국Xprinter (Xprinter Korea)
-- 공식 웹사이트: https://xprinter.co.kr
-- 최신버전 다운로드 링크: https://xpix.co.kr/labelmaster/basic/download
+- 프로그램명: 라벨마스터 스튜디오 (LabelMaster Studio)
+- 버전 (Version): v1.0
+- 개발 및 공급: 이엔드림 주식회사 (Endream Inc)
+- 고객지원 문의: endreaminc@gmail.com
+- 최신버전 다운로드 링크: https://xpix.co.kr/labelmaster/windows/download
 
 --------------------------------------------------------------------------------
-1. 상용 라이선스 (Commercial License)
+1. 소프트웨어 라이선스 및 지식재산권 보호 조항 (Intellectual Property & Terms)
 --------------------------------------------------------------------------------
-본 소프트웨어는 한국Xprinter 정품 하드웨어 고객을 위한 전용 소프트웨어입니다.
-정품 Xprinter 라벨 프린터 하드웨어 및 공인된 시리얼 번호를 통해 정식 라이선스가
-부여되며, 허가되지 않은 무단 복제, 역공학 및 재배포를 금지합니다.
+본 소프트웨어의 저작권 및 일체의 지식재산권은 '이엔드림 주식회사'에 귀속되며, 
+저작권법 및 컴퓨터프로그램 보호법 등 관련 법률의 보호를 받습니다.
+
+- 본 소프트웨어는 당사의 서비스 정책에 따라 제공되며, 추후 운영 정책에 따라 
+  일부 또는 전체 기능이 유료 라이선스로 전환될 수 있습니다.
+- 당사의 사전 서면 승인 없는 소스 코드의 역컴파일(Decompile), 리버스 엔지니어링,
+  바이너리 변조, 불법 크랙 생성, 임의 코드 수정 및 상업적 무단 재배포 행위를 엄격히 금지합니다.
+- 불법 복제 및 변조 적발 시 관련 법령에 따라 예고 없이 민·형사상 법적 책임과 
+  손해배상 청구가 이루어질 수 있습니다.
 
 --------------------------------------------------------------------------------
 2. 사용된 오픈소스 라이브러리 (Open Source Licenses)
@@ -45,11 +51,10 @@ LabelMaster Basic v2 - 프로그램 라이선스 및 오픈소스 고지 (Licens
 --------------------------------------------------------------------------------
 3. 기술 지원 및 고객 문의 (Technical Support & Inquiries)
 --------------------------------------------------------------------------------
-- 개발/공급: 한국Xprinter (Xprinter Korea)
-- 프로그램 문의: help@endream.com
-- 공식 웹사이트: https://xprinter.co.kr
-- 최신버전 다운로드 링크: https://xpix.co.kr/labelmaster/basic/download
-- 지원 하드웨어: Xprinter TSPL 라벨 프린터 전 기종 (XP-423B, D4601B, DT108B, T4501 등 ※ 일부 모델은 지원되지 않을 수 있습니다)
+- 개발/공급: 이엔드림 주식회사 (Endream Inc)
+- 고객지원 문의: endreaminc@gmail.com
+- 최신버전 다운로드 링크: https://xpix.co.kr/labelmaster/windows/download
+- 지원 하드웨어: TSPL 라벨 프린터 전 기종 (DT237BT, XP-370, XP-375 등 일부 모델은 일부 기능이 제한될 수 있습니다)
 
-Copyright (c) 2026 한국Xprinter. All rights reserved.
+Copyright (c) 2026 이엔드림 주식회사 (Endream Inc). All rights reserved.
 ================================================================================

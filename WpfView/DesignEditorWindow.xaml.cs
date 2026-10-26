@@ -17,7 +17,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var resourceLocater = new Uri("/LabelMaster_Basic_v2;component/wpfview/designeditorwindow.xaml", UriKind.Relative);
+                var resourceLocater = new Uri("/LabelMaster;component/wpfview/designeditorwindow.xaml", UriKind.Relative);
                 System.Windows.Application.LoadComponent(this, resourceLocater);
             }
             catch (Exception ex)

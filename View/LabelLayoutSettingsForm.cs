@@ -618,9 +618,9 @@ namespace BarcodePrint.View
             SCALE = dpi / 25.4f;
             
             if (numPaperWidth != null)
-                numPaperWidth.Value = (decimal)(PRINT_INFO_CLASS.PrinterInfo.Paper_Width > 0 ? PRINT_INFO_CLASS.PrinterInfo.Paper_Width : 70);
+                numPaperWidth.Value = (decimal)(PRINT_INFO_CLASS.PrinterInfo.Paper_Width > 0 ? PRINT_INFO_CLASS.PrinterInfo.Paper_Width : 80);
             if (numPaperHeight != null)
-                numPaperHeight.Value = (decimal)(PRINT_INFO_CLASS.PrinterInfo.Paper_Height > 0 ? PRINT_INFO_CLASS.PrinterInfo.Paper_Height : 28);
+                numPaperHeight.Value = (decimal)(PRINT_INFO_CLASS.PrinterInfo.Paper_Height > 0 ? PRINT_INFO_CLASS.PrinterInfo.Paper_Height : 60);
             if (chkPaperRotate != null)
                 chkPaperRotate.Checked = PRINT_INFO_CLASS.PrinterInfo.bPaperRotated;
 
@@ -1457,8 +1457,8 @@ namespace BarcodePrint.View
 
 
 
-            numPaperWidth = new NumericUpDown { Location = new Point(L_CTRL_X + 5, y + 5), Size = new Size(50, 30), Font = controlFont, Minimum = 10, Maximum = 500, Value = 70 };
-            numPaperHeight = new NumericUpDown { Location = new Point(R_LABEL_X + 10, y + 5), Size = new Size(50, 30), Font = controlFont, Minimum = 10, Maximum = 500, Value = 28 };
+            numPaperWidth = new NumericUpDown { Location = new Point(L_CTRL_X + 5, y + 5), Size = new Size(50, 30), Font = controlFont, Minimum = 10, Maximum = 500, Value = 80 };
+            numPaperHeight = new NumericUpDown { Location = new Point(R_LABEL_X + 10, y + 5), Size = new Size(50, 30), Font = controlFont, Minimum = 10, Maximum = 500, Value = 60 };
 
 
 
