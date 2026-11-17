@@ -14,6 +14,14 @@ namespace BarcodePrint.Model
 {
     public static class BarcodeVisualHelper
     {
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, BitmapSource> _barcodeCache 
+            = new System.Collections.Concurrent.ConcurrentDictionary<string, BitmapSource>();
+
+        public static void ClearCache()
+        {
+            _barcodeCache.Clear();
+        }
+
         /// <summary>
         /// 실제 표준 바코드 및 QR코드 그래픽 UIElement 생성 (ZXing 기반 정밀 렌더링 & 바코드 위/아래/미표시 텍스트 위치 지원)
         /// </summary>
@@ -101,23 +109,37 @@ namespace BarcodePrint.Model
                 Height = availableH
             };
 
-            var qrWriter = new ZXing.Presentation.BarcodeWriter
-            {
-                Format = BarcodeFormat.QR_CODE,
-                Options = new QrCodeEncodingOptions
-                {
-                    Width = (int)Math.Max(32, displaySize * 2),
-                    Height = (int)Math.Max(32, displaySize * 2),
-                    Margin = 1,
-                    ErrorCorrection = ErrorCorrectionLevel.M,
-                    CharacterSet = "UTF-8"
-                }
-            };
-
             Image qrImage = null;
-            try
+            int reqSize = (int)Math.Max(32, displaySize * 2);
+            string cacheKey = $"QR_{content}_{reqSize}";
+            if (!_barcodeCache.TryGetValue(cacheKey, out BitmapSource bitmapSource))
             {
-                var bitmapSource = qrWriter.Write(content);
+                var qrWriter = new ZXing.Presentation.BarcodeWriter
+                {
+                    Format = BarcodeFormat.QR_CODE,
+                    Options = new QrCodeEncodingOptions
+                    {
+                        Width = reqSize,
+                        Height = reqSize,
+                        Margin = 1,
+                        ErrorCorrection = ErrorCorrectionLevel.M,
+                        CharacterSet = "UTF-8"
+                    }
+                };
+                try
+                {
+                    bitmapSource = qrWriter.Write(content);
+                    if (bitmapSource != null)
+                    {
+                        if (_barcodeCache.Count > 200) _barcodeCache.Clear();
+                        _barcodeCache[cacheKey] = bitmapSource;
+                    }
+                }
+                catch { }
+            }
+
+            if (bitmapSource != null)
+            {
                 qrImage = new Image
                 {
                     Source = bitmapSource,
@@ -129,7 +151,6 @@ namespace BarcodePrint.Model
                 };
                 RenderOptions.SetBitmapScalingMode(qrImage, BitmapScalingMode.NearestNeighbor);
             }
-            catch { }
 
             TextBlock textBlock = null;
             if (isTextVisible)
@@ -184,31 +205,42 @@ namespace BarcodePrint.Model
                 Height = totalHeight
             };
 
-            var writer = new ZXing.Presentation.BarcodeWriter
+            int reqW = (int)Math.Max(60, targetWidth * 2);
+            int reqH = (int)Math.Max(20, targetHeight * 2);
+            string cacheKey = $"1D_{format}_{safeContent}_{reqW}_{reqH}";
+            if (!_barcodeCache.TryGetValue(cacheKey, out BitmapSource bitmapSource))
             {
-                Format = format,
-                Options = new EncodingOptions
+                var writer = new ZXing.Presentation.BarcodeWriter
                 {
-                    Width = (int)Math.Max(60, targetWidth * 2),
-                    Height = (int)Math.Max(20, targetHeight * 2),
-                    Margin = 0,
-                    PureBarcode = true
-                }
-            };
+                    Format = format,
+                    Options = new EncodingOptions
+                    {
+                        Width = reqW,
+                        Height = reqH,
+                        Margin = 0,
+                        PureBarcode = true
+                    }
+                };
 
-            WriteableBitmap bitmapSource = null;
-            try
-            {
-                bitmapSource = writer.Write(safeContent);
-            }
-            catch
-            {
                 try
                 {
-                    writer.Format = BarcodeFormat.CODE_128;
-                    bitmapSource = writer.Write("12345678");
+                    bitmapSource = writer.Write(safeContent);
                 }
-                catch { }
+                catch
+                {
+                    try
+                    {
+                        writer.Format = BarcodeFormat.CODE_128;
+                        bitmapSource = writer.Write("12345678");
+                    }
+                    catch { }
+                }
+
+                if (bitmapSource != null)
+                {
+                    if (_barcodeCache.Count > 200) _barcodeCache.Clear();
+                    _barcodeCache[cacheKey] = bitmapSource;
+                }
             }
 
             Image barcodeImage = null;
@@ -322,22 +354,37 @@ namespace BarcodePrint.Model
                 Height = availableH
             };
 
-            var writer = new ZXing.Presentation.BarcodeWriter
-            {
-                Format = format,
-                Options = new EncodingOptions
-                {
-                    Width = (int)Math.Max(32, displaySize * 2),
-                    Height = (int)Math.Max(32, displaySize * 2),
-                    Margin = 1
-                }
-            };
-
             Image image = null;
-            try
+            int reqSize = (int)Math.Max(32, displaySize * 2);
+            string safeContent = string.IsNullOrWhiteSpace(content) ? "12345678" : content;
+            string cacheKey = $"2D_{format}_{safeContent}_{reqSize}";
+            if (!_barcodeCache.TryGetValue(cacheKey, out BitmapSource bitmapSource))
             {
-                string safeContent = string.IsNullOrWhiteSpace(content) ? "12345678" : content;
-                var bitmapSource = writer.Write(safeContent);
+                var writer = new ZXing.Presentation.BarcodeWriter
+                {
+                    Format = format,
+                    Options = new EncodingOptions
+                    {
+                        Width = reqSize,
+                        Height = reqSize,
+                        Margin = 1
+                    }
+                };
+
+                try
+                {
+                    bitmapSource = writer.Write(safeContent);
+                    if (bitmapSource != null)
+                    {
+                        if (_barcodeCache.Count > 200) _barcodeCache.Clear();
+                        _barcodeCache[cacheKey] = bitmapSource;
+                    }
+                }
+                catch { }
+            }
+
+            if (bitmapSource != null)
+            {
                 image = new Image
                 {
                     Source = bitmapSource,
@@ -349,7 +396,6 @@ namespace BarcodePrint.Model
                 };
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
             }
-            catch { }
 
             TextBlock textBlock = null;
             if (isTextVisible)

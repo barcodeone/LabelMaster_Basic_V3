@@ -72,10 +72,13 @@
                     <StackPanel>
                         <TextBlock Text="🖨️ 사용할 라벨 프린터 선택" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource TextMainBrush}" Margin="0,0,0,10"/>
                         <DockPanel Margin="0,0,0,8">
-                            <Button Content="🔄 새로고침" Click="OnRefreshPrintersClick" DockPanel.Dock="Right" Width="90" Height="36" Background="#F1F5F9" Foreground="#334155" FontWeight="Bold" FontSize="12" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" Margin="8,0,0,0"/>
-                            <ComboBox x:Name="CboPrinters" Height="36" FontSize="13" VerticalContentAlignment="Center" Padding="8,0" SelectionChanged="OnPrinterSelectionChanged"/>
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="8,0,0,0">
+                                <Button Content="⚡ 프린터 연결" Click="OnApplyConnectClick" Width="105" Height="36" Background="#2563EB" Foreground="White" FontWeight="Bold" FontSize="12" BorderThickness="0" Cursor="Hand" Margin="0,0,6,0" ToolTip="선택한 프린터로 즉시 연결을 설정합니다 (창이 닫히지 않고 바로 테스트 가능)."/>
+                                <Button Content="🔄 새로고침" Click="OnRefreshPrintersClick" Width="80" Height="36" Background="#F1F5F9" Foreground="#334155" FontWeight="Bold" FontSize="12" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand"/>
+                            </StackPanel>
+                            <ComboBox x:Name="CboPrinters" Height="36" FontSize="12.5" VerticalContentAlignment="Center" Padding="8,0" SelectionChanged="OnPrinterSelectionChanged"/>
                         </DockPanel>
-                        <TextBlock x:Name="TxtPrinterNotice" Text="※ 실제 켜져 있고 연결된 온라인 라벨 프린터만 감지하여 표시합니다." FontSize="11.5" Foreground="#059669" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtPrinterNotice" Text="※ 시스템에 설치된 라벨 프린터 목록입니다." FontSize="11.5" Foreground="#059669" FontWeight="SemiBold"/>
                     </StackPanel>
                 </Border>
 
@@ -114,9 +117,9 @@
                 <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,0,6">
                     <StackPanel>
                         <TextBlock Text="💡 연결 팁:" FontWeight="Bold" FontSize="12" Foreground="#1E40AF" Margin="0,0,0,4"/>
-                        <TextBlock Text="• 프린터 전원이 켜져 있고 USB 또는 LAN 케이블이 연결되어 있어야 합니다." FontSize="11.5" Foreground="#1E3A8A" Margin="0,1"/>
-                        <TextBlock Text="• 원하는 프린터를 선택한 후 아래 [🖨️ 프린터 연결] 버튼을 누르면 즉시 연결됩니다." FontSize="11.5" Foreground="#1E3A8A" Margin="0,1"/>
-                        <TextBlock Text="• 용지 규격이 바뀌거나 위치가 맞지 않을 때는 [용지센싱]을 실행해 주세요." FontSize="11.5" Foreground="#1E3A8A" Margin="0,1"/>
+                        <TextBlock Text="• 프린터를 선택한 후 [⚡ 프린터 연결] 버튼을 누르면 창을 닫지 않고 바로 연결됩니다." FontSize="11.5" Foreground="#1E3A8A" Margin="0,1"/>
+                        <TextBlock Text="• 연결 후 아래 [연결테스트]를 눌러 라벨 1장이 급지되는지 바로 확인하세요." FontSize="11.5" Foreground="#1E3A8A" Margin="0,1"/>
+                        <TextBlock Text="• 라벨 출력이 정위치에 맞지 않을 때는 [용지센싱]을 실행해 주세요." FontSize="11.5" Foreground="#1E3A8A" Margin="0,1"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -127,7 +130,7 @@
             <DockPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="취소" Click="OnCancelClick" Width="80" Height="38" Background="Transparent" Foreground="#64748B" FontWeight="SemiBold" FontSize="13" BorderThickness="0" Cursor="Hand" Margin="0,0,10,0"/>
-                    <Button x:Name="BtnConnect" Content="🖨️ 프린터 연결" Click="OnConnectClick" MinWidth="130" Width="Auto" Height="38" Padding="18,0" Background="#2563EB" Foreground="White" FontWeight="Bold" FontSize="13.5" BorderThickness="0" Cursor="Hand"/>
+                    <Button x:Name="BtnConnect" Content="저장 및 닫기" Click="OnConnectClick" MinWidth="120" Width="Auto" Height="38" Padding="18,0" Background="#059669" Foreground="White" FontWeight="Bold" FontSize="13.5" BorderThickness="0" Cursor="Hand" ToolTip="선택한 프린터 설정을 저장하고 창을 닫습니다."/>
                 </StackPanel>
             </DockPanel>
         </Border>

@@ -275,8 +275,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 _paperPresets = (settings.PdfPaperPresets != null && settings.PdfPaperPresets.Count > 0)
                     ? settings.PdfPaperPresets
                     : AppSettings.GetDefaultPdfPaperPresets();
@@ -294,8 +293,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 settings.PdfPaperPresets = _paperPresets;
                 settings.Save();
             }

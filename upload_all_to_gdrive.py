@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Google Drive 대상 폴더(18Ee0vrvlibAwPf9lP0HNeXpE2DENZv-h)에
-Windows, Android, Mac, iOS 모든 플랫폼 최신 배포 파일을 업로드/동기화하는 스크립트
+Google Drive 대상 폴더(18Ee0vrvlibAwPf9lP0HNeXpE2DENZv-h) 배포 스크립트
+- 옵션:
+  python upload_all_to_gdrive.py --windows-only  (Windows 배포본만 단독 업로드)
+  python upload_all_to_gdrive.py --all           (Windows, Android, Mac, iOS 전체 플랫폼 통합 업로드)
 """
 
 import os
@@ -120,51 +122,79 @@ def list_folder_contents(service, folder_id):
         print(f"  - {f['name']:<35} | {size_str:>12} | {f.get('modifiedTime', '')}")
 
 
+def get_current_version(base_dir):
+    ver_path = os.path.join(base_dir, "version.txt")
+    if os.path.exists(ver_path):
+        try:
+            with open(ver_path, "r", encoding="utf-8") as f:
+                v = f.read().strip()
+                if v:
+                    return v
+        except Exception:
+            pass
+    return "1.0.2"
+
+
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    is_windows_only = "--windows-only" in sys.argv or "--win" in sys.argv
+    version = get_current_version(base_dir)
+
     service = authenticate_gdrive(base_dir)
 
     print("==================================================")
-    print(f"Google Drive 모든 플랫폼 통합 업로드 (Folder ID: {TARGET_FOLDER_ID})")
+    if is_windows_only:
+        print(f"Google Drive Windows 전용 배포 업로드 (v{version})")
+    else:
+        print(f"Google Drive 모든 플랫폼 통합 업로드 (Folder ID: {TARGET_FOLDER_ID})")
     print("==================================================")
 
-    # 업로드 대상 정의
+    # 1. Windows 배포 대상 (항상 포함)
     targets = [
-        # 1. Windows
         {
-            "path": os.path.join(base_dir, "bin", "LabelMaster_v1.0.1.zip"),
-            "name": "LabelMaster_Windows_v1.0.1.zip"
+            "path": os.path.join(base_dir, "bin", f"LabelMaster_v{version}.zip"),
+            "name": f"LabelMaster_Windows_v{version}.zip"
         },
         {
             "path": os.path.join(base_dir, "bin", "LabelMaster.zip"),
             "name": "LabelMaster_Windows_Latest.zip"
-        },
-        # 2. Android
-        {
-            "path": r"E:\4.sourcecode\C#\Android\Label_Master\app\build\outputs\apk\release\LabelMaster.apk",
-            "name": "LabelMaster_Android.apk"
-        },
-        {
-            "path": r"E:\4.sourcecode\C#\Android\Label_Master\app\build\outputs\bundle\release\LabelMaster.aab",
-            "name": "LabelMaster_Android_Store.aab"
-        },
-        # 3. Mac
-        {
-            "path": r"E:\4.sourcecode\C#\Mac\LabelMaster_MacPC\dist\LabelMaster_Mac.dmg",
-            "name": "LabelMaster_Mac.dmg"
-        },
-        # 4. iOS
-        {
-            "path": r"E:\4.sourcecode\C#\iOS\LabelMaster_iOS\AppBinary\LabelMaster_iOS.app.zip",
-            "name": "LabelMaster_iOS.app.zip"
         }
     ]
+
+    repo_root = os.path.dirname(base_dir)
+
+    # 2. 전체 플랫폼 통합 배포일 때만 타 플랫폼 추가
+    if not is_windows_only:
+        targets.extend([
+            # Android
+            {
+                "path": os.path.join(repo_root, "Android", "app", "build", "outputs", "apk", "release", "LabelMaster.apk"),
+                "name": "LabelMaster_Android.apk"
+            },
+            {
+                "path": os.path.join(repo_root, "Android", "app", "build", "outputs", "bundle", "release", "LabelMaster.aab"),
+                "name": "LabelMaster_Android_Store.aab"
+            },
+            # Mac
+            {
+                "path": os.path.join(repo_root, "Mac", "dist", "LabelMaster_Mac.dmg"),
+                "name": "LabelMaster_Mac.dmg"
+            },
+            # iOS
+            {
+                "path": os.path.join(repo_root, "iOS", "AppBinary", "LabelMaster_iOS.app.zip"),
+                "name": "LabelMaster_iOS.app.zip"
+            }
+        ])
 
     for item in targets:
         upload_file_to_folder(service, item["path"], TARGET_FOLDER_ID, item["name"])
 
     list_folder_contents(service, TARGET_FOLDER_ID)
-    print("\n[SUCCESS] 모든 플랫폼 파일이 Google Drive 폴더에 성공적으로 업로드되었습니다!")
+    if is_windows_only:
+        print(f"\n[SUCCESS] Windows 버전 (v{version})이 Google Drive에 성공적으로 업로드되었습니다!")
+    else:
+        print("\n[SUCCESS] 모든 플랫폼 파일이 Google Drive 폴더에 성공적으로 업로드되었습니다!")
 
 
 if __name__ == "__main__":

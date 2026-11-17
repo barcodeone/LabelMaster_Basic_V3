@@ -30,12 +30,18 @@ def upload_html(local_path, target_key):
         config=Config(signature_version='s3v4')
     )
     
+    content_type = "text/html; charset=utf-8"
+    if target_key.lower().endswith(".jpg") or target_key.lower().endswith(".jpeg"):
+        content_type = "image/jpeg"
+    elif target_key.lower().endswith(".png"):
+        content_type = "image/png"
+
     with open(local_path, "rb") as f:
         s3.put_object(
             Bucket=BUCKET_NAME,
             Key=target_key,
             Body=f,
-            ContentType="text/html; charset=utf-8",
+            ContentType=content_type,
             CacheControl="no-cache, no-store, must-revalidate"
         )
     public_url = f"{PUBLIC_DOMAIN}/{target_key}"

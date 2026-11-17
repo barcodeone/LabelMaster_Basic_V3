@@ -84,6 +84,8 @@ namespace BarcodePrint.WpfView
         private int _startOffsetX;
         private int _startOffsetY;
         private Canvas _activeDragCanvas = null;
+        private readonly System.Diagnostics.Stopwatch _dragRenderThrottleStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        private long _lastDragRenderMs = 0;
 
         public StartWindow DashboardWindow { get; set; }
 
@@ -91,11 +93,57 @@ namespace BarcodePrint.WpfView
         {
             InitializeComponentSafely();
             Loaded += WpfMainWindow_Loaded;
-            Closing += (s, e) => ViewModel?.SaveSettingsSilently();
+            Closing += (s, e) =>
+            {
+                BarcodePrint.Model.PrinterOnlineDetector.IsAppExiting = true;
+                BarcodePrint.Model.UsbPrinterHelper.IsAppExiting = true;
+                ViewModel?.StopRealtimeStatusMonitoring();
+                ViewModel?.SaveSettingsSilently();
+                BarcodePrint.Model.PrinterOnlineDetector.WaitForWmiCompletion(600);
+            };
+        }
+
+        private System.Windows.Interop.HwndSource _hwndSource;
+        private DateTime _lastDeviceChangeHandled = DateTime.MinValue;
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            try
+            {
+                var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                _hwndSource = System.Windows.Interop.HwndSource.FromHwnd(handle);
+                _hwndSource?.AddHook(WndProcDeviceChange);
+            }
+            catch { }
+        }
+
+        private IntPtr WndProcDeviceChange(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_DEVICECHANGE = 0x0219;
+            if (msg == WM_DEVICECHANGE)
+            {
+                if ((DateTime.Now - _lastDeviceChangeHandled).TotalMilliseconds > 350)
+                {
+                    _lastDeviceChangeHandled = DateTime.Now;
+                    ViewModel?.OnHardwareDeviceChanged();
+                }
+            }
+            return IntPtr.Zero;
         }
 
         protected override void OnClosed(EventArgs e)
         {
+            try
+            {
+                BarcodePrint.Model.PrinterOnlineDetector.IsAppExiting = true;
+                BarcodePrint.Model.UsbPrinterHelper.IsAppExiting = true;
+                _hwndSource?.RemoveHook(WndProcDeviceChange);
+                ViewModel?.StopRealtimeStatusMonitoring();
+                AppSettings.Default?.SaveImmediate();
+                BarcodePrint.Model.PrinterOnlineDetector.WaitForWmiCompletion(600);
+            }
+            catch { }
             base.OnClosed(e);
             if (DashboardWindow != null && !DashboardWindow.IsVisible)
             {
@@ -248,6 +296,20 @@ namespace BarcodePrint.WpfView
         {
             if (e.Handled) return;
 
+            bool isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            bool isShift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+            // 0. 전역 단축키: Ctrl + P (인쇄 실행 - 텍스트 입력창 포커스 여부와 관계없이 즉시 인쇄 실행)
+            if (isCtrl && e.Key == Key.P)
+            {
+                if (ViewModel?.SinglePrintCommand != null && ViewModel.SinglePrintCommand.CanExecute(null))
+                {
+                    ViewModel.SinglePrintCommand.Execute(null);
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             // 텍스트 입력 컨트롤에 커서가 있는 경우 처리
             if (Keyboard.FocusedElement is TextBox tb)
             {
@@ -274,9 +336,6 @@ namespace BarcodePrint.WpfView
             }
 
             if (ViewModel == null) return;
-
-            bool isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
-            bool isShift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
 
             // 1. Del / Backspace: 선택된 요소 삭제
             if (e.Key == Key.Delete || e.Key == Key.Back)
@@ -365,7 +424,26 @@ namespace BarcodePrint.WpfView
                     e.Handled = true;
                 }
             }
-            // 8. ESC: 선택 해제
+            // 8. 앞/뒤 순서 변경 단축키 (Z-Order)
+            // Ctrl + Shift + ]: 맨 앞으로 가져오기 (Bring to Front)
+            // Ctrl + Shift + [: 맨 뒤로 보내기 (Send to Back)
+            // Ctrl + ]: 한 단계 앞으로 (Bring Forward)
+            // Ctrl + [: 한 단계 뒤로 (Send Backward)
+            else if (isCtrl && (e.Key == Key.OemCloseBrackets || e.Key == Key.Oem6))
+            {
+                if (isShift) ViewModel.BringToFront();
+                else ViewModel.BringForward();
+                RedrawInteractiveCanvas();
+                e.Handled = true;
+            }
+            else if (isCtrl && (e.Key == Key.OemOpenBrackets || e.Key == Key.Oem4))
+            {
+                if (isShift) ViewModel.SendToBack();
+                else ViewModel.SendBackward();
+                RedrawInteractiveCanvas();
+                e.Handled = true;
+            }
+            // 9. ESC: 선택 해제
             else if (e.Key == Key.Escape)
             {
                 ViewModel.DeselectElement();
@@ -405,7 +483,7 @@ namespace BarcodePrint.WpfView
 
         private void OnSelectedAlignLeftClick(object sender, RoutedEventArgs e)
         {
-            if (ViewModel != null && ViewModel.HasSelectedElement)
+            if (ViewModel != null && ViewModel.IsSelectedElementText)
             {
                 ViewModel.SelectedElementAlignment = "LEFT";
                 RedrawInteractiveCanvas();
@@ -414,7 +492,7 @@ namespace BarcodePrint.WpfView
 
         private void OnSelectedAlignCenterClick(object sender, RoutedEventArgs e)
         {
-            if (ViewModel != null && ViewModel.HasSelectedElement)
+            if (ViewModel != null && ViewModel.IsSelectedElementText)
             {
                 ViewModel.SelectedElementAlignment = "CENTER";
                 RedrawInteractiveCanvas();
@@ -423,7 +501,7 @@ namespace BarcodePrint.WpfView
 
         private void OnSelectedAlignRightClick(object sender, RoutedEventArgs e)
         {
-            if (ViewModel != null && ViewModel.HasSelectedElement)
+            if (ViewModel != null && ViewModel.IsSelectedElementText)
             {
                 ViewModel.SelectedElementAlignment = "RIGHT";
                 RedrawInteractiveCanvas();
@@ -445,6 +523,22 @@ namespace BarcodePrint.WpfView
 
         private void WpfMainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            try
+            {
+                double screenH = SystemParameters.WorkArea.Height;
+                double screenW = SystemParameters.WorkArea.Width;
+                if (screenH <= 768 || screenW <= 1366)
+                {
+                    if (this.Height > screenH - 10) this.Height = Math.Max(560, screenH - 10);
+                    if (this.Width > screenW - 10) this.Width = Math.Max(960, screenW - 10);
+                    if (screenH <= 768 && screenW <= 1366)
+                    {
+                        this.WindowState = WindowState.Maximized;
+                    }
+                }
+            }
+            catch { }
+
             if (ViewModel != null)
             {
                 ViewModel.FocusFirstInputRequested = FocusFirstInput;
@@ -482,19 +576,8 @@ namespace BarcodePrint.WpfView
             RedrawInteractiveCanvas();
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                RedrawInteractiveCanvas();
                 UpdateRulers();
             }), System.Windows.Threading.DispatcherPriority.Loaded);
-
-            // 메인 윈도우 표시 및 스플래시 창 종료가 완전히 완료된 후 안전하게 하드웨어 인증 수행
-            Dispatcher.BeginInvoke(new Action(async () =>
-            {
-                await System.Threading.Tasks.Task.Delay(300);
-                if (ViewModel != null && !string.IsNullOrEmpty(ViewModel.SelectedPrinterName) && ViewModel.AvailablePrinters.Contains(ViewModel.SelectedPrinterName))
-                {
-                    ViewModel.ExecuteReadPrinterHardwareInfo(showLoadingPopup: false);
-                }
-            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void Window_DragOver(object sender, DragEventArgs e)
@@ -765,19 +848,22 @@ namespace BarcodePrint.WpfView
                     if (int.TryParse(currentTb.Tag.ToString(), out int index))
                     {
                         int activeCount = Math.Max(1, Math.Min(8, ViewModel != null ? ViewModel.ActiveColumnCount : 1));
-                        bool isShift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+                        bool isMultilineShortcut = (Keyboard.Modifiers & (ModifierKeys.Shift | ModifierKeys.Alt | ModifierKeys.Control)) != ModifierKeys.None;
 
-                        if (isShift)
+                        if (isMultilineShortcut)
                         {
-                            // Shift + Enter: 이전 활성화된(직접 입력 가능한) 열로 포커스 이동
-                            for (int k = index - 1; k >= 0; k--)
+                            // Shift+Enter / Alt+Enter / Ctrl+Enter: 현재 입력창 내 줄바꿈 삽입
+                            int caret = currentTb.CaretIndex;
+                            string text = currentTb.Text ?? string.Empty;
+                            if (currentTb.SelectionLength > 0)
                             {
-                                if (FindName($"TxtCol{k + 1}") is TextBox prevTb && prevTb.IsEnabled && prevTb.IsVisible)
-                                {
-                                    FocusControlByName($"TxtCol{k + 1}");
-                                    break;
-                                }
+                                int selStart = currentTb.SelectionStart;
+                                text = text.Remove(selStart, currentTb.SelectionLength);
+                                caret = selStart;
                             }
+                            currentTb.Text = text.Insert(caret, Environment.NewLine);
+                            currentTb.CaretIndex = caret + Environment.NewLine.Length;
+                            binding?.UpdateSource();
                             return;
                         }
 
@@ -860,9 +946,39 @@ namespace BarcodePrint.WpfView
         {
             if (ViewModel == null) return;
 
-            RenderCanvasContent(GlobalCanvas, true);
-            RenderCanvasContent(ExcelCanvas, true);
-            RenderCanvasContent(DragCanvas, false);
+            if (ViewModel.SelectedElement == null && !ViewModel.HasMultipleSelectedElements)
+            {
+                _selectedTemplateElement = null;
+                _selectedItemIndex = -1;
+                _selectedItemIndices.Clear();
+            }
+
+            var gCanvas = GlobalCanvas;
+            var eCanvas = ExcelCanvas;
+            var dCanvas = DragCanvas;
+
+            bool renderedAny = false;
+            if (gCanvas != null && gCanvas.IsVisible)
+            {
+                RenderCanvasContent(gCanvas, true);
+                renderedAny = true;
+            }
+            if (eCanvas != null && eCanvas.IsVisible)
+            {
+                RenderCanvasContent(eCanvas, true);
+                renderedAny = true;
+            }
+            if (dCanvas != null && dCanvas.IsVisible)
+            {
+                RenderCanvasContent(dCanvas, false);
+                renderedAny = true;
+            }
+
+            // 초기 로딩 또는 캔버스 IsVisible 지연 시 기본적으로 GlobalCanvas 렌더링 보장
+            if (!renderedAny && gCanvas != null)
+            {
+                RenderCanvasContent(gCanvas, true);
+            }
         }
 
         /// <summary>
@@ -882,6 +998,19 @@ namespace BarcodePrint.WpfView
         private void OnCanvasScrollViewerSizeChanged(object sender, SizeChangedEventArgs e)
         {
             UpdateRulers();
+        }
+
+        private string _lastRulerStateKey = "";
+        private static readonly Brush _rulerTextBrush = CreateFrozenBrush("#475569");
+        private static readonly Brush _rulerMajorBrush = CreateFrozenBrush("#64748B");
+        private static readonly Brush _rulerMinorBrush = CreateFrozenBrush("#94A3B8");
+        private static readonly Brush _rulerMicroBrush = CreateFrozenBrush("#CBD5E1");
+
+        private static Brush CreateFrozenBrush(string hex)
+        {
+            var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+            b.Freeze();
+            return b;
         }
 
         public void UpdateRulers()
@@ -908,10 +1037,20 @@ namespace BarcodePrint.WpfView
                 double originX = ptTop.X;
                 double originY = ptLeft.Y;
 
-                // 1. 상단 가로 눈금자 (Top Ruler) 렌더링
-                topCanvas.Children.Clear();
                 double rulerW = topCanvas.ActualWidth > 0 ? topCanvas.ActualWidth : 1200;
                 double rulerH = topCanvas.ActualHeight > 0 ? topCanvas.ActualHeight : 22;
+                double leftRulerW = leftCanvas.ActualWidth > 0 ? leftCanvas.ActualWidth : 22;
+                double leftRulerH = leftCanvas.ActualHeight > 0 ? leftCanvas.ActualHeight : 800;
+
+                string stateKey = $"{zoom:F2}_{wMm}_{hMm}_{originX:F1}_{originY:F1}_{rulerW:F0}_{leftRulerH:F0}";
+                if (stateKey == _lastRulerStateKey && topCanvas.Children.Count > 0 && leftCanvas.Children.Count > 0)
+                {
+                    return;
+                }
+                _lastRulerStateKey = stateKey;
+
+                // 1. 상단 가로 눈금자 (Top Ruler) 렌더링
+                topCanvas.Children.Clear();
 
                 // 라벨 용지 너비 영역 하이라이트 배경 (흰색)
                 double paperStartPx = originX;
@@ -942,10 +1081,10 @@ namespace BarcodePrint.WpfView
                 if (pxPerMm * 20 < 30) stepMm = 50;
                 if (pxPerMm * 50 < 30) stepMm = 100;
 
-                var textBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#475569"));
-                var majorTickBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#64748B"));
-                var minorTickBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#94A3B8"));
-                var microTickBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CBD5E1"));
+                var textBrush = _rulerTextBrush;
+                var majorTickBrush = _rulerMajorBrush;
+                var minorTickBrush = _rulerMinorBrush;
+                var microTickBrush = _rulerMicroBrush;
 
                 for (int mm = minMm; mm <= maxMm; mm++)
                 {
@@ -1004,8 +1143,6 @@ namespace BarcodePrint.WpfView
 
                 // 2. 좌측 세로 눈금자 (Left Ruler) 렌더링
                 leftCanvas.Children.Clear();
-                double leftRulerW = leftCanvas.ActualWidth > 0 ? leftCanvas.ActualWidth : 22;
-                double leftRulerH = leftCanvas.ActualHeight > 0 ? leftCanvas.ActualHeight : 800;
 
                 // 라벨 용지 높이 영역 하이라이트 배경 (흰색)
                 double paperTopPx = originY;
@@ -1152,7 +1289,7 @@ namespace BarcodePrint.WpfView
                 startYMm += ViewModel.TableTitleSpacing;
             }
 
-            int activeCount = Math.Max(1, Math.Min(8, ViewModel.ActiveColumnCount));
+            int activeCount = Math.Max(0, Math.Min(8, ViewModel.ActiveColumnCount));
 
             // 바코드 컬럼 여부 확인 및 텍스트 컬럼 리스트 추출
             var textColIndices = new List<int>();
@@ -1182,7 +1319,7 @@ namespace BarcodePrint.WpfView
 
             double userSpecifiedTotalMm = 0;
             int autoCount = 0;
-            for (int r = 0; r < textRowCount; r++)
+            for (int r = 0; r < textColIndices.Count; r++)
             {
                 int colNum = textColIndices[r];
                 int userH = ViewModel.GetRowHeightByIndex(colNum);
@@ -1211,12 +1348,26 @@ namespace BarcodePrint.WpfView
             double[] rowTopsPx = new double[textRowCount];
             double userSpecifiedTotalPx = userSpecifiedTotalMm * MM_TO_PX;
 
-            if (autoCount > 0)
+            for (int r = 0; r < textColIndices.Count; r++)
+            {
+                int colNum = textColIndices[r];
+                int userH = ViewModel.GetRowHeightByIndex(colNum);
+                if (userH > 0)
+                {
+                    rowHeightsPx[r] = userH * MM_TO_PX;
+                }
+            }
+
+            if (textColIndices.Count == 0)
+            {
+                rowHeightsPx[0] = tableHPx;
+            }
+            else if (autoCount > 0)
             {
                 double remainingPx = Math.Max(autoCount * 4.0 * MM_TO_PX, tableHPx - userSpecifiedTotalPx);
                 double totalWeight = 0;
                 double[] weights = new double[textRowCount];
-                for (int r = 0; r < textRowCount; r++)
+                for (int r = 0; r < textColIndices.Count; r++)
                 {
                     int colNum = textColIndices[r];
                     if (ViewModel.GetRowHeightByIndex(colNum) <= 0)
@@ -1226,12 +1377,12 @@ namespace BarcodePrint.WpfView
                         totalWeight += weights[r];
                     }
                 }
-                for (int r = 0; r < textRowCount; r++)
+                for (int r = 0; r < textColIndices.Count; r++)
                 {
                     int colNum = textColIndices[r];
                     if (ViewModel.GetRowHeightByIndex(colNum) <= 0)
                     {
-                        rowHeightsPx[r] = remainingPx * (weights[r] / totalWeight);
+                        rowHeightsPx[r] = totalWeight > 0 ? remainingPx * (weights[r] / totalWeight) : (remainingPx / Math.Max(1, autoCount));
                     }
                 }
             }
@@ -1329,7 +1480,7 @@ namespace BarcodePrint.WpfView
                     }
 
                     // 4. 각 열별 텍스트 렌더링
-                    for (int c = 0; c < colCount; c++)
+                    for (int c = 0; c < textColIndices.Count; c++)
                     {
                         int colNum = textColIndices[c];
                         int i = colNum - 1;
@@ -1644,6 +1795,11 @@ namespace BarcodePrint.WpfView
 
                     // 템플릿 요소 찾기 (크기/위치 및 객체 전달)
                     TemplateElement elem = ViewModel.CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == colNum);
+                    if (elem == null && ViewModel.CurrentTemplate?.Elements != null)
+                    {
+                        // 템플릿에 존재하지 않는 가변 컬럼은 그리지 않고 건너뜀 (삭제된 컬럼 유령 렌더링 방지)
+                        continue;
+                    }
                     if (elem != null)
                     {
                         isBarcode = (elem.Type == ElementType.BARCODE || elem.Type == ElementType.QR_CODE);
@@ -1697,8 +1853,15 @@ namespace BarcodePrint.WpfView
             }
             else if (ViewModel.SelectedElement != null)
             {
-                _selectedTemplateElement = ViewModel.SelectedElement;
-                DrawSelectionOverlay(targetCanvas, ViewModel.SelectedElement, showHandles: true);
+                if (ViewModel.CurrentTemplate?.Elements != null && ViewModel.CurrentTemplate.Elements.Contains(ViewModel.SelectedElement))
+                {
+                    _selectedTemplateElement = ViewModel.SelectedElement;
+                    DrawSelectionOverlay(targetCanvas, ViewModel.SelectedElement, showHandles: true);
+                }
+                else
+                {
+                    _selectedTemplateElement = null;
+                }
             }
             else if (_selectedItemIndex >= 0 && ViewModel.CurrentTemplate?.Elements != null)
             {
@@ -1712,7 +1875,24 @@ namespace BarcodePrint.WpfView
                     _selectedTemplateElement = matchingElem;
                     DrawSelectionOverlay(targetCanvas, matchingElem, showHandles: true);
                 }
+                else
+                {
+                    _selectedTemplateElement = null;
+                }
             }
+            else
+            {
+                _selectedTemplateElement = null;
+            }
+        }
+
+        private void SetCanvasElementZIndex(UIElement uiElement, TemplateElement elem)
+        {
+            if (uiElement == null) return;
+            int zIndex = (ViewModel?.CurrentTemplate?.Elements != null && elem != null)
+                ? ViewModel.CurrentTemplate.Elements.IndexOf(elem)
+                : -1;
+            Panel.SetZIndex(uiElement, zIndex >= 0 ? zIndex * 2 + 10 : 10);
         }
 
         private void RenderCustomTemplateElements(Canvas targetCanvas)
@@ -1768,6 +1948,7 @@ namespace BarcodePrint.WpfView
                         lineBorder.Child = linePath;
                         Canvas.SetLeft(lineBorder, leftPx);
                         Canvas.SetTop(lineBorder, topPx);
+                        SetCanvasElementZIndex(lineBorder, elem);
                         targetCanvas.Children.Add(lineBorder);
                         break;
 
@@ -1784,7 +1965,7 @@ namespace BarcodePrint.WpfView
                             Data = ShapeGeometryHelper.CreateShapeGeometry(elem.ShapeType, shapeW, shapeH, strokeS),
                             Stroke = isSelected ? Brushes.Blue : Brushes.Black,
                             StrokeThickness = strokeS,
-                            Fill = elem.IsFilled ? Brushes.Black : Brushes.Transparent,
+                            Fill = elem.IsFilled ? Brushes.Black : null, // 채우기 없을 시 null로 하여 안쪽 텍스트 클릭 가능
                             Cursor = Cursors.SizeAll,
                             Tag = elem
                         };
@@ -1795,6 +1976,7 @@ namespace BarcodePrint.WpfView
                         }
                         Canvas.SetLeft(shapePath, leftPx);
                         Canvas.SetTop(shapePath, topPx);
+                        SetCanvasElementZIndex(shapePath, elem);
                         targetCanvas.Children.Add(shapePath);
                         break;
 
@@ -1818,9 +2000,12 @@ namespace BarcodePrint.WpfView
                         {
                             if (!string.IsNullOrEmpty(elem.Content) && System.IO.File.Exists(elem.Content))
                             {
-                                var bmp = new System.Windows.Media.Imaging.BitmapImage(new Uri(elem.Content));
-                                var imgCtrl = new Image { Source = bmp, Stretch = Stretch.Uniform };
-                                imgBorder.Child = imgCtrl;
+                                var bmp = GetCachedImageSource(elem.Content);
+                                if (bmp != null)
+                                {
+                                    var imgCtrl = new Image { Source = bmp, Stretch = Stretch.Uniform };
+                                    imgBorder.Child = imgCtrl;
+                                }
                             }
                             else
                             {
@@ -1841,6 +2026,7 @@ namespace BarcodePrint.WpfView
                         }
                         Canvas.SetLeft(imgBorder, leftPx);
                         Canvas.SetTop(imgBorder, topPx);
+                        SetCanvasElementZIndex(imgBorder, elem);
                         targetCanvas.Children.Add(imgBorder);
                         break;
 
@@ -1971,7 +2157,62 @@ namespace BarcodePrint.WpfView
             outerBorder.Child = grid;
             Canvas.SetLeft(outerBorder, leftPx);
             Canvas.SetTop(outerBorder, topPx);
+            SetCanvasElementZIndex(outerBorder, elem);
             targetCanvas.Children.Add(outerBorder);
+        }
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Windows.Media.Imaging.BitmapSource> _imageFileCache
+            = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Windows.Media.Imaging.BitmapSource>(StringComparer.OrdinalIgnoreCase);
+
+        private static System.Windows.Media.Imaging.BitmapSource GetCachedImageSource(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath)) return null;
+            try
+            {
+                long ticks = System.IO.File.GetLastWriteTimeUtc(filePath).Ticks;
+                string key = $"{filePath}_{ticks}";
+                if (_imageFileCache.TryGetValue(key, out var cached)) return cached;
+
+                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(filePath);
+                bmp.EndInit();
+                if (bmp.CanFreeze) bmp.Freeze();
+
+                if (_imageFileCache.Count > 30) _imageFileCache.Clear();
+                _imageFileCache[key] = bmp;
+                return bmp;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Typeface> _typefaceCache
+            = new System.Collections.Concurrent.ConcurrentDictionary<string, Typeface>();
+
+        private struct CachedTextMeasurement
+        {
+            public double WidthPx;
+            public double HeightPx;
+            public Thickness Padding;
+            public bool IsWrapped;
+        }
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, CachedTextMeasurement> _textMeasureCache
+            = new System.Collections.Concurrent.ConcurrentDictionary<string, CachedTextMeasurement>();
+
+        private static Typeface GetCachedTypeface(string family, FontStyle style, FontWeight weight)
+        {
+            string key = $"{family}_{style}_{weight}";
+            if (!_typefaceCache.TryGetValue(key, out var tf))
+            {
+                tf = new Typeface(new FontFamily(family), style, weight, FontStretches.Normal);
+                _typefaceCache[key] = tf;
+            }
+            return tf;
         }
 
         private void MeasureTextDimensions(TemplateElement elem, double requestedWidthMm, out double finalWidthPx, out double finalHeightPx, out Thickness padding, out bool isWrapped)
@@ -2002,30 +2243,45 @@ namespace BarcodePrint.WpfView
             {
                 textToMeasure = $"🕒 {textToMeasure}";
             }
+            if (elem.IsVertical)
+            {
+                textToMeasure = MainViewModel.ConvertToVerticalText(textToMeasure);
+            }
 
             string family = string.IsNullOrWhiteSpace(elem.FontName) ? "맑은 고딕" : elem.FontName;
             var style = elem.IsItalic ? FontStyles.Italic : FontStyles.Normal;
             var weight = elem.IsBold ? FontWeights.Bold : FontWeights.Normal;
             double fontSizePx = (elem.FontSize > 0 ? elem.FontSize : 10.0) * 1.35;
+            double scaleX = (elem.FontScaleX > 0) ? elem.FontScaleX : 1.0;
+            double lineSpacing = (elem.LineSpacing > 0) ? elem.LineSpacing : 1.0;
+            double letterSpacing = elem.LetterSpacing;
 
-            // 폰트 크기에 비례하는 일정한 안전 여백 (글자와 테두리선의 관계가 항상 일정하도록 보장)
-            double padX = Math.Max(6.0, fontSizePx * 0.22);
-            double padY = Math.Max(4.0, fontSizePx * 0.16);
-            padding = new Thickness(padX, padY, padX, padY);
+            string measureCacheKey = $"{textToMeasure}|{family}|{elem.IsBold}|{elem.IsItalic}|{fontSizePx:F2}|{scaleX:F2}|{lineSpacing:F2}|{letterSpacing:F3}|{requestedWidthMm:F1}";
+            if (_textMeasureCache.TryGetValue(measureCacheKey, out var cachedMeas))
+            {
+                finalWidthPx = cachedMeas.WidthPx;
+                finalHeightPx = cachedMeas.HeightPx;
+                padding = cachedMeas.Padding;
+                isWrapped = cachedMeas.IsWrapped;
+                return;
+            }
+
+            // 인쇄(DrawTextOnDc)와 100% 1:1 좌표 일치를 위해 텍스트 여백(Padding)을 0으로 통일
+            double padX = 0;
+            double padY = 0;
+            padding = new Thickness(0);
+
+            var typeface = GetCachedTypeface(family, style, weight);
 
             // 1. 단일행 기준 텍스트 전체 크기 측정
             var ftSingle = new FormattedText(
                 textToMeasure,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                new Typeface(new FontFamily(family), style, weight, FontStretches.Normal),
+                typeface,
                 Math.Max(8, fontSizePx),
                 Brushes.Black,
                 1.0);
-
-            double scaleX = (elem.FontScaleX > 0) ? elem.FontScaleX : 1.0;
-            double lineSpacing = (elem.LineSpacing > 0) ? elem.LineSpacing : 1.0;
-            double letterSpacing = elem.LetterSpacing;
 
             string[] lines = textToMeasure.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             int maxChars = 0;
@@ -2053,7 +2309,7 @@ namespace BarcodePrint.WpfView
                         textToMeasure,
                         System.Globalization.CultureInfo.CurrentCulture,
                         FlowDirection.LeftToRight,
-                        new Typeface(new FontFamily(family), style, weight, FontStretches.Normal),
+                        typeface,
                         Math.Max(8, fontSizePx),
                         Brushes.Black,
                         1.0);
@@ -2079,6 +2335,15 @@ namespace BarcodePrint.WpfView
                 finalWidthPx = singleLineTotalWPx;
                 finalHeightPx = (ftSingle.Height * lineSpacing) + (padY * 2);
             }
+
+            if (_textMeasureCache.Count > 500) _textMeasureCache.Clear();
+            _textMeasureCache[measureCacheKey] = new CachedTextMeasurement
+            {
+                WidthPx = finalWidthPx,
+                HeightPx = finalHeightPx,
+                Padding = padding,
+                IsWrapped = isWrapped
+            };
         }
 
         private void GetElementVisualDimensions(TemplateElement elem, out double widthPx, out double heightPx)
@@ -2093,7 +2358,15 @@ namespace BarcodePrint.WpfView
             if (elem.Type == ElementType.TEXT || elem.Type == ElementType.DATE_TIME)
             {
                 MeasureTextDimensions(elem, elem.Width, out widthPx, out heightPx, out _, out _);
-                elem.Height = Math.Round(heightPx / MM_TO_PX, 1);
+                double textHMm = Math.Round(heightPx / MM_TO_PX, 1);
+                if (elem.Height > textHMm)
+                {
+                    heightPx = elem.Height * MM_TO_PX;
+                }
+                else if (Math.Abs(elem.Height - textHMm) > 0.05)
+                {
+                    elem.Height = textHMm;
+                }
             }
             else
             {
@@ -2122,6 +2395,10 @@ namespace BarcodePrint.WpfView
             }
 
             string renderedText = (index == 99) ? $"🕒 {displayVal}" : ((index == 101) ? $"🔢 {displayVal}" : displayVal);
+            if (elem != null && elem.IsVertical)
+            {
+                renderedText = MainViewModel.ConvertToVerticalText(renderedText);
+            }
             bool isSelected = _selectedItemIndices.Contains(index) || (_selectedItemIndex == index) || 
                               (elem != null && ViewModel != null && (ViewModel.SelectedElements.Contains(elem) || ViewModel.SelectedElement == elem));
 
@@ -2138,7 +2415,15 @@ namespace BarcodePrint.WpfView
             if (elem != null && (elem.Type == ElementType.TEXT || elem.Type == ElementType.DATE_TIME))
             {
                 MeasureTextDimensions(elem, elem.Width, out itemWPx, out itemHPx, out itemPadding, out isWrapped);
-                elem.Height = Math.Round(itemHPx / MM_TO_PX, 1);
+                double textHMm = Math.Round(itemHPx / MM_TO_PX, 1);
+                if (elem.Height > textHMm)
+                {
+                    itemHPx = elem.Height * MM_TO_PX;
+                }
+                else
+                {
+                    elem.Height = textHMm;
+                }
             }
             else if (isBarcode)
             {
@@ -2157,17 +2442,27 @@ namespace BarcodePrint.WpfView
             {
                 double effectiveFontSizePt = (elem != null && elem.FontSize > 0) ? elem.FontSize : size;
                 double exactTextWMm = (ViewModel != null) 
-                    ? (ViewModel.CalculateExactTextWidthMm(renderedText, fontName, (int)Math.Round(effectiveFontSizePt), isBold, isItalic) + 3.0) 
+                    ? ViewModel.CalculateExactTextWidthMm(renderedText, fontName, (int)Math.Round(effectiveFontSizePt), isBold, isItalic)
                     : 20.0;
                 double effectiveItemWMm = (widthMm > 0) ? widthMm : exactTextWMm;
-                itemWPx = Math.Max(12.0, effectiveItemWMm * MM_TO_PX + 10.0);
+                itemWPx = Math.Max(12.0, effectiveItemWMm * MM_TO_PX);
                 itemHPx = (heightMm > 0) ? heightMm * MM_TO_PX : (elem != null && elem.Height > 0 ? elem.Height * MM_TO_PX : 24.0);
-                itemPadding = cellPaddingMm > 0 ? new Thickness(cellPaddingMm * MM_TO_PX) : new Thickness(6, 4, 6, 4);
+                itemPadding = cellPaddingMm > 0 ? new Thickness(cellPaddingMm * MM_TO_PX) : new Thickness(0);
+            }
+
+            var containerBg = Brushes.Transparent;
+            if (elem != null && elem.IsInverse)
+            {
+                containerBg = Brushes.Black;
+            }
+            else if (isSelected && !hasSelectionOverlay)
+            {
+                containerBg = new SolidColorBrush(Color.FromArgb(60, 37, 99, 235));
             }
 
             var container = new Border
             {
-                Background = (isSelected && !hasSelectionOverlay) ? new SolidColorBrush(Color.FromArgb(60, 37, 99, 235)) : Brushes.Transparent,
+                Background = containerBg,
                 BorderBrush = (isSelected && !hasSelectionOverlay) ? new SolidColorBrush(Color.FromRgb(37, 99, 235)) : Brushes.Transparent,
                 BorderThickness = new Thickness((isSelected && !hasSelectionOverlay) ? 2.0 : 0.0),
                 CornerRadius = new CornerRadius(2),
@@ -2206,21 +2501,26 @@ namespace BarcodePrint.WpfView
                 double lineSpacing = (elem != null && elem.LineSpacing > 0) ? elem.LineSpacing : 1.0;
                 double letterSpacing = (elem != null) ? elem.LetterSpacing : 0.0;
 
+                var textFg = (elem != null && elem.IsInverse) ? Brushes.White : ((index == 99) ? Brushes.DarkBlue : ((index == 101) ? Brushes.DarkGreen : Brushes.Black));
                 var textBlock = new TextBlock
                 {
                     FontFamily = new FontFamily(string.IsNullOrWhiteSpace(fontName) ? "맑은 고딕" : fontName),
                     FontSize = effectiveFontSizePt * 1.35,
-                    Foreground = (index == 99) ? Brushes.DarkBlue : ((index == 101) ? Brushes.DarkGreen : Brushes.Black),
+                    Foreground = textFg,
                     FontWeight = isBold ? FontWeights.Bold : FontWeights.Normal,
                     FontStyle = isItalic ? FontStyles.Italic : FontStyles.Normal,
                     TextDecorations = (elem != null && elem.IsUnderline) ? TextDecorations.Underline : null,
                     TextAlignment = textAlignment,
                     TextWrapping = isWrapped ? TextWrapping.Wrap : TextWrapping.NoWrap,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
-                    LineHeight = effectiveFontSizePt * 1.35 * lineSpacing
+                    VerticalAlignment = VerticalAlignment.Center
                 };
+
+                if (Math.Abs(lineSpacing - 1.0) > 0.001)
+                {
+                    textBlock.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+                    textBlock.LineHeight = effectiveFontSizePt * 1.35 * lineSpacing;
+                }
 
                 if (Math.Abs(scaleX - 1.0) > 0.001)
                 {
@@ -2259,14 +2559,24 @@ namespace BarcodePrint.WpfView
                 container.Child = textBlock;
             }
 
-            if (elem != null && elem.Rotation != 0)
+            if (elem != null && (elem.IsMirrored || elem.Rotation != 0))
             {
+                var transformGroup = new TransformGroup();
+                if (elem.IsMirrored)
+                {
+                    transformGroup.Children.Add(new ScaleTransform(-1.0, 1.0));
+                }
+                if (elem.Rotation != 0)
+                {
+                    transformGroup.Children.Add(new RotateTransform(elem.Rotation));
+                }
                 container.RenderTransformOrigin = new Point(0.5, 0.5);
-                container.RenderTransform = new RotateTransform(elem.Rotation);
+                container.RenderTransform = transformGroup;
             }
 
             Canvas.SetLeft(container, left);
             Canvas.SetTop(container, top);
+            SetCanvasElementZIndex(container, elem);
 
             targetCanvas.Children.Add(container);
 
@@ -2323,7 +2633,8 @@ namespace BarcodePrint.WpfView
                 {
                     Width = widthPx,
                     Height = Math.Max(16.0, elem.LineWidth + 12),
-                    IsHitTestVisible = true
+                    IsHitTestVisible = true,
+                    Tag = elem
                 };
                 Canvas.SetLeft(lineOverlay, leftPx);
                 Canvas.SetTop(lineOverlay, topPx);
@@ -2356,16 +2667,16 @@ namespace BarcodePrint.WpfView
 
                 double centerY = lineOverlay.Height / 2.0;
 
-                // 시작점 핸들 (Cross Cursor)
+                // 시작점 핸들 (Cross Cursor, 슬림한 8px 원형 핸들)
                 var hStart = CreateCircleHandle("HANDLE_LINE_START", Cursors.Cross, "선 시작점 드래그: 위치 및 길이 조절");
-                Canvas.SetLeft(hStart, -6);
-                Canvas.SetTop(hStart, centerY - 6);
+                Canvas.SetLeft(hStart, -4);
+                Canvas.SetTop(hStart, centerY - 4);
                 lineOverlay.Children.Add(hStart);
 
-                // 끝점 핸들 (Cross Cursor)
+                // 끝점 핸들 (Cross Cursor, 슬림한 8px 원형 핸들)
                 var hEnd = CreateCircleHandle("HANDLE_LINE_END", Cursors.Cross, "선 끝점 드래그: 길이 및 회전각도 조절");
-                Canvas.SetLeft(hEnd, widthPx - 6);
-                Canvas.SetTop(hEnd, centerY - 6);
+                Canvas.SetLeft(hEnd, widthPx - 4);
+                Canvas.SetTop(hEnd, centerY - 4);
                 lineOverlay.Children.Add(hEnd);
 
                 targetCanvas.Children.Add(lineOverlay);
@@ -2390,13 +2701,13 @@ namespace BarcodePrint.WpfView
                 overlay.RenderTransform = new RotateTransform(elem.Rotation);
             }
 
-            // [A] 선택 외곽 테두리 (텍스트를 가리지 않도록 Fill은 투명하게 설정)
+            // [A] 선택 외곽 테두리 (텍스트를 가리지 않도록 Fill은 투명하게 설정, 슬림한 1.4px)
             var borderRect = new Rectangle
             {
                 Width = widthPx,
                 Height = heightPx,
                 Stroke = new SolidColorBrush(Color.FromRgb(37, 99, 235)),
-                StrokeThickness = showHandles ? 2.0 : 1.5,
+                StrokeThickness = showHandles ? 1.4 : 1.0,
                 StrokeDashArray = showHandles ? null : new DoubleCollection { 3, 2 },
                 RadiusX = 2.0,
                 RadiusY = 2.0,
@@ -2411,8 +2722,8 @@ namespace BarcodePrint.WpfView
                 return;
             }
 
-            // [B] 상단 회전 핸들 (연결선 + ↻ 원형 버튼)
-            double rotDist = 26.0;
+            // [B] 상단 회전 핸들 (연결선 + ↻ 원형 버튼, 슬림한 16px 크기)
+            double rotDist = 18.0;
             var rotLine = new Line
             {
                 X1 = widthPx / 2.0,
@@ -2420,19 +2731,19 @@ namespace BarcodePrint.WpfView
                 X2 = widthPx / 2.0,
                 Y2 = -rotDist,
                 Stroke = new SolidColorBrush(Color.FromRgb(37, 99, 235)),
-                StrokeThickness = 1.8,
+                StrokeThickness = 1.2,
                 IsHitTestVisible = false
             };
             overlay.Children.Add(rotLine);
 
             var rotBtn = new Border
             {
-                Width = 24,
-                Height = 24,
-                CornerRadius = new CornerRadius(12),
+                Width = 16,
+                Height = 16,
+                CornerRadius = new CornerRadius(8),
                 Background = new SolidColorBrush(Color.FromRgb(37, 99, 235)),
                 BorderBrush = Brushes.White,
-                BorderThickness = new Thickness(2.0),
+                BorderThickness = new Thickness(1.4),
                 Cursor = Cursors.Hand,
                 Tag = "HANDLE_ROTATE",
                 ToolTip = $"회전 핸들: 마우스 드래그로 회전 방향 조절 (현재: {elem.Rotation}°)"
@@ -2440,7 +2751,7 @@ namespace BarcodePrint.WpfView
             var rotIcon = new TextBlock
             {
                 Text = "↻",
-                FontSize = 14,
+                FontSize = 9.5,
                 FontWeight = FontWeights.Bold,
                 Foreground = Brushes.White,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -2448,13 +2759,13 @@ namespace BarcodePrint.WpfView
                 Margin = new Thickness(0, -1, 0, 0)
             };
             rotBtn.Child = rotIcon;
-            Canvas.SetLeft(rotBtn, (widthPx / 2.0) - 12);
-            Canvas.SetTop(rotBtn, -rotDist - 12);
+            Canvas.SetLeft(rotBtn, (widthPx / 2.0) - 8);
+            Canvas.SetTop(rotBtn, -rotDist - 8);
             overlay.Children.Add(rotBtn);
 
             // [C] 4개 테두리선(상, 하, 좌, 우) 직접 드래그 리사이즈 감지 영역 (마우스 조작 편의 극대화)
-            double hR = 5.5; // 포인트 반경 (지름 11px)
-            double stripThick = 8.0;
+            double hR = 4.0; // 포인트 반경 (지름 8px - 요소 가림을 방지하는 슬림한 크기)
+            double stripThick = 12.0; // 테두리선 마우스 감도 유지
             double halfThick = stripThick / 2.0;
 
             // 상단 테두리선
@@ -2466,7 +2777,7 @@ namespace BarcodePrint.WpfView
             // 우측 테두리선
             AddResizeEdgeStrip(overlay, widthPx - halfThick, hR, stripThick, Math.Max(1.0, heightPx - 2 * hR), "HANDLE_RESIZE_E", Cursors.SizeWE, "우측 테두리 드래그: 너비(폭) 조절");
 
-            // [D] 정확히 8개의 리사이즈 포인트 (NW, N, NE, E, SE, S, SW, W - 테두리선보다 위에 배치되어 정확한 핸들 클릭 보장)
+            // [D] 정확히 8개의 리사이즈 포인트 (NW, N, NE, E, SE, S, SW, W - 지름 8px 단정하고 세련된 크기)
             // 1. 좌상단 (NW)
             AddResizeCircleHandle(overlay, -hR, -hR, "HANDLE_RESIZE_NW", Cursors.SizeNWSE, "좌상단 크기 조절");
             // 2. 상단 중앙 (N)
@@ -2493,12 +2804,12 @@ namespace BarcodePrint.WpfView
         {
             return new Border
             {
-                Width = 13,
-                Height = 13,
-                CornerRadius = new CornerRadius(6.5),
+                Width = 8,
+                Height = 8,
+                CornerRadius = new CornerRadius(4),
                 Background = Brushes.White,
                 BorderBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235)),
-                BorderThickness = new Thickness(2.2),
+                BorderThickness = new Thickness(1.2),
                 Cursor = cursor,
                 Tag = tag,
                 ToolTip = tooltip
@@ -2509,12 +2820,12 @@ namespace BarcodePrint.WpfView
         {
             var h = new Border
             {
-                Width = 11,
-                Height = 11,
-                CornerRadius = new CornerRadius(5.5),
+                Width = 8,
+                Height = 8,
+                CornerRadius = new CornerRadius(4),
                 Background = Brushes.White,
                 BorderBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235)),
-                BorderThickness = new Thickness(1.8),
+                BorderThickness = new Thickness(1.2),
                 Cursor = cursor,
                 Tag = tag,
                 ToolTip = tooltip
@@ -3055,16 +3366,24 @@ namespace BarcodePrint.WpfView
 
                 if (hitElement != null && hitElement.Tag is TemplateElement hitElem)
                 {
+                    bool selectionChanged = false;
                     if (isMultiKey)
                     {
                         ViewModel.ToggleElementSelection(hitElem);
                         _selectedTemplateElement = ViewModel.SelectedElement;
+                        selectionChanged = true;
                     }
                     else
                     {
                         if (!ViewModel.SelectedElements.Contains(hitElem))
                         {
                             ViewModel.SelectedElement = hitElem;
+                            selectionChanged = true;
+                        }
+                        else if (_selectedTemplateElement != hitElem)
+                        {
+                            _selectedTemplateElement = hitElem;
+                            selectionChanged = true;
                         }
                         _selectedTemplateElement = hitElem;
                     }
@@ -3088,14 +3407,52 @@ namespace BarcodePrint.WpfView
                         }
                     }
 
+                    GetElementVisualDimensions(hitElem, out double vWPx, out double vHPx);
+                    double leftPx = hitElem.X * MM_TO_PX;
+                    double topPx = hitElem.Y * MM_TO_PX;
+
+                    Point centerPt = new Point(leftPx + vWPx / 2.0, topPx + vHPx / 2.0);
+                    Point curMousePt = e.GetPosition(canvas);
+                    double relX = curMousePt.X - centerPt.X;
+                    double relY = curMousePt.Y - centerPt.Y;
+
+                    if (hitElem.Rotation != 0)
+                    {
+                        double rad = -hitElem.Rotation * Math.PI / 180.0;
+                        double cos = Math.Cos(rad);
+                        double sin = Math.Sin(rad);
+                        double unrotX = relX * cos - relY * sin;
+                        double unrotY = relX * sin + relY * cos;
+                        relX = unrotX;
+                        relY = unrotY;
+                    }
+
+                    double localX = relX + vWPx / 2.0;
+                    double localY = relY + vHPx / 2.0;
+
+                    const double EDGE_CLICK_TOLERANCE = 8.0;
+                    bool nearL = Math.Abs(localX) <= EDGE_CLICK_TOLERANCE;
+                    bool nearR = Math.Abs(localX - vWPx) <= EDGE_CLICK_TOLERANCE;
+                    bool nearT = Math.Abs(localY) <= EDGE_CLICK_TOLERANCE;
+                    bool nearB = Math.Abs(localY - vHPx) <= EDGE_CLICK_TOLERANCE;
+
                     _currentDragMode = TableDragMode.MoveTemplateElement;
+                    if (nearL && nearT) _currentDragMode = TableDragMode.ResizeElementNW;
+                    else if (nearR && nearT) _currentDragMode = TableDragMode.ResizeElementNE;
+                    else if (nearL && nearB) _currentDragMode = TableDragMode.ResizeElementSW;
+                    else if (nearR && nearB) _currentDragMode = TableDragMode.ResizeElementSE;
+                    else if (nearT) _currentDragMode = TableDragMode.ResizeElementN;
+                    else if (nearB) _currentDragMode = TableDragMode.ResizeElementS;
+                    else if (nearL) _currentDragMode = TableDragMode.ResizeElementW;
+                    else if (nearR) _currentDragMode = TableDragMode.ResizeElementE;
+
                     _isDragging = true;
                     _activeDragCanvas = canvas;
                     _dragStartPoint = e.GetPosition(canvas);
                     _startElemX = hitElem.X;
                     _startElemY = hitElem.Y;
-                    _startElemW = hitElem.Width;
-                    _startElemH = hitElem.Height;
+                    _startElemW = (hitElem.Width > 0) ? hitElem.Width : Math.Round(vWPx / MM_TO_PX, 1);
+                    _startElemH = (hitElem.Height > 0) ? hitElem.Height : Math.Round(vHPx / MM_TO_PX, 1);
                     _startFontSize = hitElem.FontSize;
                     _startRotation = hitElem.Rotation;
 
@@ -3108,7 +3465,10 @@ namespace BarcodePrint.WpfView
                     }
 
                     canvas.CaptureMouse();
-                    RedrawInteractiveCanvas();
+                    if (selectionChanged)
+                    {
+                        RedrawInteractiveCanvas();
+                    }
                     string selDesc = ViewModel.HasMultipleSelectedElements ? $"{ViewModel.SelectedElementsCount}개 요소 선택" : $"[{hitElem.HeaderName}] 선택 (X={hitElem.X:F1}mm, Y={hitElem.Y:F1}mm)";
                     UpdateCustomDragInfo(selDesc);
                     e.Handled = true;
@@ -3306,21 +3666,38 @@ namespace BarcodePrint.WpfView
                 int maxX = Math.Max(10, effW - 2);
                 int maxY = Math.Max(10, effH - 2);
 
+                using (ViewModel.SuppressPreviewUpdate())
+                {
                 switch (_currentDragMode)
                 {
                     case TableDragMode.MoveTemplateElement:
+                        bool isSnapKey = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+                        double boundMinX = -Math.Max(100.0, effW);
+                        double boundMinY = -Math.Max(100.0, effH);
+                        double boundMaxX = effW + Math.Max(100.0, effW);
+                        double boundMaxY = effH + Math.Max(100.0, effH);
+
                         if (_startTemplateElemOffsets.Count > 0)
                         {
                             foreach (var kvp in _startTemplateElemOffsets)
                             {
                                 var elem = kvp.Key;
                                 var startPt = kvp.Value;
-                                double newX = Math.Max(0, Math.Min(effW - 2, Math.Round((startPt.X + diffXMm) * 2.0) / 2.0));
-                                double newY = Math.Max(0, Math.Min(effH - 2, Math.Round((startPt.Y + diffYMm) * 2.0) / 2.0));
-                                elem.X = newX;
-                                elem.Y = newY;
+                                double rawX = startPt.X + diffXMm;
+                                double rawY = startPt.Y + diffYMm;
+                                double newX = isSnapKey 
+                                    ? Math.Max(boundMinX, Math.Min(boundMaxX, Math.Round(rawX * 2.0) / 2.0))
+                                    : Math.Max(boundMinX, Math.Min(boundMaxX, Math.Round(rawX, 1)));
+                                double newY = isSnapKey 
+                                    ? Math.Max(boundMinY, Math.Min(boundMaxY, Math.Round(rawY * 2.0) / 2.0))
+                                    : Math.Max(boundMinY, Math.Min(boundMaxY, Math.Round(rawY, 1)));
+                                if (elem.X != newX || elem.Y != newY)
+                                {
+                                    elem.X = newX;
+                                    elem.Y = newY;
+                                    UpdateCanvasTemplateElementPosition(canvas, elem, newX, newY);
+                                }
                             }
-                            RedrawActiveDragCanvas(canvas);
                             if (ViewModel.HasMultipleSelectedElements)
                             {
                                 UpdateCustomDragInfo($"{ViewModel.SelectedElementsCount}개 요소 이동 중");
@@ -3332,15 +3709,21 @@ namespace BarcodePrint.WpfView
                         }
                         else if (_selectedTemplateElement != null)
                         {
-                            double newX = Math.Max(0, Math.Min(effW - 2, Math.Round((_startElemX + diffXMm) * 2.0) / 2.0)); // 0.5mm 단위 스냅
-                            double newY = Math.Max(0, Math.Min(effH - 2, Math.Round((_startElemY + diffYMm) * 2.0) / 2.0));
+                            double rawX = _startElemX + diffXMm;
+                            double rawY = _startElemY + diffYMm;
+                            double newX = isSnapKey 
+                                ? Math.Max(boundMinX, Math.Min(boundMaxX, Math.Round(rawX * 2.0) / 2.0)) // Shift 누를 시 0.5mm 그리드 스냅
+                                : Math.Max(boundMinX, Math.Min(boundMaxX, Math.Round(rawX, 1)));         // 기본: 0.1mm 부드러운 고정밀 이동
+                            double newY = isSnapKey 
+                                ? Math.Max(boundMinY, Math.Min(boundMaxY, Math.Round(rawY * 2.0) / 2.0))
+                                : Math.Max(boundMinY, Math.Min(boundMaxY, Math.Round(rawY, 1)));
                             if (_selectedTemplateElement.X != newX || _selectedTemplateElement.Y != newY)
                             {
                                 _selectedTemplateElement.X = newX;
                                 _selectedTemplateElement.Y = newY;
-                                RedrawActiveDragCanvas(canvas);
+                                UpdateCanvasTemplateElementPosition(canvas, _selectedTemplateElement, newX, newY);
                             }
-                            UpdateCustomDragInfo($"[{_selectedTemplateElement.HeaderName}] X={newX:F1}mm, Y={newY:F1}mm (드래그 중)");
+                            UpdateCustomDragInfo($"[{_selectedTemplateElement.HeaderName}] X={newX:F1}mm, Y={newY:F1}mm" + (isSnapKey ? " (0.5mm 스냅)" : ""));
                         }
                         break;
 
@@ -3391,7 +3774,7 @@ namespace BarcodePrint.WpfView
                             {
                                 elem.Rotation = finalDeg;
                                 ViewModel.SelectedElementRotation = finalDeg;
-                                RedrawActiveDragCanvas(canvas);
+                                RequestThrottledCanvasRedraw(canvas);
                             }
                             UpdateCustomDragInfo($"[{elem.HeaderName} 회전] {finalDeg}°" + (isShiftDown ? " (자유 각도)" : " (15° 스냅)"));
                         }
@@ -3425,7 +3808,7 @@ namespace BarcodePrint.WpfView
                             elem.Width = Math.Max(1.0, Math.Round(newLen, 1));
                             elem.Rotation = finalAngle;
                             ViewModel.SelectedElementRotation = finalAngle;
-                            RedrawActiveDragCanvas(canvas);
+                            RequestThrottledCanvasRedraw(canvas);
                             UpdateCustomDragInfo($"[선 시작점 이동] 길이: {elem.Width:F1}mm, 각도: {elem.Rotation}°");
                         }
                         break;
@@ -3452,7 +3835,7 @@ namespace BarcodePrint.WpfView
                             elem.Width = Math.Max(1.0, Math.Round(newLen, 1));
                             elem.Rotation = finalAngle;
                             ViewModel.SelectedElementRotation = finalAngle;
-                            RedrawActiveDragCanvas(canvas);
+                            RequestThrottledCanvasRedraw(canvas);
                             UpdateCustomDragInfo($"[선 끝점 조절] 길이: {elem.Width:F1}mm, 각도: {elem.Rotation}°");
                         }
                         break;
@@ -3477,204 +3860,177 @@ namespace BarcodePrint.WpfView
 
                             double newW = _startElemW;
                             double newH = _startElemH;
-                            double localShiftX = 0;
-                            double localShiftY = 0;
 
                             const double MIN_SIZE = 3.0;
 
+                            bool isCorner = (_currentDragMode == TableDragMode.ResizeElementSE ||
+                                             _currentDragMode == TableDragMode.ResizeElementSW ||
+                                             _currentDragMode == TableDragMode.ResizeElementNE ||
+                                             _currentDragMode == TableDragMode.ResizeElementNW);
+                            bool isVert = (_currentDragMode == TableDragMode.ResizeElementS ||
+                                           _currentDragMode == TableDragMode.ResizeElementN);
+                            bool isHoriz = (_currentDragMode == TableDragMode.ResizeElementE ||
+                                            _currentDragMode == TableDragMode.ResizeElementW);
+
                             if (elem.Type == ElementType.TEXT || elem.Type == ElementType.DATE_TIME)
                             {
-                                bool isCorner = (_currentDragMode == TableDragMode.ResizeElementSE ||
-                                                 _currentDragMode == TableDragMode.ResizeElementSW ||
-                                                 _currentDragMode == TableDragMode.ResizeElementNE ||
-                                                 _currentDragMode == TableDragMode.ResizeElementNW);
-                                bool isVert = (_currentDragMode == TableDragMode.ResizeElementS ||
-                                               _currentDragMode == TableDragMode.ResizeElementN);
-                                bool isHoriz = (_currentDragMode == TableDragMode.ResizeElementE ||
-                                                _currentDragMode == TableDragMode.ResizeElementW);
-
                                 double baseFont = (_startFontSize > 0) ? _startFontSize : 10.0;
 
                                 if (isCorner)
                                 {
-                                    // 1. 모서리 드래그: 가로/세로 주된 변화량으로 폰트 크기 비례 조절
-                                    double delta = (Math.Abs(localDx) > Math.Abs(localDy)) ? localDx : localDy;
-                                    if (_currentDragMode == TableDragMode.ResizeElementNW) delta = (Math.Abs(localDx) > Math.Abs(localDy)) ? -localDx : -localDy;
-                                    else if (_currentDragMode == TableDragMode.ResizeElementSW) delta = (Math.Abs(localDx) > Math.Abs(localDy)) ? -localDx : localDy;
-                                    else if (_currentDragMode == TableDragMode.ResizeElementNE) delta = (Math.Abs(localDx) > Math.Abs(localDy)) ? localDx : -localDy;
+                                    // 1. 모서리 드래그: 대각선 방향 드래그 시 폰트 크기 비례 조절 (부드러운 실시간 스케일링)
+                                    double delta = 0;
+                                    if (_currentDragMode == TableDragMode.ResizeElementSE) delta = (localDx + localDy) / 2.0;
+                                    else if (_currentDragMode == TableDragMode.ResizeElementNW) delta = -(localDx + localDy) / 2.0;
+                                    else if (_currentDragMode == TableDragMode.ResizeElementNE) delta = (localDx - localDy) / 2.0;
+                                    else if (_currentDragMode == TableDragMode.ResizeElementSW) delta = -(localDx - localDy) / 2.0;
 
                                     double scale = Math.Max(0.2, (_startElemW + delta) / Math.Max(1.0, _startElemW));
-                                    int calcFont = (int)Math.Max(5, Math.Min(120, Math.Round(baseFont * scale)));
-                                    elem.FontSize = calcFont;
+                                    double newFont = Math.Max(5.0, Math.Min(120.0, Math.Round(baseFont * scale, 1)));
+                                    elem.FontSize = newFont;
                                     if (ViewModel != null)
                                     {
-                                        ViewModel.SyncElementToLegacyColumn(elem);
-                                        ViewModel.SelectedElementFontSize = calcFont;
+                                        ViewModel.SelectedElementFontSize = (int)Math.Round(newFont);
                                     }
 
-                                    double targetW = Math.Max(MIN_SIZE, _startElemW * scale);
-                                    // 변경된 폰트 크기에 맞춰 텍스트와 테두리 치수 정밀 동기화
-                                    MeasureTextDimensions(elem, targetW, out double wPx, out double hPx, out _, out _);
-                                    newW = Math.Round(wPx / MM_TO_PX, 1);
-                                    newH = Math.Round(hPx / MM_TO_PX, 1);
-
-                                    double diffW = newW - _startElemW;
-                                    double diffH = newH - _startElemH;
-                                    if (_currentDragMode == TableDragMode.ResizeElementNW)
-                                    {
-                                        localShiftX = -diffW;
-                                        localShiftY = -diffH;
-                                    }
-                                    else if (_currentDragMode == TableDragMode.ResizeElementSW)
-                                    {
-                                        localShiftX = -diffW;
-                                    }
-                                    else if (_currentDragMode == TableDragMode.ResizeElementNE)
-                                    {
-                                        localShiftY = -diffH;
-                                    }
+                                    // 폰트 크기에 따른 텍스트 자연 크기 측정
+                                    MeasureTextDimensions(elem, 0, out double wPx, out double hPx, out _, out _);
+                                    newW = Math.Max(MIN_SIZE, Math.Round(wPx / MM_TO_PX, 1));
+                                    newH = Math.Max(MIN_SIZE, Math.Round(hPx / MM_TO_PX, 1));
                                 }
                                 else if (isVert)
                                 {
-                                    // 2. 세로 드래그: 세로 높이 변화에 맞춰 폰트 크기 비례 조절
-                                    double deltaY = (_currentDragMode == TableDragMode.ResizeElementS) ? localDy : -localDy;
-                                    double targetH = Math.Max(MIN_SIZE, _startElemH + deltaY);
-                                    double scale = Math.Max(0.2, targetH / Math.Max(1.0, _startElemH));
-                                    int calcFont = (int)Math.Max(5, Math.Min(120, Math.Round(baseFont * scale)));
-                                    elem.FontSize = calcFont;
-                                    if (ViewModel != null)
-                                    {
-                                        ViewModel.SyncElementToLegacyColumn(elem);
-                                        ViewModel.SelectedElementFontSize = calcFont;
-                                    }
-
+                                    // 2. 세로(상/하) 테두리 드래그: 폰트 크기와 가로폭을 고정하고, 텍스트 상자 세로 높이(상하 여백)를 0.1mm 단위로 부드럽게 조절
                                     MeasureTextDimensions(elem, _startElemW, out double wPx, out double hPx, out _, out _);
-                                    newW = Math.Round(wPx / MM_TO_PX, 1);
-                                    newH = Math.Round(hPx / MM_TO_PX, 1);
+                                    double minTextHMm = Math.Round(hPx / MM_TO_PX, 1);
 
-                                    if (_currentDragMode == TableDragMode.ResizeElementN)
-                                    {
-                                        localShiftY = _startElemH - newH;
-                                    }
+                                    double deltaY = (_currentDragMode == TableDragMode.ResizeElementS) ? localDy : -localDy;
+                                    newH = Math.Max(minTextHMm, Math.Round(_startElemH + deltaY, 1));
+                                    newW = _startElemW; // 가로폭 절대 보존
                                 }
                                 else if (isHoriz)
                                 {
-                                    // 3. 가로 드래그: 폰트 크기는 그대로 유지하고, 가로폭(Width)을 변경하여 좁아지면 자동 줄바꿈
+                                    // 3. 가로(좌/우) 테두리 드래그: 폰트 크기는 그대로 유지하고 너비를 0.1mm 단위로 연속 조절하여 자동 줄바꿈 영역 제어
                                     double deltaX = (_currentDragMode == TableDragMode.ResizeElementE) ? localDx : -localDx;
-                                    double targetW = Math.Max(MIN_SIZE, _startElemW + deltaX);
+                                    newW = Math.Max(MIN_SIZE, Math.Round(_startElemW + deltaX, 1));
 
-                                    elem.FontSize = (int)baseFont;
-                                    if (ViewModel != null)
-                                    {
-                                        ViewModel.SelectedElementFontSize = (int)baseFont;
-                                    }
-
-                                    // targetW를 기준으로 텍스트 자동 줄바꿈 및 전체 높이 재계산
-                                    MeasureTextDimensions(elem, targetW, out double wPx, out double hPx, out _, out bool isWrapped);
-                                    newW = Math.Round(targetW, 1);
-                                    newH = Math.Round(hPx / MM_TO_PX, 1);
-
-                                    if (ViewModel != null)
-                                    {
-                                        elem.Width = newW;
-                                        elem.Height = newH;
-                                        ViewModel.SyncElementToLegacyColumn(elem);
-                                    }
-
-                                    if (_currentDragMode == TableDragMode.ResizeElementW)
-                                    {
-                                        localShiftX = _startElemW - newW;
-                                    }
+                                    // 줄바꿈에 따른 필요 높이 계산
+                                    MeasureTextDimensions(elem, newW, out double wPx, out double hPx, out _, out bool isWrapped);
+                                    double textHMm = Math.Round(hPx / MM_TO_PX, 1);
+                                    newH = Math.Max(textHMm, _startElemH);
                                 }
                             }
                             else
                             {
-                                // 일반 요소 (바코드, 도형, 이미지 등)
+                                // 일반 요소 (바코드, QR코드, 도형, 이미지 등)
                                 switch (_currentDragMode)
                                 {
                                     case TableDragMode.ResizeElementE:
-                                        newW = Math.Max(MIN_SIZE, _startElemW + localDx);
+                                        newW = Math.Max(MIN_SIZE, Math.Round(_startElemW + localDx, 1));
                                         break;
                                     case TableDragMode.ResizeElementW:
-                                        newW = Math.Max(MIN_SIZE, _startElemW - localDx);
-                                        localShiftX = _startElemW - newW;
+                                        newW = Math.Max(MIN_SIZE, Math.Round(_startElemW - localDx, 1));
                                         break;
                                     case TableDragMode.ResizeElementS:
-                                        newH = Math.Max(MIN_SIZE, _startElemH + localDy);
+                                        newH = Math.Max(MIN_SIZE, Math.Round(_startElemH + localDy, 1));
                                         break;
                                     case TableDragMode.ResizeElementN:
-                                        newH = Math.Max(MIN_SIZE, _startElemH - localDy);
-                                        localShiftY = _startElemH - newH;
+                                        newH = Math.Max(MIN_SIZE, Math.Round(_startElemH - localDy, 1));
                                         break;
                                     case TableDragMode.ResizeElementSE:
-                                        newW = Math.Max(MIN_SIZE, _startElemW + localDx);
-                                        newH = Math.Max(MIN_SIZE, _startElemH + localDy);
+                                        newW = Math.Max(MIN_SIZE, Math.Round(_startElemW + localDx, 1));
+                                        newH = Math.Max(MIN_SIZE, Math.Round(_startElemH + localDy, 1));
                                         break;
                                     case TableDragMode.ResizeElementSW:
-                                        newW = Math.Max(MIN_SIZE, _startElemW - localDx);
-                                        localShiftX = _startElemW - newW;
-                                        newH = Math.Max(MIN_SIZE, _startElemH + localDy);
+                                        newW = Math.Max(MIN_SIZE, Math.Round(_startElemW - localDx, 1));
+                                        newH = Math.Max(MIN_SIZE, Math.Round(_startElemH + localDy, 1));
                                         break;
                                     case TableDragMode.ResizeElementNE:
-                                        newW = Math.Max(MIN_SIZE, _startElemW + localDx);
-                                        newH = Math.Max(MIN_SIZE, _startElemH - localDy);
-                                        localShiftY = _startElemH - newH;
+                                        newW = Math.Max(MIN_SIZE, Math.Round(_startElemW + localDx, 1));
+                                        newH = Math.Max(MIN_SIZE, Math.Round(_startElemH - localDy, 1));
                                         break;
                                     case TableDragMode.ResizeElementNW:
-                                        newW = Math.Max(MIN_SIZE, _startElemW - localDx);
-                                        localShiftX = _startElemW - newW;
-                                        newH = Math.Max(MIN_SIZE, _startElemH - localDy);
-                                        localShiftY = _startElemH - newH;
+                                        newW = Math.Max(MIN_SIZE, Math.Round(_startElemW - localDx, 1));
+                                        newH = Math.Max(MIN_SIZE, Math.Round(_startElemH - localDy, 1));
                                         break;
                                 }
 
-                                if (elem.Type == ElementType.BARCODE || elem.Type == ElementType.QR_CODE)
+                                if (elem.Type == ElementType.QR_CODE && isCorner)
                                 {
-                                    if (elem.Type == ElementType.QR_CODE)
-                                    {
-                                        bool isCornerDrag = (_currentDragMode == TableDragMode.ResizeElementSE ||
-                                                             _currentDragMode == TableDragMode.ResizeElementSW ||
-                                                             _currentDragMode == TableDragMode.ResizeElementNE ||
-                                                             _currentDragMode == TableDragMode.ResizeElementNW);
-                                        if (isCornerDrag)
-                                        {
-                                            // QR코드는 모서리 조절 시 완벽한 정사각형(1:1) 비율 유지
-                                            double maxDim = Math.Max(newW, newH);
-                                            newW = maxDim;
-                                            newH = maxDim;
-                                            if (_currentDragMode == TableDragMode.ResizeElementNW)
-                                            {
-                                                localShiftX = _startElemW - newW;
-                                                localShiftY = _startElemH - newH;
-                                            }
-                                            else if (_currentDragMode == TableDragMode.ResizeElementSW)
-                                            {
-                                                localShiftX = _startElemW - newW;
-                                            }
-                                            else if (_currentDragMode == TableDragMode.ResizeElementNE)
-                                            {
-                                                localShiftY = _startElemH - newH;
-                                            }
-                                        }
-                                    }
-
+                                    // QR코드는 모서리 조절 시 완벽한 1:1 정사각형 비율 유지
+                                    double maxDim = Math.Max(newW, newH);
+                                    newW = maxDim;
+                                    newH = maxDim;
+                                }
+                                else if (elem.Type == ElementType.BARCODE)
+                                {
                                     int calcBarH = (int)Math.Max(10, Math.Min(120, Math.Round(newH * 2.5)));
                                     elem.FontSize = calcBarH;
                                     if (ViewModel != null)
                                     {
-                                        ViewModel.SyncElementToLegacyColumn(elem);
                                         ViewModel.SelectedElementFontSize = calcBarH;
                                     }
                                 }
                             }
 
-                            // 로컬 Shift(좌상단 이동량)를 글로벌 좌표로 변환
-                            double globalShiftX = localShiftX * cos - localShiftY * sin;
-                            double globalShiftY = localShiftX * sin + localShiftY * cos;
+                            // 수학적 앵커(Anchor) 모델: 고정되어야 할 반대편 변/모서리를 0.001mm 오차도 없이 화면에 완벽 고정
+                            double c0x = _startElemX + (_startElemW / 2.0);
+                            double c0y = _startElemY + (_startElemH / 2.0);
+                            double uAnchor = 0;
+                            double vAnchor = 0;
+                            double uPrimeAnchor = 0;
+                            double vPrimeAnchor = 0;
 
-                            double newX = Math.Max(0, Math.Min(effW - 2, Math.Round((_startElemX + globalShiftX) * 2.0) / 2.0));
-                            double newY = Math.Max(0, Math.Min(effH - 2, Math.Round((_startElemY + globalShiftY) * 2.0) / 2.0));
+                            switch (_currentDragMode)
+                            {
+                                case TableDragMode.ResizeElementE:
+                                    uAnchor = -_startElemW / 2.0; vAnchor = 0;
+                                    uPrimeAnchor = -newW / 2.0; vPrimeAnchor = 0;
+                                    break;
+                                case TableDragMode.ResizeElementW:
+                                    uAnchor = _startElemW / 2.0; vAnchor = 0;
+                                    uPrimeAnchor = newW / 2.0; vPrimeAnchor = 0;
+                                    break;
+                                case TableDragMode.ResizeElementS:
+                                    uAnchor = 0; vAnchor = -_startElemH / 2.0;
+                                    uPrimeAnchor = 0; vPrimeAnchor = -newH / 2.0;
+                                    break;
+                                case TableDragMode.ResizeElementN:
+                                    uAnchor = 0; vAnchor = _startElemH / 2.0;
+                                    uPrimeAnchor = 0; vPrimeAnchor = newH / 2.0;
+                                    break;
+                                case TableDragMode.ResizeElementSE:
+                                    uAnchor = -_startElemW / 2.0; vAnchor = -_startElemH / 2.0;
+                                    uPrimeAnchor = -newW / 2.0; vPrimeAnchor = -newH / 2.0;
+                                    break;
+                                case TableDragMode.ResizeElementSW:
+                                    uAnchor = _startElemW / 2.0; vAnchor = -_startElemH / 2.0;
+                                    uPrimeAnchor = newW / 2.0; vPrimeAnchor = -newH / 2.0;
+                                    break;
+                                case TableDragMode.ResizeElementNE:
+                                    uAnchor = -_startElemW / 2.0; vAnchor = _startElemH / 2.0;
+                                    uPrimeAnchor = -newW / 2.0; vPrimeAnchor = newH / 2.0;
+                                    break;
+                                case TableDragMode.ResizeElementNW:
+                                    uAnchor = _startElemW / 2.0; vAnchor = _startElemH / 2.0;
+                                    uPrimeAnchor = newW / 2.0; vPrimeAnchor = newH / 2.0;
+                                    break;
+                            }
 
+                            // 앵커 점의 불변 글로벌 좌표
+                            double anchorGx = c0x + (uAnchor * cos - vAnchor * sin);
+                            double anchorGy = c0y + (uAnchor * sin + vAnchor * cos);
+
+                            // 새 중심점 및 좌상단 좌표 역산
+                            double cPrimeX = anchorGx - (uPrimeAnchor * cos - vPrimeAnchor * sin);
+                            double cPrimeY = anchorGy - (uPrimeAnchor * sin + vPrimeAnchor * cos);
+
+                            double newX = cPrimeX - (newW / 2.0);
+                            double newY = cPrimeY - (newH / 2.0);
+
+                            // 0.1mm 정밀도로 부드럽게 갱신 (용지 밖으로도 자유롭게 크기/위치 조절 가능)
+                            newX = Math.Max(-100.0, Math.Min(effW + 100.0, Math.Round(newX, 1)));
+                            newY = Math.Max(-100.0, Math.Min(effH + 100.0, Math.Round(newY, 1)));
                             newW = Math.Round(newW, 1);
                             newH = Math.Round(newH, 1);
 
@@ -3683,8 +4039,8 @@ namespace BarcodePrint.WpfView
                             elem.Width = newW;
                             elem.Height = newH;
 
-                            RedrawActiveDragCanvas(canvas);
-                            UpdateCustomDragInfo($"[{elem.HeaderName} 크기 조절] {newW:F1} × {newH:F1} mm" + (elem.Type == ElementType.TEXT ? $", 폰트: {elem.FontSize}pt" : ""));
+                            RequestThrottledCanvasRedraw(canvas);
+                            UpdateCustomDragInfo($"[{elem.HeaderName} 크기 조절] {newW:F1} × {newH:F1} mm" + (elem.Type == ElementType.TEXT ? $", 폰트: {elem.FontSize:F1}pt" : ""));
                         }
                         break;
 
@@ -3704,7 +4060,7 @@ namespace BarcodePrint.WpfView
                                         matchingElem.Width = newW;
                                     }
                                 }
-                                RedrawActiveDragCanvas(canvas);
+                                RequestThrottledCanvasRedraw(canvas);
                             }
                             string colDesc = (_resizingColNum == 99) ? "날짜/시간" : ((_resizingColNum == 101) ? "순번" : $"{_resizingColNum}열");
                             UpdateCustomDragInfo($"[{colDesc} 박스 너비] {newW} mm (줄바꿈 폭)");
@@ -3717,7 +4073,7 @@ namespace BarcodePrint.WpfView
                             if (ViewModel.TableHeaderWidthMm != newW)
                             {
                                 ViewModel.TableHeaderWidthMm = newW;
-                                RedrawActiveDragCanvas(canvas);
+                                RequestThrottledCanvasRedraw(canvas);
                             }
                             UpdateCustomDragInfo($"[제목 열 너비] {newW} mm");
                         }
@@ -3731,7 +4087,7 @@ namespace BarcodePrint.WpfView
                             if (ViewModel.TableHeaderHeightMm != newH)
                             {
                                 ViewModel.TableHeaderHeightMm = newH;
-                                RedrawActiveDragCanvas(canvas);
+                                RequestThrottledCanvasRedraw(canvas);
                             }
                             UpdateCustomDragInfo($"[헤더 행 높이] {newH} mm");
                         }
@@ -3742,7 +4098,7 @@ namespace BarcodePrint.WpfView
                             int targetColNum = GetTextColNumByIndex(_resizingRowIndex);
                             int newH = (int)Math.Max(3, Math.Min(maxY, Math.Round(_startSpecificRowHeightMm + diffYMm)));
                             ViewModel.SetRowHeightByIndex(targetColNum, newH);
-                            RedrawActiveDragCanvas(canvas);
+                            RequestThrottledCanvasRedraw(canvas);
                             UpdateCustomDragInfo($"[{targetColNum}열 높이] {newH} mm");
                         }
                         break;
@@ -3755,7 +4111,7 @@ namespace BarcodePrint.WpfView
                             if (ViewModel.TableWidth != newW)
                             {
                                 ViewModel.TableWidth = newW;
-                                RedrawActiveDragCanvas(canvas);
+                                RequestThrottledCanvasRedraw(canvas);
                             }
                             UpdateCustomDragInfo($"[표 전체 너비] {newW} mm");
                         }
@@ -3769,7 +4125,7 @@ namespace BarcodePrint.WpfView
                             if (ViewModel.TableHeight != newH)
                             {
                                 ViewModel.TableHeight = newH;
-                                RedrawActiveDragCanvas(canvas);
+                                RequestThrottledCanvasRedraw(canvas);
                             }
                             UpdateCustomDragInfo($"[표 전체 높이] {newH} mm");
                         }
@@ -3785,7 +4141,7 @@ namespace BarcodePrint.WpfView
                                 int targetYMm = Math.Max(0, Math.Min(maxY, (int)Math.Round(_startOffsetY + diffYMm)));
                                 ViewModel.TableOffsetX = targetXMm;
                                 ViewModel.TableOffsetY = targetYMm;
-                                RedrawActiveDragCanvas(canvas);
+                                RequestThrottledCanvasRedraw(canvas);
                                 UpdateCustomDragInfo($"[표 위치] X: {targetXMm}mm, Y: {targetYMm}mm");
                             }
                             else if (_selectedItemIndex == 100)
@@ -3796,7 +4152,7 @@ namespace BarcodePrint.WpfView
                                 double startXMm = ViewModel.TableOffsetX > 0 ? ViewModel.TableOffsetX : 2.0;
                                 ViewModel.TableTitleOffsetX = (int)Math.Round(targetXMm - startXMm);
                                 ViewModel.TableTitleOffsetY = Math.Max(0, targetYMm - (ViewModel.TableOffsetY > 0 ? ViewModel.TableOffsetY : 2));
-                                RedrawActiveDragCanvas(canvas);
+                                RequestThrottledCanvasRedraw(canvas);
                                 UpdateCustomDragInfo($"[표 제목 위치] X: {targetXMm}mm, Y: {targetYMm}mm");
                             }
                             else
@@ -3818,6 +4174,7 @@ namespace BarcodePrint.WpfView
                         }
                         break;
                 }
+                }
             }
             catch (Exception ex)
             {
@@ -3838,6 +4195,57 @@ namespace BarcodePrint.WpfView
                         {
                             Canvas.SetLeft(fe, xMm * MM_TO_PX);
                             Canvas.SetTop(fe, yMm * MM_TO_PX);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void RequestThrottledCanvasRedraw(Canvas canvas)
+        {
+            if (canvas == null) return;
+            long now = _dragRenderThrottleStopwatch.ElapsedMilliseconds;
+            if (now - _lastDragRenderMs >= 16) // ~60fps 주기로 스로틀링하여 UI 스레드 100% 포화 방지
+            {
+                _lastDragRenderMs = now;
+                RedrawActiveDragCanvas(canvas);
+            }
+        }
+
+        private void UpdateCanvasTemplateElementPosition(Canvas canvas, TemplateElement elem, double xMm, double yMm)
+        {
+            if (canvas == null || elem == null) return;
+            try
+            {
+                double leftPx = xMm * MM_TO_PX;
+                double topPx = yMm * MM_TO_PX;
+
+                for (int i = 0; i < canvas.Children.Count; i++)
+                {
+                    if (canvas.Children[i] is FrameworkElement fe && fe.Tag != null)
+                    {
+                        if (ReferenceEquals(fe.Tag, elem) || 
+                            (fe.Tag is TemplateElement te && te.Id == elem.Id))
+                        {
+                            Canvas.SetLeft(fe, leftPx);
+                            Canvas.SetTop(fe, topPx);
+                        }
+                        else if (elem.IsVariable && elem.InputOrder >= 1 && elem.InputOrder <= 8 &&
+                                 int.TryParse(fe.Tag.ToString(), out int rawIdx) && rawIdx == elem.InputOrder - 1)
+                        {
+                            Canvas.SetLeft(fe, leftPx);
+                            Canvas.SetTop(fe, topPx);
+                        }
+                        else if (elem.Id == "DATETIME_ELEMENT" && fe.Tag.ToString() == "99")
+                        {
+                            Canvas.SetLeft(fe, leftPx);
+                            Canvas.SetTop(fe, topPx);
+                        }
+                        else if (elem.Id == "SERIAL_ELEMENT" && fe.Tag.ToString() == "101")
+                        {
+                            Canvas.SetLeft(fe, leftPx);
+                            Canvas.SetTop(fe, topPx);
                         }
                     }
                 }
@@ -3984,42 +4392,50 @@ namespace BarcodePrint.WpfView
 
                 if (ViewModel != null)
                 {
-                    if (ViewModel.HasMultipleSelectedElements)
+                    using (ViewModel.SuppressPreviewUpdate())
                     {
-                        foreach (var elem in ViewModel.SelectedElements)
+                        if (ViewModel.HasMultipleSelectedElements)
                         {
-                            ViewModel.SyncElementToLegacyColumn(elem);
+                            foreach (var elem in ViewModel.SelectedElements)
+                            {
+                                ViewModel.SyncElementToLegacyColumn(elem);
+                            }
+                            ViewModel.NotifySelectedElementProperties();
                         }
-                        ViewModel.UpdatePreview();
-                    }
-                    else if (_selectedTemplateElement != null)
-                    {
-                        ViewModel.SyncElementToLegacyColumn(_selectedTemplateElement);
-                        ViewModel.UpdatePreview();
-                        // 드래그 종료 후에도 선택 상태 및 조절 핸들 유지 (빈 공간 클릭 시 해제)
-                    }
-                    else
-                    {
-                        bool isBarcodeCol = (_selectedItemIndex >= 0 && _selectedItemIndex < 8) && ViewModel.GetBarcodeByIndex(_selectedItemIndex + 1);
-                        if (ViewModel.IsTableBorderEnabled && _selectedItemIndex >= 0 && _selectedItemIndex < 8 && !isBarcodeCol)
+                        else if (_selectedTemplateElement != null)
                         {
-                            ViewModel.UpdatePreview();
-                        }
-                        else if (_selectedItemIndex == 100)
-                        {
-                            ViewModel.UpdatePreview();
+                            ViewModel.SyncElementToLegacyColumn(_selectedTemplateElement);
+                            ViewModel.NotifySelectedElementProperties();
                         }
                         else
                         {
-                            foreach (int idx in _selectedItemIndices)
+                            bool isBarcodeCol = (_selectedItemIndex >= 0 && _selectedItemIndex < 8) && ViewModel.GetBarcodeByIndex(_selectedItemIndex + 1);
+                            if (ViewModel.IsTableBorderEnabled && _selectedItemIndex >= 0 && _selectedItemIndex < 8 && !isBarcodeCol)
                             {
-                                GetItemOffset(idx, out int x, out int y);
-                                ViewModel.SetItemOffsetDirect(idx, x, y, triggerPreview: false);
+                                // 표 모드 위치/너비 변경 완료
                             }
-                            ViewModel.UpdatePreview();
+                            else if (_selectedItemIndex == 100)
+                            {
+                                // 표 제목 변경 완료
+                            }
+                            else
+                            {
+                                foreach (int idx in _selectedItemIndices)
+                                {
+                                    GetItemOffset(idx, out int x, out int y);
+                                    ViewModel.SetItemOffsetDirect(idx, x, y, triggerPreview: false);
+                                }
+                            }
                         }
                     }
-                    RedrawInteractiveCanvas();
+
+                    if (_hasMovedDuringDrag)
+                    {
+                        RedrawInteractiveCanvas();
+                    }
+
+                    // 드래그 조작 완료 후 백그라운드에서 변경된 설정 안전하게 자동 보존
+                    System.Threading.Tasks.Task.Run(() => ViewModel?.SaveSettingsSilently());
                 }
             }
             catch (Exception ex)
@@ -4030,15 +4446,253 @@ namespace BarcodePrint.WpfView
 
         // 1. 우측 전역 미리보기 캔버스 이벤트 (단건 / 엑셀 통합)
         private void OnGlobalCanvasMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => StartCanvasDrag(sender as Canvas ?? GlobalCanvas, e);
-        private void OnGlobalCanvasMouseMove(object sender, MouseEventArgs e) => ProcessCanvasDrag(sender as Canvas ?? GlobalCanvas, e);
+        private void OnGlobalCanvasMouseMove(object sender, MouseEventArgs e)
+        {
+            var canvas = sender as Canvas ?? GlobalCanvas;
+            if (_isDragging)
+            {
+                ProcessCanvasDrag(canvas, e);
+            }
+            else
+            {
+                UpdateCanvasHoverCursor(canvas, e);
+            }
+        }
         private void OnGlobalCanvasMouseLeftButtonUp(object sender, MouseButtonEventArgs e) => EndCanvasDrag(sender as Canvas ?? GlobalCanvas);
         private void OnGlobalCanvasMouseWheel(object sender, MouseWheelEventArgs e) => HandleCanvasZoomWheel(e);
 
         // 2. 탭2 내부 캔버스 이벤트
         private void OnCanvasMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => StartCanvasDrag(sender as Canvas ?? DragCanvas, e);
-        private void OnCanvasMouseMove(object sender, MouseEventArgs e) => ProcessCanvasDrag(sender as Canvas ?? DragCanvas, e);
+        private void OnCanvasMouseMove(object sender, MouseEventArgs e)
+        {
+            var canvas = sender as Canvas ?? DragCanvas;
+            if (_isDragging)
+            {
+                ProcessCanvasDrag(canvas, e);
+            }
+            else
+            {
+                UpdateCanvasHoverCursor(canvas, e);
+            }
+        }
         private void OnCanvasMouseLeftButtonUp(object sender, MouseButtonEventArgs e) => EndCanvasDrag(sender as Canvas ?? DragCanvas);
         private void OnCanvasMouseWheel(object sender, MouseWheelEventArgs e) => HandleCanvasZoomWheel(e);
+
+        private void OnCanvasMouseLeave(object sender, MouseEventArgs e)
+        {
+            if (!_isDragging && sender is Canvas canvas)
+            {
+                canvas.Cursor = Cursors.Arrow;
+            }
+        }
+
+        private void UpdateCanvasHoverCursor(Canvas canvas, MouseEventArgs e)
+        {
+            if (_isDragging || ViewModel == null || canvas == null) return;
+
+            if (_canvasInlineTextBox != null && _canvasInlineTextBox.IsMouseOver)
+            {
+                canvas.Cursor = Cursors.IBeam;
+                return;
+            }
+
+            Point mousePt = e.GetPosition(canvas);
+
+            // 1. 선택된 요소가 있는 경우 최우선 판별 (핸들 및 테두리선)
+            var selElem = _selectedTemplateElement ?? ViewModel.SelectedElement;
+            if (selElem != null)
+            {
+                GetElementVisualDimensions(selElem, out double wPx, out double hPx);
+                double leftPx = selElem.X * MM_TO_PX;
+                double topPx = selElem.Y * MM_TO_PX;
+
+                if (selElem.Type == ElementType.LINE)
+                {
+                    Point startPt = new Point(leftPx, topPx);
+                    double lengthPx = wPx;
+                    double rotRad = selElem.Rotation * Math.PI / 180.0;
+                    Point endPt = new Point(leftPx + lengthPx * Math.Cos(rotRad), topPx + lengthPx * Math.Sin(rotRad));
+
+                    double dStart = (mousePt.X - startPt.X) * (mousePt.X - startPt.X) + (mousePt.Y - startPt.Y) * (mousePt.Y - startPt.Y);
+                    double dEnd = (mousePt.X - endPt.X) * (mousePt.X - endPt.X) + (mousePt.Y - endPt.Y) * (mousePt.Y - endPt.Y);
+
+                    if (dStart <= 120 || dEnd <= 120)
+                    {
+                        canvas.Cursor = Cursors.Cross;
+                        return;
+                    }
+                }
+                else
+                {
+                    Point centerPt = new Point(leftPx + wPx / 2.0, topPx + hPx / 2.0);
+                    double relX = mousePt.X - centerPt.X;
+                    double relY = mousePt.Y - centerPt.Y;
+
+                    if (selElem.Rotation != 0)
+                    {
+                        double rad = -selElem.Rotation * Math.PI / 180.0;
+                        double cos = Math.Cos(rad);
+                        double sin = Math.Sin(rad);
+                        double unrotX = relX * cos - relY * sin;
+                        double unrotY = relX * sin + relY * cos;
+                        relX = unrotX;
+                        relY = unrotY;
+                    }
+
+                    double localX = relX + wPx / 2.0;
+                    double localY = relY + hPx / 2.0;
+
+                    // 회전 핸들: (wPx / 2, -26) 반경 14px
+                    double rotDist = 26.0;
+                    if (Math.Abs(localX - wPx / 2.0) <= 14 && Math.Abs(localY - (-rotDist)) <= 14)
+                    {
+                        canvas.Cursor = Cursors.Hand;
+                        return;
+                    }
+
+                    const double CORNER_R = 10.0;
+                    const double EDGE_TOLERANCE = 8.0;
+
+                    // 4 모서리 (코너 핸들)
+                    if (Math.Abs(localX) <= CORNER_R && Math.Abs(localY) <= CORNER_R)
+                    {
+                        canvas.Cursor = GetRotatedCursor(Cursors.SizeNWSE, selElem.Rotation);
+                        return;
+                    }
+                    if (Math.Abs(localX - wPx) <= CORNER_R && Math.Abs(localY) <= CORNER_R)
+                    {
+                        canvas.Cursor = GetRotatedCursor(Cursors.SizeNESW, selElem.Rotation);
+                        return;
+                    }
+                    if (Math.Abs(localX) <= CORNER_R && Math.Abs(localY - hPx) <= CORNER_R)
+                    {
+                        canvas.Cursor = GetRotatedCursor(Cursors.SizeNESW, selElem.Rotation);
+                        return;
+                    }
+                    if (Math.Abs(localX - wPx) <= CORNER_R && Math.Abs(localY - hPx) <= CORNER_R)
+                    {
+                        canvas.Cursor = GetRotatedCursor(Cursors.SizeNWSE, selElem.Rotation);
+                        return;
+                    }
+
+                    // 4 테두리선 (상, 하, 좌, 우)
+                    if (Math.Abs(localY) <= EDGE_TOLERANCE && localX >= -EDGE_TOLERANCE && localX <= wPx + EDGE_TOLERANCE)
+                    {
+                        canvas.Cursor = GetRotatedCursor(Cursors.SizeNS, selElem.Rotation);
+                        return;
+                    }
+                    if (Math.Abs(localY - hPx) <= EDGE_TOLERANCE && localX >= -EDGE_TOLERANCE && localX <= wPx + EDGE_TOLERANCE)
+                    {
+                        canvas.Cursor = GetRotatedCursor(Cursors.SizeNS, selElem.Rotation);
+                        return;
+                    }
+                    if (Math.Abs(localX) <= EDGE_TOLERANCE && localY >= -EDGE_TOLERANCE && localY <= hPx + EDGE_TOLERANCE)
+                    {
+                        canvas.Cursor = GetRotatedCursor(Cursors.SizeWE, selElem.Rotation);
+                        return;
+                    }
+                    if (Math.Abs(localX - wPx) <= EDGE_TOLERANCE && localY >= -EDGE_TOLERANCE && localY <= hPx + EDGE_TOLERANCE)
+                    {
+                        canvas.Cursor = GetRotatedCursor(Cursors.SizeWE, selElem.Rotation);
+                        return;
+                    }
+
+                    // 요소 본문 내부
+                    if (localX >= 0 && localX <= wPx && localY >= 0 && localY <= hPx)
+                    {
+                        canvas.Cursor = Cursors.SizeAll;
+                        return;
+                    }
+                }
+            }
+
+            // 2. 다른 요소들 호버 판정 (테두리선 근처면 리사이즈 커서, 내부면 SizeAll)
+            if (ViewModel.CurrentTemplate?.Elements != null)
+            {
+                for (int i = ViewModel.CurrentTemplate.Elements.Count - 1; i >= 0; i--)
+                {
+                    var elem = ViewModel.CurrentTemplate.Elements[i];
+                    if (elem.IsVariable && elem.InputOrder > ViewModel.ActiveColumnCount) continue;
+
+                    GetElementVisualDimensions(elem, out double wPx, out double hPx);
+                    double leftPx = elem.X * MM_TO_PX;
+                    double topPx = elem.Y * MM_TO_PX;
+
+                    Point centerPt = new Point(leftPx + wPx / 2.0, topPx + hPx / 2.0);
+                    double relX = mousePt.X - centerPt.X;
+                    double relY = mousePt.Y - centerPt.Y;
+
+                    if (elem.Rotation != 0)
+                    {
+                        double rad = -elem.Rotation * Math.PI / 180.0;
+                        double cos = Math.Cos(rad);
+                        double sin = Math.Sin(rad);
+                        double unrotX = relX * cos - relY * sin;
+                        double unrotY = relX * sin + relY * cos;
+                        relX = unrotX;
+                        relY = unrotY;
+                    }
+
+                    double localX = relX + wPx / 2.0;
+                    double localY = relY + hPx / 2.0;
+
+                    const double EDGE_TOLERANCE = 6.0;
+                    bool nearLeft = Math.Abs(localX) <= EDGE_TOLERANCE;
+                    bool nearRight = Math.Abs(localX - wPx) <= EDGE_TOLERANCE;
+                    bool nearTop = Math.Abs(localY) <= EDGE_TOLERANCE;
+                    bool nearBottom = Math.Abs(localY - hPx) <= EDGE_TOLERANCE;
+
+                    if (localX >= -EDGE_TOLERANCE && localX <= wPx + EDGE_TOLERANCE &&
+                        localY >= -EDGE_TOLERANCE && localY <= hPx + EDGE_TOLERANCE)
+                    {
+                        if ((nearLeft || nearRight) && (nearTop || nearBottom))
+                        {
+                            canvas.Cursor = (nearLeft == nearTop) ? GetRotatedCursor(Cursors.SizeNWSE, elem.Rotation) : GetRotatedCursor(Cursors.SizeNESW, elem.Rotation);
+                            return;
+                        }
+                        if (nearTop || nearBottom)
+                        {
+                            canvas.Cursor = GetRotatedCursor(Cursors.SizeNS, elem.Rotation);
+                            return;
+                        }
+                        if (nearLeft || nearRight)
+                        {
+                            canvas.Cursor = GetRotatedCursor(Cursors.SizeWE, elem.Rotation);
+                            return;
+                        }
+
+                        canvas.Cursor = Cursors.SizeAll;
+                        return;
+                    }
+                }
+            }
+
+            canvas.Cursor = Cursors.Arrow;
+        }
+
+        private Cursor GetRotatedCursor(Cursor baseCursor, int rotation)
+        {
+            int normRot = ((rotation % 360) + 360) % 360;
+            if (normRot >= 45 && normRot < 135)
+            {
+                if (baseCursor == Cursors.SizeWE) return Cursors.SizeNS;
+                if (baseCursor == Cursors.SizeNS) return Cursors.SizeWE;
+                if (baseCursor == Cursors.SizeNWSE) return Cursors.SizeNESW;
+                if (baseCursor == Cursors.SizeNESW) return Cursors.SizeNWSE;
+            }
+            else if (normRot >= 135 && normRot < 225)
+            {
+                return baseCursor;
+            }
+            else if (normRot >= 225 && normRot < 315)
+            {
+                if (baseCursor == Cursors.SizeWE) return Cursors.SizeNS;
+                if (baseCursor == Cursors.SizeNS) return Cursors.SizeWE;
+                if (baseCursor == Cursors.SizeNWSE) return Cursors.SizeNESW;
+                if (baseCursor == Cursors.SizeNESW) return Cursors.SizeNWSE;
+            }
+            return baseCursor;
+        }
 
         private void HandleCanvasZoomWheel(MouseWheelEventArgs e)
         {

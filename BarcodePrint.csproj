@@ -386,6 +386,13 @@
     <Compile Include="WpfView\LabelSetupWizardDialog.xaml.cs">
       <DependentUpon>LabelSetupWizardDialog.xaml</DependentUpon>
     </Compile>
+    <Page Include="WpfView\PrintSetupDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\PrintSetupDialog.xaml.cs">
+      <DependentUpon>PrintSetupDialog.xaml</DependentUpon>
+    </Compile>
     <Page Include="WpfView\PrinterSetupWizardDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

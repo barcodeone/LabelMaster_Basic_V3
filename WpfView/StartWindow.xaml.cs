@@ -26,10 +26,28 @@ namespace BarcodePrint.WpfView
             InitializeComponent();
             try
             {
-                var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-                if (ver != null && TxtAppVersion != null)
+                var asm = typeof(StartWindow).Assembly;
+                var ver = asm.GetName().Version;
+                string verStr = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "v1.0.7";
+
+                try
                 {
-                    TxtAppVersion.Text = $"라벨마스터 v{ver.Major}.{ver.Minor}.{ver.Build}";
+                    if (!string.IsNullOrEmpty(asm.Location) && System.IO.File.Exists(asm.Location))
+                    {
+                        var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(asm.Location);
+                        if (!string.IsNullOrEmpty(fvi.ProductVersion))
+                        {
+                            verStr = "v" + fvi.ProductVersion.Trim().TrimStart('v');
+                        }
+                    }
+                }
+                catch { }
+
+                this.Title = $"라벨마스터 - LabelMaster ({verStr})";
+
+                if (TxtAppVersion != null)
+                {
+                    TxtAppVersion.Text = $"라벨마스터 {verStr}";
                 }
             }
             catch { }
@@ -40,36 +58,142 @@ namespace BarcodePrint.WpfView
 
             this.Loaded += (s, e) =>
             {
-                LoadQuickToolsHtml();
+                try
+                {
+                    double screenH = SystemParameters.WorkArea.Height;
+                    double screenW = SystemParameters.WorkArea.Width;
+                    if (screenH <= 768 || screenW <= 1366)
+                    {
+                        if (this.Height > screenH - 10) this.Height = Math.Max(560, screenH - 10);
+                        if (this.Width > screenW - 10) this.Width = Math.Max(960, screenW - 10);
+                        if (screenH <= 768 && screenW <= 1366)
+                        {
+                            this.WindowState = WindowState.Maximized;
+                        }
+                    }
+                }
+                catch { }
+
+                if (MainDashboardScrollViewer != null && MainDashboardScrollViewer.ActualWidth > 0)
+                {
+                    AdjustResponsiveLayout(MainDashboardScrollViewer.ActualWidth);
+                }
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    LoadQuickToolsHtml();
+                    LoadSidebarHtml();
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             };
+
+            Closing += (s, e) =>
+            {
+                BarcodePrint.Model.PrinterOnlineDetector.IsAppExiting = true;
+                BarcodePrint.Model.UsbPrinterHelper.IsAppExiting = true;
+                _dashboardStatusTimer?.Stop();
+                BarcodePrint.Model.PrinterOnlineDetector.WaitForWmiCompletion(600);
+            };
+
+            StartDashboardPrinterMonitor();
+        }
+
+        private System.Windows.Interop.HwndSource _hwndSource;
+        private System.Windows.Threading.DispatcherTimer _dashboardStatusTimer;
+        private DateTime _lastDeviceChangeHandled = DateTime.MinValue;
+        private bool _isCheckingDashboardPrinter = false;
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            try
+            {
+                var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                _hwndSource = System.Windows.Interop.HwndSource.FromHwnd(handle);
+                _hwndSource?.AddHook(WndProcDeviceChange);
+            }
+            catch { }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            try
+            {
+                _hwndSource?.RemoveHook(WndProcDeviceChange);
+                _dashboardStatusTimer?.Stop();
+                BarcodePrint.Model.PrinterOnlineDetector.IsAppExiting = true;
+                BarcodePrint.Model.UsbPrinterHelper.IsAppExiting = true;
+                BarcodePrint.Model.PrinterOnlineDetector.WaitForWmiCompletion(600);
+            }
+            catch { }
+            base.OnClosed(e);
+        }
+
+        private void StartDashboardPrinterMonitor()
+        {
+            try
+            {
+                _dashboardStatusTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(3.0)
+                };
+                _dashboardStatusTimer.Tick += (s, e) =>
+                {
+                    if (IsVisible && !_isCheckingDashboardPrinter)
+                    {
+                        _ = CheckCurrentPrinterStatusAsync(silent: true);
+                    }
+                };
+                _dashboardStatusTimer.Start();
+            }
+            catch { }
+        }
+
+        private IntPtr WndProcDeviceChange(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_DEVICECHANGE = 0x0219;
+            if (msg == WM_DEVICECHANGE && IsVisible)
+            {
+                if ((DateTime.Now - _lastDeviceChangeHandled).TotalMilliseconds > 350)
+                {
+                    _lastDeviceChangeHandled = DateTime.Now;
+                    BarcodePrint.Services.PrinterService.InvalidateUsbCache();
+                    PrinterOnlineDetector.InvalidateCache();
+                    UsbPrinterHelper.InvalidatePrinterCache();
+                    _ = CheckCurrentPrinterStatusAsync(silent: true);
+                }
+            }
+            return IntPtr.Zero;
         }
 
         private void CheckCurrentPrinterStatus()
         {
-            _ = CheckCurrentPrinterStatusAsync();
+            _ = CheckCurrentPrinterStatusAsync(silent: false);
         }
 
         /// <summary>
         /// 실제 PC에 물리적으로 연결되어 켜져 있는(온라인) 라벨 프린터만 비동기로 감지하여 UI를 업데이트합니다. (UI 블로킹 0ms)
         /// </summary>
-        private async System.Threading.Tasks.Task CheckCurrentPrinterStatusAsync()
+        private async System.Threading.Tasks.Task CheckCurrentPrinterStatusAsync(bool silent = false)
         {
+            if (_isCheckingDashboardPrinter) return;
+            _isCheckingDashboardPrinter = true;
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 string savedPrinter = settings.LastSelectedPrinterName ?? "";
 
-                if (!string.IsNullOrEmpty(savedPrinter))
+                if (!silent)
                 {
-                    TxtPrinterStatus.Text = $"확인 중: {savedPrinter}";
-                    TxtSidePrinterName.Text = savedPrinter;
-                    TxtSidePrinterStatusText.Text = "연결 상태 확인 중...";
-                }
-                else
-                {
-                    TxtPrinterStatus.Text = "프린터 연결 확인 중...";
-                    TxtSidePrinterStatusText.Text = "확인 중...";
+                    if (!string.IsNullOrEmpty(savedPrinter))
+                    {
+                        TxtPrinterStatus.Text = $"확인 중: {savedPrinter}";
+                        TxtSidePrinterName.Text = savedPrinter;
+                        TxtSidePrinterStatusText.Text = "연결 상태 확인 중...";
+                    }
+                    else
+                    {
+                        TxtPrinterStatus.Text = "프린터 연결 확인 중...";
+                        TxtSidePrinterStatusText.Text = "확인 중...";
+                    }
                 }
 
                 // 1. 실제 온라인 라벨 프린터 목록 검색 (WMI 및 하드웨어 탐색을 백그라운드로 분리)
@@ -101,6 +225,13 @@ namespace BarcodePrint.WpfView
                     _detectedPortName = detectedPortName;
                     _detectedConnType = detectedConnType;
                     _isPrinterOnline = true;
+
+                    // 대시보드에서 감지된 온라인 프린터를 설정에 동기화하여 편집화면 진입 시에도 동일한 프린터가 즉시 선택되도록 보장
+                    if (!string.Equals(settings.LastSelectedPrinterName, _detectedPrinterName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        settings.LastSelectedPrinterName = _detectedPrinterName;
+                        settings.Save();
+                    }
 
                     // 상단 헤더 뱃지 업데이트
                     DotPrinterStatus.Fill = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // Green
@@ -142,14 +273,17 @@ namespace BarcodePrint.WpfView
                 BorderPrinterBadge.ToolTip = $"프린터 감지 오류: {ex.Message}";
                 Debug.WriteLine($"[StartWindow] CheckCurrentPrinterStatus Error: {ex.Message}");
             }
+            finally
+            {
+                _isCheckingDashboardPrinter = false;
+            }
         }
 
         private void LoadRecentInfo()
         {
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
 
                 var recentList = settings.RecentWorks ?? new System.Collections.Generic.List<RecentWorkItem>();
 
@@ -218,29 +352,78 @@ namespace BarcodePrint.WpfView
             OpenPrinterSetupWizard();
         }
 
-        private void OnStoreLinkClick(object sender, RoutedEventArgs e)
+        #region Official Website & Supplies Store Navigation
+
+        private void OnOfficialSiteClick(object sender, RoutedEventArgs e)
         {
-            OpenStoreUrl();
+            OpenOfficialSiteUrl();
         }
 
-        private void OnStoreLinkClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void OnOfficialSiteClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            OpenStoreUrl();
+            OpenOfficialSiteUrl();
         }
 
-        private void OpenStoreUrl()
+        private void OpenOfficialSiteUrl()
         {
             try
             {
-                // 한국Xprinter 공식 스마트스토어 및 정품 라벨몰 링크
-                string url = "https://smartstore.naver.com/xprinter/category/61ccd82fe17043f59401bbfb6802fcc9?cp=1";
+                // 한국 Xprinter 공식 홈페이지 (기본: https://xprinter.co.kr)
+                string url = AppSettings.Default.OfficialWebsiteUrl;
+                if (string.IsNullOrWhiteSpace(url)) url = "https://xprinter.co.kr";
                 Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"스토어 링크를 여는 중 오류가 발생했습니다: {ex.Message}", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"공식 홈페이지를 여는 중 오류가 발생했습니다: {ex.Message}", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
+
+        private void OnSuppliesStoreClick(object sender, RoutedEventArgs e)
+        {
+            OpenSuppliesStoreUrl();
+        }
+
+        private void OnSuppliesStoreClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            OpenSuppliesStoreUrl();
+        }
+
+        public void OpenSuppliesStoreUrl()
+        {
+            try
+            {
+                // 정품 소모품 몰 / 배너 링크 URL
+                string url = AppSettings.Default.SuppliesStoreUrl;
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    url = "https://smartstore.naver.com/xprinter/category/61ccd82fe17043f59401bbfb6802fcc9?cp=1";
+                }
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"정품 소모품 몰 링크를 여는 중 오류가 발생했습니다: {ex.Message}", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        // 기존 이벤트 핸들러 호환성 유지
+        private void OnStoreLinkClick(object sender, RoutedEventArgs e)
+        {
+            OpenSuppliesStoreUrl();
+        }
+
+        private void OnStoreLinkClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            OpenSuppliesStoreUrl();
+        }
+
+        private void OpenStoreUrl()
+        {
+            OpenSuppliesStoreUrl();
+        }
+
+        #endregion
 
         private async void OnRefreshPrinterClick(object sender, RoutedEventArgs e)
         {
@@ -402,8 +585,17 @@ namespace BarcodePrint.WpfView
 
         private void NavigateToEditor(WpfMainWindow mainWindow)
         {
-            mainWindow.DashboardWindow = this;
-            WindowLocationHelper.TransitionToWindow(this, mainWindow, hideInsteadOfClose: true);
+            var prevCursor = System.Windows.Input.Mouse.OverrideCursor;
+            try
+            {
+                System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+                mainWindow.DashboardWindow = this;
+                WindowLocationHelper.TransitionToWindow(this, mainWindow, hideInsteadOfClose: true);
+            }
+            finally
+            {
+                System.Windows.Input.Mouse.OverrideCursor = prevCursor;
+            }
         }
 
         public void RefreshDashboard()
@@ -419,8 +611,7 @@ namespace BarcodePrint.WpfView
 
         private void OnNewTemplateClick(object sender, RoutedEventArgs e)
         {
-            var settings = new AppSettings();
-            settings.Load();
+            var settings = AppSettings.Default;
             var wizard = new LabelSetupWizardDialog(settings.PaperWidth, settings.PaperHeight);
             wizard.Owner = this;
             if (wizard.ShowDialog() == true)
@@ -443,8 +634,7 @@ namespace BarcodePrint.WpfView
         {
             if (sender is Button btn && int.TryParse(btn.Tag?.ToString(), out int index))
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 if (settings.RecentWorks != null && index >= 0 && index < settings.RecentWorks.Count)
                 {
                     OpenRecentWorkItem(settings.RecentWorks[index]);
@@ -460,8 +650,7 @@ namespace BarcodePrint.WpfView
         {
             if (item == null) return;
 
-            var settings = new AppSettings();
-            settings.Load();
+            var settings = AppSettings.Default;
             settings.AddRecentWork(item.Title, item.Width, item.Height, item.PaperType, item.Rotation, item.TemplateFilePath);
 
             if (!string.IsNullOrEmpty(item.TemplateFilePath) && System.IO.File.Exists(item.TemplateFilePath))
@@ -482,8 +671,7 @@ namespace BarcodePrint.WpfView
 
         private void OnRecentTemplateClick(object sender, RoutedEventArgs e)
         {
-            var settings = new AppSettings();
-            settings.Load();
+            var settings = AppSettings.Default;
             if (settings.RecentWorks != null && settings.RecentWorks.Count > 0)
             {
                 OpenRecentWorkItem(settings.RecentWorks[0]);
@@ -507,8 +695,7 @@ namespace BarcodePrint.WpfView
                 if (mainWindow.DataContext is MainViewModel vm)
                 {
                     vm.LoadTemplateFromFile(dlg.FileName);
-                    var settings = new AppSettings();
-                    settings.Load();
+                    var settings = AppSettings.Default;
                     string templateTitle = System.IO.Path.GetFileNameWithoutExtension(dlg.FileName);
                     string paperType = vm.CurrentTemplate?.PaperType ?? "GAP";
                     int rot = vm.CurrentTemplate?.Rotation ?? vm.LabelRotationAngle;
@@ -627,6 +814,7 @@ namespace BarcodePrint.WpfView
                     Owner = this
                 };
                 win.ShowDialog();
+                vm.StopRealtimeStatusMonitoring();
                 CheckCurrentPrinterStatus();
                 LoadRecentInfo();
             }
@@ -642,8 +830,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 _presets = settings.FavoritePresets ?? AppSettings.GetDefaultPresets();
                 if (_presets.Count < 4)
                 {
@@ -686,7 +873,60 @@ namespace BarcodePrint.WpfView
             catch { }
         }
 
+        /// <summary>
+        /// 창 크기나 대시보드 너비 변경 시 배너 및 카드들의 높이를 황금 비율로 동적 스케일링합니다.
+        /// </summary>
+        private void OnDashboardSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (e.WidthChanged)
+            {
+                AdjustResponsiveLayout(e.NewSize.Width);
+            }
+        }
+
+        private void AdjustResponsiveLayout(double actualWidth)
+        {
+            try
+            {
+                if (actualWidth <= 0) return;
+
+                // ScrollViewer 좌우 마진(28 * 2 = 56px) 제외, MaxWidth 1550 제약 반영
+                double availableWidth = Math.Max(700, Math.Min(1550, actualWidth - 56));
+
+                // 4분할 슬롯 1개당 가로 너비
+                double slotWidth = availableWidth / 4.0;
+
+                // [하단 배너 높이]: 창이 커지면 슬롯 너비에 비례하여 130px에서 최대 195px까지 시원하게 확장
+                // 기본 창(slotWidth ~ 235px) => 약 130px
+                // 전체화면(slotWidth ~ 387px) => 약 195px
+                double targetBannerHeight = Math.Max(130, Math.Min(195, slotWidth * 0.48 + 12));
+
+                if (QuickToolsHtmlBorder != null)
+                {
+                    QuickToolsHtmlBorder.Height = targetBannerHeight;
+                }
+                if (QuickToolsWebBrowser != null)
+                {
+                    QuickToolsWebBrowser.Height = targetBannerHeight;
+                }
+
+                // [최근 작업 내역 카드 높이]: 140px에서 최대 165px까지 자연스럽게 비례 확장
+                double targetCardHeight = Math.Max(135, Math.Min(165, slotWidth * 0.42 + 35));
+                if (GridRecentEmpty != null) GridRecentEmpty.Height = targetCardHeight;
+                if (GridRecent0 != null) GridRecent0.Height = targetCardHeight;
+                if (GridRecent1 != null) GridRecent1.Height = targetCardHeight;
+                if (GridRecent2 != null) GridRecent2.Height = targetCardHeight;
+                if (GridRecent3 != null) GridRecent3.Height = targetCardHeight;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[StartWindow] AdjustResponsiveLayout Error: {ex.Message}");
+            }
+        }
+
         // 현재 활성화된 배너 URL/경로 (내부 로드 허용 판정용)
+        // 항상 고정된 원격 공지/배너 웹페이지 URL 및 파일명
+        private const string FIXED_BANNER_URL = "https://pub-50e160c2ce5d41f6a4e2edcf7267f555.r2.dev/banner.html";
         private string _activeBannerBaseUrl = "";
 
         private void LoadQuickToolsHtml(bool forceReload = false)
@@ -695,93 +935,26 @@ namespace BarcodePrint.WpfView
             {
                 if (QuickToolsWebBrowser == null) return;
 
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string bannerUrlTxt = Path.Combine(baseDir, "Info", "banner_url.txt");
-                string targetUrl = "";
+                // 항상 고정된 원격 배너 URL (banner.html) 로드
+                string targetUrl = FIXED_BANNER_URL;
 
-                // 1. Info/banner_url.txt 파일이 있고 유효한 URL(http:// 또는 https://)이 설정되어 있는지 확인
-                if (File.Exists(bannerUrlTxt))
+                // AppSettings에 사용자 지정 URL이 명시되어 있는 경우에만 오버라이드
+                string cfgUrl = AppSettings.Default.QuickToolsBannerUrl?.Trim();
+                if (!string.IsNullOrEmpty(cfgUrl) &&
+                    (cfgUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                     cfgUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
                 {
-                    try
-                    {
-                        string line = File.ReadAllText(bannerUrlTxt).Trim();
-                        if (line.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                            line.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                        {
-                            targetUrl = line;
-                        }
-                    }
-                    catch { }
+                    targetUrl = cfgUrl;
                 }
 
-                // 2. AppSettings.Default.QuickToolsBannerUrl 에 설정된 외부 링크 확인
-                if (string.IsNullOrWhiteSpace(targetUrl))
-                {
-                    string cfgUrl = AppSettings.Default.QuickToolsBannerUrl?.Trim();
-                    if (!string.IsNullOrEmpty(cfgUrl) &&
-                        (cfgUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                         cfgUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        targetUrl = cfgUrl;
-                    }
-                }
-
-                // 3. 외부 URL이 설정되어 있는 경우 해당 웹 주소 로드
-                if (!string.IsNullOrWhiteSpace(targetUrl))
-                {
-                    _activeBannerBaseUrl = targetUrl;
-                    string fullUrl = targetUrl;
-                    if (forceReload)
-                    {
-                        fullUrl += (fullUrl.Contains("?") ? "&" : "?") + "t=" + DateTime.Now.Ticks;
-                    }
-                    QuickToolsWebBrowser.Navigate(new Uri(fullUrl));
-                    return;
-                }
-
-                // 4. 외부 링크가 없으면 로컬 Info/quick_tools.html 파일 로드 (오프라인 지원)
-                string htmlPath = Path.Combine(baseDir, "Info", "quick_tools.html");
-
-                // 없으면 상위 또는 개발 기본 위치 확인
-                if (!File.Exists(htmlPath))
-                {
-                    string rootHtml = Path.Combine(baseDir, "quick_tools.html");
-                    if (File.Exists(rootHtml))
-                    {
-                        htmlPath = rootHtml;
-                    }
-                    else
-                    {
-                        // 개발 환경 fallback
-                        string devPath = @"E:\4.sourcecode\C#\2.X-quick\0.엑셀인쇄\LabelMaster_Basic_v3\Info\quick_tools.html";
-                        if (File.Exists(devPath))
-                        {
-                            htmlPath = devPath;
-                        }
-                    }
-                }
-
-                // 파일이 아예 없다면 기본 템플릿 파일 생성
-                if (!File.Exists(htmlPath))
-                {
-                    string infoDir = Path.Combine(baseDir, "Info");
-                    if (!Directory.Exists(infoDir))
-                    {
-                        Directory.CreateDirectory(infoDir);
-                    }
-                    htmlPath = Path.Combine(infoDir, "quick_tools.html");
-                    CreateDefaultQuickToolsHtml(htmlPath);
-                }
-
-                _activeBannerBaseUrl = htmlPath;
-
-                // WebBrowser 로드 (고정 파일 URL)
-                string uriStr = new Uri(htmlPath).AbsoluteUri;
+                _activeBannerBaseUrl = targetUrl;
+                string fullUrl = targetUrl;
                 if (forceReload)
                 {
-                    uriStr += "?t=" + DateTime.Now.Ticks;
+                    fullUrl += (fullUrl.Contains("?") ? "&" : "?") + "t=" + DateTime.Now.Ticks;
                 }
-                QuickToolsWebBrowser.Navigate(new Uri(uriStr));
+                QuickToolsWebBrowser.Navigate(new Uri(fullUrl));
+                return;
             }
             catch (Exception ex)
             {
@@ -864,49 +1037,131 @@ namespace BarcodePrint.WpfView
     <meta charset=""UTF-8"">
     <meta http-equiv=""X-UA-Compatible"" content=""IE=edge"">
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-    <title>라벨마스터 빠른 안내 및 도구</title>
+    <title>메인 배너</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-        body, html { width: 100%; height: 100%; overflow: hidden; font-family: 'Pretendard', 'Malgun Gothic', '맑은 고딕', sans-serif; background: #FFFFFF; }
-        .banner-container { width: 100%; height: 138px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%); border: 1px solid #E2E8F0; border-radius: 12px; position: relative; overflow: hidden; }
-        .left-content { display: flex; align-items: center; z-index: 1; }
-        .icon-box { width: 58px; height: 58px; border-radius: 14px; background: #FFFFFF; border: 1.5px solid #BFDBFE; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08); display: flex; align-items: center; justify-content: center; font-size: 26px; margin-right: 18px; flex-shrink: 0; }
-        .text-group { display: flex; flex-direction: column; }
-        .title-row { display: flex; align-items: center; margin-bottom: 5px; }
-        .title { font-size: 17px; font-weight: 700; color: #0F172A; }
-        .badge { background: #DBEAFE; color: #1D4ED8; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; margin-left: 10px; }
-        .desc { font-size: 12px; color: #64748B; line-height: 1.4; }
-        .right-buttons { display: flex; align-items: center; gap: 10px; z-index: 1; }
-        .btn-link { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
-        .btn-primary { background: #2563EB; color: #FFFFFF !important; border: 1px solid #1D4ED8; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2); }
-        .btn-secondary { background: #FFFFFF; color: #1E293B !important; border: 1px solid #CBD5E1; }
-        .btn-icon { margin-right: 6px; font-size: 14px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #FFFFFF; }
     </style>
 </head>
 <body>
-    <div class=""banner-container"">
-        <div class=""left-content"">
-            <div class=""icon-box"">🚀</div>
-            <div class=""text-group"">
-                <div class=""title-row"">
-                    <span class=""title"">라벨마스터 온라인 서비스 및 빠른 지원</span>
-                    <span class=""badge"">실시간 연동</span>
-                </div>
-                <div class=""desc"">
-                    정품 감열 라벨 주문, 사용 매뉴얼 안내 및 고객 지원 서비스를 이용하세요.<br>
-                    본 배너의 내용과 링크는 <strong>Info/quick_tools.html</strong> 파일에서 언제든 자유롭게 수정 가능합니다.
-                </div>
-            </div>
-        </div>
-        <div class=""right-buttons"">
-            <a href=""https://xpix.co.kr/labelmaster/windows/download"" class=""btn-link btn-secondary"" title=""최신 업데이트 다운로드"">
-                <span class=""btn-icon"">🔄</span>최신 버전 확인
-            </a>
-            <a href=""https://smartstore.naver.com"" class=""btn-link btn-primary"" title=""공식 스토어 바로가기"">
-                <span class=""btn-icon"">🛒</span>정품 소모품 몰
-            </a>
-        </div>
-    </div>
+</body>
+</html>";
+                File.WriteAllText(filePath, html, System.Text.Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        #endregion
+
+        #region Sidebar HTML Banner Integration
+
+        // Cloudflare R2 원격 사이드바 배너 고정 URL
+        private const string FIXED_SIDEBAR_BANNER_URL = "https://pub-50e160c2ce5d41f6a4e2edcf7267f555.r2.dev/sidebar_banner.html";
+        private string _activeSidebarBannerBaseUrl = "";
+
+        public void LoadSidebarHtml(bool forceReload = false)
+        {
+            try
+            {
+                if (SidebarWebBrowser == null) return;
+
+                // 기본 원격 서버 URL
+                string targetUrl = FIXED_SIDEBAR_BANNER_URL;
+
+                // 1. AppSettings.Default.SidebarBannerUrl 에 사용자 정의 URL이 있는 경우 오버라이드
+                string cfgUrl = AppSettings.Default.SidebarBannerUrl?.Trim();
+                if (!string.IsNullOrEmpty(cfgUrl) &&
+                    (cfgUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                     cfgUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+                {
+                    targetUrl = cfgUrl;
+                }
+
+                _activeSidebarBannerBaseUrl = targetUrl;
+                string fullUrl = targetUrl;
+                if (forceReload)
+                {
+                    fullUrl += (fullUrl.Contains("?") ? "&" : "?") + "t=" + DateTime.Now.Ticks;
+                }
+                SidebarWebBrowser.Navigate(new Uri(fullUrl));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[StartWindow] LoadSidebarHtml Error: {ex.Message}");
+            }
+        }
+
+        private void OnSidebarWebBrowserNavigating(object sender, System.Windows.Navigation.NavigatingCancelEventArgs e)
+        {
+            try
+            {
+                if (e.Uri == null) return;
+                string uriStr = e.Uri.AbsoluteUri;
+
+                // 1. about:blank 허용
+                if (uriStr.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
+
+                // 2. 로컬 sidebar_banner.html 허용
+                if (uriStr.StartsWith("file:", StringComparison.OrdinalIgnoreCase) && 
+                    uriStr.IndexOf("sidebar_banner.html", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return;
+                }
+
+                // 3. 외부 타겟 URL 자체 로딩 허용
+                if (!string.IsNullOrWhiteSpace(_activeSidebarBannerBaseUrl) &&
+                    (_activeSidebarBannerBaseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                     _activeSidebarBannerBaseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+                {
+                    string cleanTarget = _activeSidebarBannerBaseUrl.Split('?')[0].TrimEnd('/');
+                    string cleanUri = uriStr.Split('?')[0].TrimEnd('/');
+                    if (string.Equals(cleanTarget, cleanUri, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
+                }
+
+                // 4. 배너 내부 링크 클릭 시 시스템 기본 브라우저로 열기
+                e.Cancel = true;
+                Process.Start(new ProcessStartInfo(uriStr) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[StartWindow] Sidebar WebBrowser Navigating Error: {ex.Message}");
+            }
+        }
+
+        private void OnSidebarWebBrowserLoadCompleted(object sender, System.Windows.Navigation.NavigationEventArgs e)
+        {
+            try
+            {
+                dynamic doc = SidebarWebBrowser.Document;
+                if (doc != null && doc.body != null && doc.body.style != null)
+                {
+                    doc.body.style.overflow = "hidden";
+                    doc.body.scroll = "no";
+                }
+            }
+            catch { }
+        }
+
+        private void CreateDefaultSidebarBannerHtml(string filePath)
+        {
+            try
+            {
+                string html = @"<!DOCTYPE html>
+<html lang=""ko"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta http-equiv=""X-UA-Compatible"" content=""IE=edge"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>사이드바 배너</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #FFFFFF; }
+    </style>
+</head>
+<body>
 </body>
 </html>";
                 File.WriteAllText(filePath, html, System.Text.Encoding.UTF8);
@@ -1056,8 +1311,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 settings.FavoritePresets = _presets;
                 settings.Save();
             }

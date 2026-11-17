@@ -26,6 +26,8 @@ namespace BarcodePrint.ViewModel
         public ICommand DeleteSelectedRecordCommand { get; private set; }
         public ICommand ReprintSelectedRecordsCommand { get; private set; }
         public ICommand SinglePrintCommand { get; private set; }
+        public ICommand OpenPrintSetupCommand { get; private set; }
+        public ICommand PrintExecuteCommand { get; private set; }
         public ICommand PrintCommand => SinglePrintCommand;
         public ICommand PrintAllRecordsCommand { get; private set; }
         public ICommand PrintUnprintedRecordsCommand { get; private set; }
@@ -76,6 +78,10 @@ namespace BarcodePrint.ViewModel
         public ICommand AddDateTimeElementCommand { get; private set; }
         public ICommand ImportPdfCommand { get; private set; }
         public ICommand DeleteSelectedElementCommand { get; private set; }
+        public ICommand BringToFrontCommand { get; private set; }
+        public ICommand SendToBackCommand { get; private set; }
+        public ICommand BringForwardCommand { get; private set; }
+        public ICommand SendBackwardCommand { get; private set; }
         public ICommand CopySelectedCommand { get; private set; }
         public ICommand DeselectElementCommand { get; private set; }
         public ICommand StepXCommand { get; private set; }
@@ -184,7 +190,9 @@ namespace BarcodePrint.ViewModel
             PrintAndRecordCommand = new RelayCommand(_ => ExecutePrintAndRecord(), _ => IsCurrentPrinterAuthorized);
             PrintOnlyCommand = new RelayCommand(_ => ExecutePrintOnly(), _ => IsCurrentPrinterAuthorized);
             RecordOnlyCommand = new RelayCommand(_ => ExecuteRecordOnly());
-            SinglePrintCommand = new RelayCommand(_ => ExecutePrintOnly(), _ => IsCurrentPrinterAuthorized);
+            PrintExecuteCommand = new RelayCommand(_ => ExecutePrintOnly(), _ => IsCurrentPrinterAuthorized);
+            OpenPrintSetupCommand = new RelayCommand(_ => ExecuteOpenPrintSetupDialog(), _ => IsCurrentPrinterAuthorized);
+            SinglePrintCommand = new RelayCommand(_ => ExecuteOpenPrintSetupDialog(), _ => IsCurrentPrinterAuthorized);
             ExportToExcelCommand = new RelayCommand(_ => ExecuteExportToExcel());
             ImportFromExcelCommand = new RelayCommand(_ => ExecuteImportFromExcel());
             ImportFromExcelForElementCommand = new RelayCommand(_ => ExecuteImportExcelForSelectedElement());
@@ -295,6 +303,10 @@ namespace BarcodePrint.ViewModel
             AddDateTimeElementCommand = new RelayCommand(_ => AddNewElement(ElementType.DATE_TIME));
             ImportPdfCommand = new RelayCommand(_ => OpenPdfPrintStudio());
             DeleteSelectedElementCommand = new RelayCommand(_ => DeleteSelectedElement());
+            BringToFrontCommand = new RelayCommand(_ => BringToFront(), _ => HasSelectedElement || HasMultipleSelectedElements);
+            SendToBackCommand = new RelayCommand(_ => SendToBack(), _ => HasSelectedElement || HasMultipleSelectedElements);
+            BringForwardCommand = new RelayCommand(_ => BringForward(), _ => HasSelectedElement || HasMultipleSelectedElements);
+            SendBackwardCommand = new RelayCommand(_ => SendBackward(), _ => HasSelectedElement || HasMultipleSelectedElements);
             CopySelectedCommand = new RelayCommand(_ => DuplicateSelectedElement());
             DeselectElementCommand = new RelayCommand(_ => DeselectElement());
 
@@ -398,14 +410,14 @@ namespace BarcodePrint.ViewModel
 
             IncreasePaperWidthCommand = new RelayCommand(_ => PaperWidth = Math.Min(300, PaperWidth + 1));
             DecreasePaperWidthCommand = new RelayCommand(_ => PaperWidth = Math.Max(10, PaperWidth - 1));
-            IncreasePaperHeightCommand = new RelayCommand(_ => PaperHeight = Math.Min(300, PaperHeight + 1));
+            IncreasePaperHeightCommand = new RelayCommand(_ => PaperHeight = Math.Min(AppSettings.MAX_PAPER_HEIGHT, PaperHeight + 1));
             DecreasePaperHeightCommand = new RelayCommand(_ => PaperHeight = Math.Max(10, PaperHeight - 1));
             IncreaseGapHeightCommand = new RelayCommand(_ => GapHeight = Math.Min(50, GapHeight + 1));
             DecreaseGapHeightCommand = new RelayCommand(_ => GapHeight = Math.Max(0, GapHeight - 1));
 
             IncreasePrintDarknessCommand = new RelayCommand(_ => PrintDarkness = Math.Min(15, PrintDarkness + 1));
             DecreasePrintDarknessCommand = new RelayCommand(_ => PrintDarkness = Math.Max(1, PrintDarkness - 1));
-            IncreasePrintSpeedCommand = new RelayCommand(_ => PrintSpeed = Math.Min(6, PrintSpeed + 1));
+            IncreasePrintSpeedCommand = new RelayCommand(_ => PrintSpeed = Math.Min(8, PrintSpeed + 1));
             DecreasePrintSpeedCommand = new RelayCommand(_ => PrintSpeed = Math.Max(2, PrintSpeed - 1));
 
             IncreasePrinterOffsetXCommand = new RelayCommand(_ => PrinterOffsetX = Math.Min(50, PrinterOffsetX + 1));
@@ -825,6 +837,25 @@ namespace BarcodePrint.ViewModel
                 bool isSuccess = dict.TryGetValue("IS_SUCCESS", out string succ) && succ == "true";
                 if (!isSuccess)
                 {
+                    // 💡 [2차 안전 폴백]: TSPL 하드웨어 직렬 응답이 없더라도 Windows 인쇄 스풀러 상 온라인/준비 상태인 경우
+                    // 일부 PC(포트 독점, 보안 차단, 양방향 미지원 포트 등)에서도 정상 인쇄가 가능하도록 자동 폴백 승인
+                    bool isSpoolerOnline = false;
+                    try
+                    {
+                        isSpoolerOnline = PrinterOnlineDetector.CheckIsPrinterOnline(currentPrinter);
+                    }
+                    catch { }
+
+                    if (isSpoolerOnline)
+                    {
+                        isSuccess = true;
+                        dict["IS_SUCCESS"] = "true";
+                        dict["통신 모드"] = "Windows 스풀러 인쇄 모드 (단방향)";
+                    }
+                }
+
+                if (!isSuccess)
+                {
                     IsCurrentPrinterAuthorized = false;
                     PrinterHardwareSummaryText = $"🔴 [{currentPrinter}] 통신 응답 없음 (전원 꺼짐 / 케이블 또는 페어링 확인)";
                     PrinterStatusBadge = "🔴 오프라인 (통신 응답 없음 / 전원 꺼짐)";
@@ -833,18 +864,31 @@ namespace BarcodePrint.ViewModel
                 }
                 else
                 {
+                    bool isSpoolerFallback = dict.TryGetValue("통신 모드", out string cmVal) && cmVal.Contains("스풀러");
+
                     // 하드웨어 시리얼 번호 정품 라이선스 검증
                     bool isAuth = ValidatePrinterAuthorization(serial);
                     var licenseMode = TrialLicenseManager.EvaluateLicense(isAuth, serial, currentPrinter);
                     UpdateTrialLicenseState();
 
-                    PrinterSerialLogger.WriteLog($"[프린터 시리얼 검증] 대상: {currentPrinter}, 수신 시리얼: {serial}, 결과: {(isAuth ? "✅ 매칭 성공" : "❌ 매칭 실패 (미등록 장치)")}, 라이선스 상태: {licenseMode}");
+                    PrinterSerialLogger.WriteLog($"[프린터 시리얼 검증] 대상: {currentPrinter}, 수신 시리얼: {serial}, 모드: {(isSpoolerFallback ? "스풀러 모드" : "TSPL 다이렉트")}, 라이선스 상태: {licenseMode}");
 
                     IsCurrentPrinterAuthorized = true;
-                    PrinterHardwareSummaryText = $"✅ [{currentPrinter}] 정상 연결됨 (시리얼: {serial})";
+                    if (isSpoolerFallback)
+                    {
+                        PrinterHardwareSummaryText = $"✅ [{currentPrinter}] 정상 연결됨 (Windows 스풀러 인쇄 모드)";
+                        PrinterStatusBadge = "🟢 정상 준비 (스풀러 모드)";
+                        PrinterStatusColor = "#16A34A";
+                    }
+                    else
+                    {
+                        PrinterHardwareSummaryText = $"✅ [{currentPrinter}] 정상 연결됨 (시리얼: {serial})";
+                        PrinterStatusBadge = "🟢 정상 준비 (Ready)";
+                        PrinterStatusColor = "#16A34A";
 
-                    // UI 스레드 프리징을 방지하기 위해 백그라운드 태스크로 상태 조회 실행
-                    CheckRealtimePrinterStatus();
+                        // UI 스레드 프리징을 방지하기 위해 백그라운드 태스크로 상태 조회 실행
+                        CheckRealtimePrinterStatus();
+                    }
                 }
 
                 // UI 인쇄 버튼 상태 강제 즉시 갱신
@@ -881,6 +925,23 @@ namespace BarcodePrint.ViewModel
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"디자인 편집기 창 열기 오류: {ex.Message}");
+            }
+        }
+
+        public void ExecuteOpenPrintSetupDialog()
+        {
+            try
+            {
+                TargetPrinterName = SelectedPrinterName;
+                var dlg = new WpfView.PrintSetupDialog(this)
+                {
+                    Owner = System.Windows.Application.Current?.MainWindow
+                };
+                dlg.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"라벨 인쇄 설정 다이얼로그 열기 오류: {ex.Message}");
             }
         }
 

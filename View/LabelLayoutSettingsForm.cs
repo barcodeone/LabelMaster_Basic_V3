@@ -1458,7 +1458,7 @@ namespace BarcodePrint.View
 
 
             numPaperWidth = new NumericUpDown { Location = new Point(L_CTRL_X + 5, y + 5), Size = new Size(50, 30), Font = controlFont, Minimum = 10, Maximum = 500, Value = 80 };
-            numPaperHeight = new NumericUpDown { Location = new Point(R_LABEL_X + 10, y + 5), Size = new Size(50, 30), Font = controlFont, Minimum = 10, Maximum = 500, Value = 60 };
+            numPaperHeight = new NumericUpDown { Location = new Point(R_LABEL_X + 10, y + 5), Size = new Size(60, 30), Font = controlFont, Minimum = 10, Maximum = 1778, Value = 60 };
 
 
 

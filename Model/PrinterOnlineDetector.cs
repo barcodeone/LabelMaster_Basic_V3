@@ -26,6 +26,27 @@ namespace BarcodePrint.Model
     /// </summary>
     public static class PrinterOnlineDetector
     {
+        public static volatile bool IsAppExiting = false;
+        public static readonly object WmiGlobalLock = new object();
+        private static object _wmiLock => WmiGlobalLock;
+
+        /// <summary>
+        /// 프로그램 종료 시 진행 중인 백그라운드 WMI 쿼리가 안전하게 완료될 때까지 대기하여 RaceOnRCWCleanup MDA 방지
+        /// </summary>
+        public static void WaitForWmiCompletion(int timeoutMs = 600)
+        {
+            IsAppExiting = true;
+            UsbPrinterHelper.IsAppExiting = true;
+            try
+            {
+                if (System.Threading.Monitor.TryEnter(WmiGlobalLock, Math.Max(100, timeoutMs)))
+                {
+                    System.Threading.Monitor.Exit(WmiGlobalLock);
+                }
+            }
+            catch { }
+        }
+
         private static readonly string[] VirtualPrinterKeywords = new[]
         {
             "ONENOTE", "PDF", "FAX", "XPS", "DOCUMENT", "ALPDF", "ROOT PRINT", "SEND TO"
@@ -38,6 +59,7 @@ namespace BarcodePrint.Model
         public static List<OnlinePrinterItem> GetOnlinePrinters(bool labelPrintersOnly = true)
         {
             var results = new List<OnlinePrinterItem>();
+            if (IsAppExiting) return results;
 
             try
             {
@@ -49,85 +71,117 @@ namespace BarcodePrint.Model
                 }
                 catch { }
 
-                using (var searcher = new ManagementObjectSearcher(
-                    "SELECT Name, PortName, DriverName, WorkOffline, PrinterStatus, PrinterState FROM Win32_Printer"))
+                lock (_wmiLock)
                 {
-                    foreach (ManagementObject obj in searcher.Get())
+                    if (IsAppExiting) return results;
+
+                    using (var searcher = new ManagementObjectSearcher(
+                        "SELECT Name, PortName, DriverName, WorkOffline, PrinterStatus, PrinterState FROM Win32_Printer"))
+                    using (var collection = searcher.Get())
                     {
-                        string name = obj["Name"]?.ToString() ?? "";
-                        string port = obj["PortName"]?.ToString() ?? "";
-                        string driver = obj["DriverName"]?.ToString() ?? "";
-                        bool workOffline = (obj["WorkOffline"]?.ToString() == "True");
-
-                        if (string.IsNullOrWhiteSpace(name)) continue;
-
-                        // 1. 오프라인(전원 꺼짐 / 케이블 뽑힘 / 작업 오프라인) 장치는 완벽 배제
-                        if (workOffline) continue;
-
-                        // 2. 가상 프린터 배제 (OneNote, PDF 등)
-                        string upperName = name.ToUpperInvariant();
-                        if (VirtualPrinterKeywords.Any(k => upperName.Contains(k))) continue;
-
-                        // 3. 연결 방식 판별
-                        string connType = "USB";
-                        if (port.StartsWith("USB", StringComparison.OrdinalIgnoreCase))
+                        foreach (ManagementObject obj in collection)
                         {
-                            connType = "USB";
-                        }
-                        else if (Regex.IsMatch(port, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b") ||
-                                 port.StartsWith("IP_", StringComparison.OrdinalIgnoreCase) ||
-                                 port.StartsWith("WSD", StringComparison.OrdinalIgnoreCase) ||
-                                 port.Contains(":9100"))
-                        {
-                            connType = "LAN";
-                        }
-                        else if (port.ToUpper().Contains("COM") || port.ToUpper().Contains("BTH"))
-                        {
-                            connType = "Bluetooth";
-                        }
-
-                        // 🔍 물리적 연결 검증: USB 프린터인데 PC에 실제 연결된 USBPRINT 장치가 전혀 없으면 오프라인
-                        if (connType == "USB" && !BarcodePrint.Services.PrinterService.HasConnectedUsbPrinters())
-                        {
-                            continue;
-                        }
-
-                        // 🔍 블루투스 COM 포트 프린터인데 가상 COM 포트가 시스템에 존재하지 않으면 오프라인
-                        if (connType == "Bluetooth")
-                        {
-                            var comMatch = Regex.Match(port, @"COM\d+", RegexOptions.IgnoreCase);
-                            if (comMatch.Success)
+                            if (IsAppExiting) break;
+                            using (obj)
                             {
-                                string portOnly = comMatch.Value.ToUpper();
-                                var availablePorts = UsbPrinterHelper.GetAvailableComPorts();
-                                if (!availablePorts.Any(p => p.Equals(portOnly, StringComparison.OrdinalIgnoreCase)))
+                                string name = obj["Name"]?.ToString() ?? "";
+                                string port = obj["PortName"]?.ToString() ?? "";
+                                string driver = obj["DriverName"]?.ToString() ?? "";
+                                bool workOffline = (obj["WorkOffline"]?.ToString() == "True");
+
+                                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                                // 1. 가상 프린터 배제 (OneNote, PDF 등)
+                                string upperName = name.ToUpperInvariant();
+                                if (VirtualPrinterKeywords.Any(k => upperName.Contains(k))) continue;
+
+                                // 2. 연결 방식 판별
+                                string connType = "USB";
+                                if (port.StartsWith("USB", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    continue;
+                                    connType = "USB";
                                 }
+                                else if (Regex.IsMatch(port, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b") ||
+                                         port.StartsWith("IP_", StringComparison.OrdinalIgnoreCase) ||
+                                         port.StartsWith("WSD", StringComparison.OrdinalIgnoreCase) ||
+                                         port.Contains(":9100"))
+                                {
+                                    connType = "LAN";
+                                }
+                                else if (port.ToUpper().Contains("COM") || port.ToUpper().Contains("BTH"))
+                                {
+                                    connType = "Bluetooth";
+                                }
+
+                                // 2. 연결 방식별 실시간 물리 연결 상태 정밀 검증
+                                if (connType == "USB")
+                                {
+                                    // 시스템에 물리적으로 연결/켜져 있는 USB 프린터 장치가 1대 이상 존재하는지 확인
+                                    bool hasAnyUsbDevice = BarcodePrint.Services.PrinterService.HasConnectedUsbPrinters();
+                                    if (!hasAnyUsbDevice)
+                                    {
+                                        continue; // 물리 USB 장치가 전혀 없으면 오프라인
+                                    }
+
+                                    // 특정 포트 또는 활성 USB 장치 확인
+                                    bool isPortConnected = BarcodePrint.Services.PrinterService.IsUsbPortConnected(port, name);
+                                    if (!isPortConnected)
+                                    {
+                                        continue;
+                                    }
+
+                                    // 물리적으로 활성화된 경우 스풀러 지연 WorkOffline 플래그는 무시
+                                    if (workOffline && !isPortConnected)
+                                    {
+                                        continue;
+                                    }
+                                }
+                                else if (connType == "LAN")
+                                {
+                                    if (workOffline) continue;
+                                    if (!IsLanPortReachable(port))
+                                    {
+                                        continue;
+                                    }
+                                }
+                                else if (connType == "Bluetooth")
+                                {
+                                    if (workOffline) continue;
+                                    var comMatch = Regex.Match(port, @"COM\d+", RegexOptions.IgnoreCase);
+                                    if (comMatch.Success)
+                                    {
+                                        string portOnly = comMatch.Value.ToUpper();
+                                        var availablePorts = UsbPrinterHelper.GetAvailableComPorts();
+                                        if (!availablePorts.Any(p => p.Equals(portOnly, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                // 4. 라벨 프린터 여부 판별
+                                bool isLabel = UsbPrinterHelper.IsXprinterDevice(name, driver);
+                                if (!isLabel)
+                                {
+                                    // TSC, Bixolon, Zebra 등 일반 라벨 프린터 키워드 보조 검사
+                                    string combined = $"{name} {driver}".ToUpperInvariant();
+                                    isLabel = combined.Contains("LABEL") || combined.Contains("BARCODE") || combined.Contains("THERMAL") || combined.Contains("XP-");
+                                }
+
+                                if (labelPrintersOnly && !isLabel) continue;
+
+                                results.Add(new OnlinePrinterItem
+                                {
+                                    Name = name,
+                                    PortName = port,
+                                    DriverName = driver,
+                                    ConnectionType = connType,
+                                    IsOnline = true,
+                                    IsLabelPrinter = isLabel,
+                                    IsDefault = name.Equals(defaultPrinterName, StringComparison.OrdinalIgnoreCase)
+                                });
                             }
                         }
-
-                        // 4. 라벨 프린터 여부 판별
-                        bool isLabel = UsbPrinterHelper.IsXprinterDevice(name, driver);
-                        if (!isLabel)
-                        {
-                            // TSC, Bixolon, Zebra 등 일반 라벨 프린터 키워드 보조 검사
-                            string combined = $"{name} {driver}".ToUpperInvariant();
-                            isLabel = combined.Contains("LABEL") || combined.Contains("BARCODE") || combined.Contains("THERMAL") || combined.Contains("XP-");
-                        }
-
-                        if (labelPrintersOnly && !isLabel) continue;
-
-                        results.Add(new OnlinePrinterItem
-                        {
-                            Name = name,
-                            PortName = port,
-                            DriverName = driver,
-                            ConnectionType = connType,
-                            IsOnline = true,
-                            IsLabelPrinter = isLabel,
-                            IsDefault = name.Equals(defaultPrinterName, StringComparison.OrdinalIgnoreCase)
-                        });
                     }
                 }
             }
@@ -185,11 +239,58 @@ namespace BarcodePrint.Model
                 Debug.WriteLine($"[PrinterOnlineDetector] Bluetooth GetOnlinePrinters Error: {ex.Message}");
             }
 
-            // Xprinter 라벨 프린터를 최상단으로 정렬
+            // Xprinter 라벨 프린터 및 물리적 USB 연결 프린터를 최상단으로 정렬
             return results.OrderByDescending(p => p.IsLabelPrinter)
+                          .ThenByDescending(p => p.ConnectionType == "USB")
                           .ThenByDescending(p => p.IsDefault)
                           .ThenBy(p => p.Name)
                           .ToList();
+        }
+
+        private static List<OnlinePrinterItem> _cachedAllOnlinePrinters;
+        private static DateTime _lastOnlineCheckTime = DateTime.MinValue;
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (bool IsReachable, DateTime CheckedAt)> _lanReachabilityCache =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, (bool, DateTime)>(StringComparer.OrdinalIgnoreCase);
+
+        public static void InvalidateCache()
+        {
+            _cachedAllOnlinePrinters = null;
+            _lastOnlineCheckTime = DateTime.MinValue;
+            _lanReachabilityCache.Clear();
+        }
+
+        public static bool IsLanPortReachable(string port)
+        {
+            if (string.IsNullOrWhiteSpace(port)) return false;
+            var ipMatch = Regex.Match(port, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b");
+            if (!ipMatch.Success) return false;
+
+            string ip = ipMatch.Value;
+            if (_lanReachabilityCache.TryGetValue(ip, out var cached) && (DateTime.Now - cached.CheckedAt).TotalSeconds < 5.0)
+            {
+                return cached.IsReachable;
+            }
+
+            bool reachable = false;
+            try
+            {
+                using (var client = new System.Net.Sockets.TcpClient())
+                {
+                    var ar = client.BeginConnect(ip, 9100, null, null);
+                    if (ar.AsyncWaitHandle.WaitOne(220) && client.Connected)
+                    {
+                        client.EndConnect(ar);
+                        reachable = true;
+                    }
+                }
+            }
+            catch
+            {
+                reachable = false;
+            }
+
+            _lanReachabilityCache[ip] = (reachable, DateTime.Now);
+            return reachable;
         }
 
         /// <summary>
@@ -197,19 +298,21 @@ namespace BarcodePrint.Model
         /// </summary>
         public static (bool IsOnline, string PrinterName, string Port, string ConnType) GetPrimaryOnlinePrinter()
         {
-            var onlinePrinters = GetOnlinePrinters(true);
+            var allOnline = GetOnlinePrinters(false);
+            _cachedAllOnlinePrinters = allOnline;
+            _lastOnlineCheckTime = DateTime.Now;
 
-            if (onlinePrinters.Count > 0)
+            var labelPrinters = allOnline.Where(p => p.IsLabelPrinter).ToList();
+            if (labelPrinters.Count > 0)
             {
-                var primary = onlinePrinters.FirstOrDefault(p => p.IsDefault) ?? onlinePrinters.First();
+                var usbLabel = labelPrinters.FirstOrDefault(p => p.ConnectionType == "USB");
+                var primary = usbLabel ?? labelPrinters.FirstOrDefault(p => p.IsDefault) ?? labelPrinters.First();
                 return (true, primary.Name, primary.PortName, primary.ConnectionType);
             }
 
-            // 라벨 프린터가 온라인이 아니면, 기타 물리 프린터 중 온라인 장치 확인
-            var anyOnline = GetOnlinePrinters(false);
-            if (anyOnline.Count > 0)
+            if (allOnline.Count > 0)
             {
-                var primary = anyOnline.FirstOrDefault(p => p.IsDefault) ?? anyOnline.First();
+                var primary = allOnline.FirstOrDefault(p => p.IsDefault) ?? allOnline.First();
                 return (true, primary.Name, primary.PortName, primary.ConnectionType);
             }
 
@@ -221,7 +324,7 @@ namespace BarcodePrint.Model
         /// </summary>
         public static bool CheckIsPrinterOnline(string printerName)
         {
-            if (string.IsNullOrWhiteSpace(printerName)) return false;
+            if (IsAppExiting || string.IsNullOrWhiteSpace(printerName)) return false;
 
             // 블루투스 프린터인 경우 할당된 가상 직렬(COM) 포트의 시스템 존재 여부로 확인
             if (printerName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase))
@@ -234,17 +337,17 @@ namespace BarcodePrint.Model
                 return false;
             }
 
+            if (_cachedAllOnlinePrinters != null && (DateTime.Now - _lastOnlineCheckTime).TotalSeconds < 1.5)
+            {
+                return _cachedAllOnlinePrinters.Any(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
+            }
+
             try
             {
-                using (var searcher = new ManagementObjectSearcher(
-                    $"SELECT Name, WorkOffline FROM Win32_Printer WHERE Name = '{printerName.Replace("'", "''")}'"))
-                {
-                    foreach (ManagementObject obj in searcher.Get())
-                    {
-                        bool workOffline = (obj["WorkOffline"]?.ToString() == "True");
-                        return !workOffline;
-                    }
-                }
+                var allOnline = GetOnlinePrinters(false);
+                _cachedAllOnlinePrinters = allOnline;
+                _lastOnlineCheckTime = DateTime.Now;
+                return allOnline.Any(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
             }
             catch { }
 

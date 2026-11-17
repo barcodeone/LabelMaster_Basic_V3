@@ -20,8 +20,7 @@ namespace BarcodePrint.WpfView
 
         private void LoadPresets()
         {
-            var settings = new AppSettings();
-            settings.Load();
+            var settings = AppSettings.Default;
             _presets = settings.FavoritePresets ?? AppSettings.GetDefaultPresets();
             if (_presets.Count == 0)
             {
@@ -77,8 +76,7 @@ namespace BarcodePrint.WpfView
                     item.HeightMm = dlg.PresetItem.HeightMm;
                     item.Description = dlg.PresetItem.Description;
 
-                    var settings = new AppSettings();
-                    settings.Load();
+                    var settings = AppSettings.Default;
                     settings.FavoritePresets = _presets;
                     settings.Save();
 
@@ -105,8 +103,7 @@ namespace BarcodePrint.WpfView
             if (dlg.ShowDialog() == true && dlg.ResultPresets != null)
             {
                 _presets = dlg.ResultPresets;
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 settings.FavoritePresets = _presets;
                 settings.Save();
 
@@ -125,8 +122,7 @@ namespace BarcodePrint.WpfView
             if (res == MessageBoxResult.Yes)
             {
                 _presets = AppSettings.GetDefaultPresets();
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 settings.FavoritePresets = _presets;
                 settings.Save();
 

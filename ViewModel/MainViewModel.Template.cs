@@ -84,6 +84,9 @@ namespace BarcodePrint.ViewModel
             OnPropertyChanged(nameof(SelectedElementIsBold));
             OnPropertyChanged(nameof(SelectedElementIsItalic));
             OnPropertyChanged(nameof(SelectedElementIsUnderline));
+            OnPropertyChanged(nameof(SelectedElementIsVertical));
+            OnPropertyChanged(nameof(SelectedElementIsMirrored));
+            OnPropertyChanged(nameof(SelectedElementIsInverse));
             OnPropertyChanged(nameof(SelectedElementLetterSpacing));
             OnPropertyChanged(nameof(SelectedElementFontScaleX));
             OnPropertyChanged(nameof(SelectedElementLineSpacing));
@@ -102,9 +105,12 @@ namespace BarcodePrint.ViewModel
             OnPropertyChanged(nameof(IsSelectedElementTable));
             OnPropertyChanged(nameof(SelectedElementTableRows));
             OnPropertyChanged(nameof(SelectedElementTableColumns));
-            OnPropertyChanged(nameof(SelectedElementTableLineWidth));
-            OnPropertyChanged(nameof(SelectedElementTableIsFilled));
-            RefreshTableCells();
+            if (SelectedElement != null && SelectedElement.Type == ElementType.TABLE)
+            {
+                OnPropertyChanged(nameof(SelectedElementTableLineWidth));
+                OnPropertyChanged(nameof(SelectedElementTableIsFilled));
+                RefreshTableCells();
+            }
             OnPropertyChanged(nameof(SelectedElementShapeType));
             OnPropertyChanged(nameof(SelectedElementShapeName));
             OnPropertyChanged(nameof(SelectedElementLineStyle));
@@ -118,6 +124,7 @@ namespace BarcodePrint.ViewModel
             OnPropertyChanged(nameof(SelectedElementAutoUpdateDate));
             OnPropertyChanged(nameof(DateTimeFormatOptions));
             OnPropertyChanged(nameof(SelectedElementIsKeep));
+            OnPropertyChanged(nameof(SelectedElementIsResetAfterPrint));
         }
 
         public bool HasSelectedElement => SelectedElement != null;
@@ -157,7 +164,7 @@ namespace BarcodePrint.ViewModel
         public bool IsSelectedElementContentEditable => SelectedElement != null && 
             (SelectedElement.Type == ElementType.TEXT || SelectedElement.Type == ElementType.BARCODE || SelectedElement.Type == ElementType.QR_CODE || SelectedElement.Type == ElementType.DATE_TIME);
 
-        public string[] AvailableFonts { get; } = new[] { "맑은 고딕", "나눔고딕", "굴림", "돋움", "Arial", "Segoe UI", "Times New Roman" };
+        public string[] AvailableFonts => AvailableFontFamilies?.ToArray() ?? PriorityFontNames;
         public string[] AvailableBarcodeFormats { get; } = new[] 
         { 
             "CODE128", 
@@ -458,7 +465,7 @@ namespace BarcodePrint.ViewModel
             {
                 if (SelectedElement != null && Math.Abs(SelectedElement.X - value) > 0.01)
                 {
-                    SelectedElement.X = Math.Max(0, value);
+                    SelectedElement.X = Math.Max(-200.0, value);
                     OnPropertyChanged();
                     UpdatePreview();
                 }
@@ -472,7 +479,7 @@ namespace BarcodePrint.ViewModel
             {
                 if (SelectedElement != null && Math.Abs(SelectedElement.Y - value) > 0.01)
                 {
-                    SelectedElement.Y = Math.Max(0, value);
+                    SelectedElement.Y = Math.Max(-200.0, value);
                     OnPropertyChanged();
                     UpdatePreview();
                 }
@@ -651,13 +658,13 @@ namespace BarcodePrint.ViewModel
         public void StepSelectedElementX(double delta)
         {
             if (SelectedElement == null) return;
-            SelectedElementX = Math.Max(0, Math.Round((SelectedElement.X + delta) * 2.0) / 2.0);
+            SelectedElementX = Math.Max(-200.0, Math.Round((SelectedElement.X + delta) * 2.0) / 2.0);
         }
 
         public void StepSelectedElementY(double delta)
         {
             if (SelectedElement == null) return;
-            SelectedElementY = Math.Max(0, Math.Round((SelectedElement.Y + delta) * 2.0) / 2.0);
+            SelectedElementY = Math.Max(-200.0, Math.Round((SelectedElement.Y + delta) * 2.0) / 2.0);
         }
 
         public void StepSelectedElementWidth(double delta)
@@ -674,7 +681,7 @@ namespace BarcodePrint.ViewModel
 
         public void StepSelectedElementFontSize(double delta)
         {
-            if (SelectedElement == null) return;
+            if (SelectedElement == null || !IsSelectedElementText) return;
             SelectedElementFontSize = Math.Max(4.0, Math.Min(200.0, Math.Round(SelectedElement.FontSize + delta)));
         }
 
@@ -686,25 +693,25 @@ namespace BarcodePrint.ViewModel
 
         public void StepSelectedElementLetterSpacing(double delta)
         {
-            if (SelectedElement == null) return;
+            if (SelectedElement == null || !IsSelectedElementText) return;
             SelectedElementLetterSpacing = Math.Max(-0.5, Math.Min(2.0, Math.Round((SelectedElementLetterSpacing + delta) * 100.0) / 100.0));
         }
 
         public void StepSelectedElementFontScaleX(double delta)
         {
-            if (SelectedElement == null) return;
+            if (SelectedElement == null || !IsSelectedElementText) return;
             SelectedElementFontScaleX = Math.Max(30.0, Math.Min(300.0, Math.Round(SelectedElementFontScaleX + delta)));
         }
 
         public void StepSelectedElementLineSpacing(double delta)
         {
-            if (SelectedElement == null) return;
+            if (SelectedElement == null || !IsSelectedElementText) return;
             SelectedElementLineSpacing = Math.Max(0.5, Math.Min(3.0, Math.Round((SelectedElementLineSpacing + delta) * 10.0) / 10.0));
         }
 
         public void ResetSelectedElementTextSpacing()
         {
-            if (SelectedElement == null) return;
+            if (SelectedElement == null || !IsSelectedElementText) return;
             SelectedElementLetterSpacing = 0.0;
             SelectedElementFontScaleX = 100.0;
             SelectedElementLineSpacing = 1.0;
@@ -1103,14 +1110,27 @@ namespace BarcodePrint.ViewModel
 
         public bool SelectedElementIsKeep
         {
-            get => SelectedElement?.IsKeep ?? false;
+            get => SelectedElement?.IsKeep ?? true;
             set
             {
                 if (SelectedElement != null && SelectedElement.IsKeep != value)
                 {
                     SelectedElement.IsKeep = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedElementIsResetAfterPrint));
                     SyncElementToLegacyColumn(SelectedElement);
+                }
+            }
+        }
+
+        public bool SelectedElementIsResetAfterPrint
+        {
+            get => SelectedElement != null ? !SelectedElement.IsKeep : false;
+            set
+            {
+                if (SelectedElement != null)
+                {
+                    SelectedElementIsKeep = !value;
                 }
             }
         }
@@ -1217,7 +1237,17 @@ namespace BarcodePrint.ViewModel
 
         public string SelectedElementFontName
         {
-            get => SelectedElement?.FontName ?? "맑은 고딕";
+            get
+            {
+                string raw = SelectedElement?.FontName;
+                if (string.IsNullOrWhiteSpace(raw)) return "맑은 고딕";
+                if (raw.Equals("Malgun Gothic", StringComparison.OrdinalIgnoreCase)) return "맑은 고딕";
+                if (raw.Equals("Gulim", StringComparison.OrdinalIgnoreCase)) return "굴림";
+                if (raw.Equals("Dotum", StringComparison.OrdinalIgnoreCase)) return "돋움";
+                if (raw.Equals("Batang", StringComparison.OrdinalIgnoreCase)) return "바탕";
+                if (raw.Equals("Gungsuh", StringComparison.OrdinalIgnoreCase)) return "궁서";
+                return raw;
+            }
             set
             {
                 if (SelectedElement != null && SelectedElement.FontName != value)
@@ -1268,6 +1298,51 @@ namespace BarcodePrint.ViewModel
                 if (SelectedElement != null && SelectedElement.IsUnderline != value)
                 {
                     SelectedElement.IsUnderline = value;
+                    OnPropertyChanged();
+                    SyncElementToLegacyColumn(SelectedElement);
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public bool SelectedElementIsVertical
+        {
+            get => SelectedElement?.IsVertical ?? false;
+            set
+            {
+                if (SelectedElement != null && SelectedElement.IsVertical != value)
+                {
+                    SelectedElement.IsVertical = value;
+                    OnPropertyChanged();
+                    SyncElementToLegacyColumn(SelectedElement);
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public bool SelectedElementIsMirrored
+        {
+            get => SelectedElement?.IsMirrored ?? false;
+            set
+            {
+                if (SelectedElement != null && SelectedElement.IsMirrored != value)
+                {
+                    SelectedElement.IsMirrored = value;
+                    OnPropertyChanged();
+                    SyncElementToLegacyColumn(SelectedElement);
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public bool SelectedElementIsInverse
+        {
+            get => SelectedElement?.IsInverse ?? false;
+            set
+            {
+                if (SelectedElement != null && SelectedElement.IsInverse != value)
+                {
+                    SelectedElement.IsInverse = value;
                     OnPropertyChanged();
                     SyncElementToLegacyColumn(SelectedElement);
                     UpdatePreview();
@@ -1383,7 +1458,7 @@ namespace BarcodePrint.ViewModel
             double centerY = Math.Max(2.0, (height - initTextHMm) / 2.0);
 
             var defaultElem = TemplateMigrationHelper.CreateElement(ElementType.TEXT, centerX, centerY);
-            defaultElem.Content = "상품명 또는 텍스트 입력";
+            defaultElem.Content = "텍스트";
             defaultElem.HeaderName = "1열";
             defaultElem.InputOrder = 1;
             defaultElem.FontSize = 14;
@@ -1410,18 +1485,66 @@ namespace BarcodePrint.ViewModel
 
         public void LoadTemplateFromFile(string filePath)
         {
-            var loaded = LabelTemplateModel.LoadFromFile(filePath);
+            if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath)) return;
+
+            var loaded = _templateService.ImportTemplateModel(filePath, out string err);
             if (loaded != null)
             {
-                CurrentTemplate = loaded;
-                PaperWidth = (int)Math.Round(loaded.WidthMm);
-                PaperHeight = (int)Math.Round(loaded.HeightMm);
-                PaperWidthStr = loaded.WidthMm.ToString("0.#");
-                PaperHeightStr = loaded.HeightMm.ToString("0.#");
-                LabelRotationAngle = loaded.Rotation;
-                StatusMessage = $"템플릿을 불러왔습니다: {System.IO.Path.GetFileName(filePath)}";
-                UpdatePreview();
+                ApplyLoadedTemplate(loaded, filePath);
             }
+            else
+            {
+                StatusMessage = $"템플릿 로드 실패: {err}";
+            }
+        }
+
+        public void ApplyLoadedTemplate(LabelTemplateModel loaded, string filePath)
+        {
+            if (loaded == null) return;
+
+            CurrentTemplate = loaded;
+            PaperWidth = (int)Math.Round(loaded.WidthMm);
+            PaperHeight = (int)Math.Round(loaded.HeightMm);
+            PaperWidthStr = loaded.WidthMm.ToString("0.#");
+            PaperHeightStr = loaded.HeightMm.ToString("0.#");
+            LabelRotationAngle = loaded.Rotation;
+            if (!string.IsNullOrEmpty(loaded.PaperType))
+            {
+                PaperType = loaded.PaperType;
+            }
+
+            // 1. 변수 요소들을 기존 1~8열 변수에 역동기화
+            if (loaded.Elements != null && loaded.Elements.Count > 0)
+            {
+                var variableElems = loaded.Elements.Where(e => e.IsVariable).OrderBy(e => e.InputOrder).ToList();
+                if (variableElems.Count > 0)
+                {
+                    int maxOrder = Math.Min(8, variableElems.Max(e => e.InputOrder));
+                    ActiveColumnCount = Math.Max(1, Math.Min(8, Math.Max(variableElems.Count, maxOrder)));
+
+                    foreach (var elem in variableElems)
+                    {
+                        SyncElementToLegacyColumn(elem);
+                    }
+                }
+                else
+                {
+                    ActiveColumnCount = 1;
+                }
+
+                SelectedElement = loaded.Elements.FirstOrDefault();
+            }
+
+            OnPropertyChanged("");
+            ActiveColumnCountChanged?.Invoke(ActiveColumnCount);
+            UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
+
+            string title = System.IO.Path.GetFileNameWithoutExtension(filePath);
+            if (string.IsNullOrEmpty(title)) title = $"라벨 {PaperWidth}×{PaperHeight} mm";
+            _settings.AddRecentWork(title, (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, filePath);
+
+            StatusMessage = $"템플릿 로드 완료: {System.IO.Path.GetFileName(filePath)}";
         }
 
         public void AddImageElement()
@@ -1523,6 +1646,9 @@ namespace BarcodePrint.ViewModel
         {
             if (CurrentTemplate == null) InitializeDefaultTemplateFromCurrentSettings();
 
+            double paperW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
+            double paperH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
+
             // 스마트 겹침 방지 오프셋 계산
             double defaultX = 5.0;
             double defaultY = 5.0;
@@ -1530,10 +1656,10 @@ namespace BarcodePrint.ViewModel
             {
                 var lastElem = CurrentTemplate.Elements.Last();
                 defaultY = lastElem.Y + lastElem.Height + 2.0;
-                if (defaultY + 10.0 > EffectivePaperHeight)
+                if (defaultY + 10.0 > paperH)
                 {
                     defaultY = 5.0;
-                    defaultX = Math.Min(EffectivePaperWidth - 20.0, lastElem.X + 15.0);
+                    defaultX = Math.Max(2.0, Math.Min(paperW - 20.0, lastElem.X + 15.0));
                 }
             }
 
@@ -1546,8 +1672,26 @@ namespace BarcodePrint.ViewModel
             {
                 newElem.LineStyle = subType;
             }
-            newElem.InputOrder = CurrentTemplate.Elements.Count(e => e.IsVariable) + 1;
-            newElem.HeaderName = $"{newElem.InputOrder}열 ({type})";
+            else if (type == ElementType.TABLE)
+            {
+                newElem.Width = Math.Min(newElem.Width, Math.Max(20.0, paperW - 4.0));
+                newElem.Height = Math.Min(newElem.Height, Math.Max(15.0, paperH - 4.0));
+                if (newElem.X + newElem.Width > paperW - 1.0)
+                {
+                    newElem.X = Math.Max(2.0, (paperW - newElem.Width) / 2.0);
+                }
+                if (newElem.Y + newElem.Height > paperH - 1.0)
+                {
+                    newElem.Y = Math.Max(2.0, (paperH - newElem.Height) / 2.0);
+                }
+                newElem.EnsureTableData();
+            }
+
+            if (newElem.IsVariable)
+            {
+                newElem.InputOrder = CurrentTemplate.Elements.Count(e => e.IsVariable) + 1;
+                newElem.HeaderName = $"{newElem.InputOrder}열 ({type})";
+            }
 
             RecordUndoSnapshot();
             CurrentTemplate.Elements.Add(newElem);
@@ -1590,6 +1734,27 @@ namespace BarcodePrint.ViewModel
             _redoStack.Clear();
         }
 
+        private void ResyncTemplateVariableColumns()
+        {
+            if (CurrentTemplate?.Elements == null) return;
+            var variableElems = CurrentTemplate.Elements.Where(e => e.IsVariable).OrderBy(e => e.InputOrder).ToList();
+            int order = 1;
+            foreach (var elem in variableElems)
+            {
+                elem.InputOrder = order;
+                if (order <= 8)
+                {
+                    SyncElementToLegacyColumn(elem);
+                }
+                order++;
+            }
+            ActiveColumnCount = variableElems.Count;
+            for (int c = ActiveColumnCount + 1; c <= 8; c++)
+            {
+                ClearColumnData(c);
+            }
+        }
+
         public void Undo()
         {
             if (_undoStack == null || _undoStack.Count == 0 || CurrentTemplate?.Elements == null)
@@ -1603,10 +1768,13 @@ namespace BarcodePrint.ViewModel
             _redoStack.Push(currentSnapshot);
 
             var previous = _undoStack.Pop();
-            CurrentTemplate.Elements.Clear();
-            foreach (var el in previous) CurrentTemplate.Elements.Add(el);
-
-            SelectedElement = CurrentTemplate.Elements.LastOrDefault();
+            using (SuppressPreviewUpdate())
+            {
+                CurrentTemplate.Elements.Clear();
+                foreach (var el in previous) CurrentTemplate.Elements.Add(el);
+                ResyncTemplateVariableColumns();
+                SelectedElement = CurrentTemplate.Elements.LastOrDefault();
+            }
             OnPropertyChanged(nameof(TemplateElements));
             StatusMessage = "실행 취소(Undo) 완료 (Ctrl+Z).";
             UpdatePreview();
@@ -1625,10 +1793,13 @@ namespace BarcodePrint.ViewModel
             _undoStack.Push(currentSnapshot);
 
             var next = _redoStack.Pop();
-            CurrentTemplate.Elements.Clear();
-            foreach (var el in next) CurrentTemplate.Elements.Add(el);
-
-            SelectedElement = CurrentTemplate.Elements.LastOrDefault();
+            using (SuppressPreviewUpdate())
+            {
+                CurrentTemplate.Elements.Clear();
+                foreach (var el in next) CurrentTemplate.Elements.Add(el);
+                ResyncTemplateVariableColumns();
+                SelectedElement = CurrentTemplate.Elements.LastOrDefault();
+            }
             OnPropertyChanged(nameof(TemplateElements));
             StatusMessage = "다시 실행(Redo) 완료 (Ctrl+Y).";
             UpdatePreview();
@@ -1777,6 +1948,38 @@ namespace BarcodePrint.ViewModel
 
         #region 선택 요소 정렬 (Alignment & Distribution)
 
+        public double GetElementEffectiveWidthMm(TemplateElement el)
+        {
+            if (el == null) return 0;
+            if (el.Width > 0) return el.Width;
+
+            if (el.Type == ElementType.TEXT || el.Type == ElementType.DATE_TIME)
+            {
+                string txt = GetElementEffectiveContent(el);
+                double w = CalculateExactTextWidthMm(txt, el.FontName, (int)Math.Round(el.FontSize > 0 ? el.FontSize : 10.0), el.IsBold, el.IsItalic);
+                return w > 0 ? w : 20.0;
+            }
+            if (el.Type == ElementType.BARCODE) return 45.0;
+            if (el.Type == ElementType.QR_CODE) return 18.0;
+            if (el.Type == ElementType.SHAPE) return 40.0;
+            return 20.0;
+        }
+
+        public double GetElementEffectiveHeightMm(TemplateElement el)
+        {
+            if (el == null) return 0;
+            if (el.Height > 0) return el.Height;
+
+            if (el.Type == ElementType.TEXT || el.Type == ElementType.DATE_TIME)
+            {
+                return Math.Max(5.0, (el.FontSize > 0 ? el.FontSize : 10.0) * 0.5);
+            }
+            if (el.Type == ElementType.BARCODE) return 15.0;
+            if (el.Type == ElementType.QR_CODE) return 18.0;
+            if (el.Type == ElementType.SHAPE) return 20.0;
+            return 10.0;
+        }
+
         public void AlignSelectedElements(string alignmentType)
         {
             var targets = _selectedElements.Count >= 2 
@@ -1794,25 +1997,28 @@ namespace BarcodePrint.ViewModel
                 double paperW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
                 double paperH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
 
+                double effW = GetElementEffectiveWidthMm(el);
+                double effH = GetElementEffectiveHeightMm(el);
+
                 switch (alignmentType?.ToUpper())
                 {
                     case "LEFT":
                         el.X = 2.0;
                         break;
                     case "CENTER":
-                        el.X = Math.Max(0, Math.Round(((paperW - el.Width) / 2.0) * 2.0) / 2.0);
+                        el.X = Math.Max(0, Math.Round(((paperW - effW) / 2.0) * 2.0) / 2.0);
                         break;
                     case "RIGHT":
-                        el.X = Math.Max(0, Math.Round((paperW - el.Width - 2.0) * 2.0) / 2.0);
+                        el.X = Math.Max(0, Math.Round((paperW - effW - 2.0) * 2.0) / 2.0);
                         break;
                     case "TOP":
                         el.Y = 2.0;
                         break;
                     case "MIDDLE":
-                        el.Y = Math.Max(0, Math.Round(((paperH - el.Height) / 2.0) * 2.0) / 2.0);
+                        el.Y = Math.Max(0, Math.Round(((paperH - effH) / 2.0) * 2.0) / 2.0);
                         break;
                     case "BOTTOM":
-                        el.Y = Math.Max(0, Math.Round((paperH - el.Height - 2.0) * 2.0) / 2.0);
+                        el.Y = Math.Max(0, Math.Round((paperH - effH - 2.0) * 2.0) / 2.0);
                         break;
                 }
                 SyncElementToLegacyColumn(el);
@@ -1823,9 +2029,9 @@ namespace BarcodePrint.ViewModel
 
             // 2개 이상 다중 선택되었을 때는 선택된 요소 그룹 기준 정렬
             double minX = targets.Min(e => e.X);
-            double maxX = targets.Max(e => e.X + e.Width);
+            double maxX = targets.Max(e => e.X + GetElementEffectiveWidthMm(e));
             double minY = targets.Min(e => e.Y);
-            double maxY = targets.Max(e => e.Y + e.Height);
+            double maxY = targets.Max(e => e.Y + GetElementEffectiveHeightMm(e));
             double centerX = (minX + maxX) / 2.0;
             double centerY = (minY + maxY) / 2.0;
 
@@ -1835,33 +2041,33 @@ namespace BarcodePrint.ViewModel
                     foreach (var el in targets) el.X = minX;
                     break;
                 case "CENTER":
-                    foreach (var el in targets) el.X = Math.Round((centerX - (el.Width / 2.0)) * 2.0) / 2.0;
+                    foreach (var el in targets) el.X = Math.Round((centerX - (GetElementEffectiveWidthMm(el) / 2.0)) * 2.0) / 2.0;
                     break;
                 case "RIGHT":
-                    foreach (var el in targets) el.X = maxX - el.Width;
+                    foreach (var el in targets) el.X = maxX - GetElementEffectiveWidthMm(el);
                     break;
                 case "TOP":
                     foreach (var el in targets) el.Y = minY;
                     break;
                 case "MIDDLE":
-                    foreach (var el in targets) el.Y = Math.Round((centerY - (el.Height / 2.0)) * 2.0) / 2.0;
+                    foreach (var el in targets) el.Y = Math.Round((centerY - (GetElementEffectiveHeightMm(el) / 2.0)) * 2.0) / 2.0;
                     break;
                 case "BOTTOM":
-                    foreach (var el in targets) el.Y = maxY - el.Height;
+                    foreach (var el in targets) el.Y = maxY - GetElementEffectiveHeightMm(el);
                     break;
                 case "DISTRIBUTE_HORIZONTALLY":
                     if (targets.Count >= 3)
                     {
                         var sorted = targets.OrderBy(e => e.X).ToList();
-                        double totalElemW = sorted.Sum(e => e.Width);
-                        double totalSpan = (sorted.Last().X + sorted.Last().Width) - sorted.First().X;
+                        double totalElemW = sorted.Sum(e => GetElementEffectiveWidthMm(e));
+                        double totalSpan = (sorted.Last().X + GetElementEffectiveWidthMm(sorted.Last())) - sorted.First().X;
                         double totalGap = totalSpan - totalElemW;
                         double gap = totalGap / (sorted.Count - 1);
                         double curX = sorted.First().X;
                         for (int i = 0; i < sorted.Count; i++)
                         {
                             sorted[i].X = Math.Round(curX * 2.0) / 2.0;
-                            curX += sorted[i].Width + gap;
+                            curX += GetElementEffectiveWidthMm(sorted[i]) + gap;
                         }
                     }
                     else
@@ -1874,15 +2080,15 @@ namespace BarcodePrint.ViewModel
                     if (targets.Count >= 3)
                     {
                         var sorted = targets.OrderBy(e => e.Y).ToList();
-                        double totalElemH = sorted.Sum(e => e.Height);
-                        double totalSpan = (sorted.Last().Y + sorted.Last().Height) - sorted.First().Y;
+                        double totalElemH = sorted.Sum(e => GetElementEffectiveHeightMm(e));
+                        double totalSpan = (sorted.Last().Y + GetElementEffectiveHeightMm(sorted.Last())) - sorted.First().Y;
                         double totalGap = totalSpan - totalElemH;
                         double gap = totalGap / (sorted.Count - 1);
                         double curY = sorted.First().Y;
                         for (int i = 0; i < sorted.Count; i++)
                         {
                             sorted[i].Y = Math.Round(curY * 2.0) / 2.0;
-                            curY += sorted[i].Height + gap;
+                            curY += GetElementEffectiveHeightMm(sorted[i]) + gap;
                         }
                     }
                     else
@@ -1941,12 +2147,103 @@ namespace BarcodePrint.ViewModel
             var targets = _selectedElements.Count > 0 ? _selectedElements.ToList() : new List<TemplateElement> { SelectedElement };
             foreach (var elem in targets)
             {
-                elem.X = Math.Max(0, Math.Min(EffectivePaperWidth - 1.0, elem.X + deltaX));
-                elem.Y = Math.Max(0, Math.Min(EffectivePaperHeight - 1.0, elem.Y + deltaY));
+                elem.X = Math.Max(-100.0, Math.Min(EffectivePaperWidth + 100.0, elem.X + deltaX));
+                elem.Y = Math.Max(-100.0, Math.Min(EffectivePaperHeight + 100.0, elem.Y + deltaY));
                 SyncElementToLegacyColumn(elem);
             }
             UpdatePreview();
         }
+
+        #region 요소 순서(Z-Order) 변경 로직 (Bring to Front / Send to Back)
+
+        public void BringToFront()
+        {
+            if (CurrentTemplate?.Elements == null) return;
+            var targets = _selectedElements.Count > 0 ? _selectedElements.ToList() : (SelectedElement != null ? new List<TemplateElement> { SelectedElement } : null);
+            if (targets == null || targets.Count == 0) return;
+
+            RecordUndoSnapshot();
+
+            foreach (var elem in targets)
+            {
+                if (CurrentTemplate.Elements.Remove(elem))
+                {
+                    CurrentTemplate.Elements.Add(elem);
+                }
+            }
+
+            StatusMessage = targets.Count > 1 ? $"{targets.Count}개 요소를 맨 앞으로 가져왔습니다." : "선택한 요소를 맨 앞으로 가져왔습니다.";
+            UpdatePreview();
+        }
+
+        public void SendToBack()
+        {
+            if (CurrentTemplate?.Elements == null) return;
+            var targets = _selectedElements.Count > 0 ? _selectedElements.ToList() : (SelectedElement != null ? new List<TemplateElement> { SelectedElement } : null);
+            if (targets == null || targets.Count == 0) return;
+
+            RecordUndoSnapshot();
+
+            for (int i = targets.Count - 1; i >= 0; i--)
+            {
+                var elem = targets[i];
+                if (CurrentTemplate.Elements.Remove(elem))
+                {
+                    CurrentTemplate.Elements.Insert(0, elem);
+                }
+            }
+
+            StatusMessage = targets.Count > 1 ? $"{targets.Count}개 요소를 맨 뒤로 보냈습니다." : "선택한 요소를 맨 뒤로 보냈습니다.";
+            UpdatePreview();
+        }
+
+        public void BringForward()
+        {
+            if (CurrentTemplate?.Elements == null) return;
+            var targets = _selectedElements.Count > 0 ? _selectedElements.ToList() : (SelectedElement != null ? new List<TemplateElement> { SelectedElement } : null);
+            if (targets == null || targets.Count == 0) return;
+
+            RecordUndoSnapshot();
+
+            for (int i = targets.Count - 1; i >= 0; i--)
+            {
+                var elem = targets[i];
+                int idx = CurrentTemplate.Elements.IndexOf(elem);
+                if (idx >= 0 && idx < CurrentTemplate.Elements.Count - 1)
+                {
+                    CurrentTemplate.Elements.RemoveAt(idx);
+                    CurrentTemplate.Elements.Insert(idx + 1, elem);
+                }
+            }
+
+            StatusMessage = targets.Count > 1 ? $"{targets.Count}개 요소를 한 단계 앞으로 가져왔습니다." : "선택한 요소를 한 단계 앞으로 가져왔습니다.";
+            UpdatePreview();
+        }
+
+        public void SendBackward()
+        {
+            if (CurrentTemplate?.Elements == null) return;
+            var targets = _selectedElements.Count > 0 ? _selectedElements.ToList() : (SelectedElement != null ? new List<TemplateElement> { SelectedElement } : null);
+            if (targets == null || targets.Count == 0) return;
+
+            RecordUndoSnapshot();
+
+            for (int i = 0; i < targets.Count; i++)
+            {
+                var elem = targets[i];
+                int idx = CurrentTemplate.Elements.IndexOf(elem);
+                if (idx > 0)
+                {
+                    CurrentTemplate.Elements.RemoveAt(idx);
+                    CurrentTemplate.Elements.Insert(idx - 1, elem);
+                }
+            }
+
+            StatusMessage = targets.Count > 1 ? $"{targets.Count}개 요소를 한 단계 뒤로 보냈습니다." : "선택한 요소를 한 단계 뒤로 보냈습니다.";
+            UpdatePreview();
+        }
+
+        #endregion
 
         public void DeleteSelectedElement()
         {
@@ -1958,54 +2255,57 @@ namespace BarcodePrint.ViewModel
 
             bool isDeletingAll = targets.Count >= CurrentTemplate.Elements.Count;
 
-            if (isDeletingAll)
+            using (SuppressPreviewUpdate())
             {
-                CurrentTemplate.Elements.Clear();
-                ClearAllColumnsData();
-                ActiveColumnCount = 1;
-                ClearSelectedElements();
-                SelectedElement = null;
-                SelectedItemIndex = -1;
-                StatusMessage = "모든 라벨 요소가 삭제되었습니다 (Del).";
-            }
-            else
-            {
-                foreach (var elem in targets)
+                if (isDeletingAll)
                 {
-                    CurrentTemplate.Elements.Remove(elem);
-                    if (elem.IsVariable && elem.InputOrder <= 8)
+                    CurrentTemplate.Elements.Clear();
+                    ClearAllColumnsData();
+                    ActiveColumnCount = 0;
+                    ClearSelectedElements();
+                    SelectedElement = null;
+                    SelectedItemIndex = -1;
+                    StatusMessage = "모든 라벨 요소가 삭제되었습니다 (Del).";
+                }
+                else
+                {
+                    foreach (var elem in targets)
                     {
-                        ClearColumnData(elem.InputOrder);
+                        CurrentTemplate.Elements.Remove(elem);
+                        if (elem.IsVariable && elem.InputOrder <= 8)
+                        {
+                            ClearColumnData(elem.InputOrder);
+                        }
                     }
-                }
 
-                // 남은 가변 요소들의 InputOrder 재정렬 및 레거시 컬럼 동기화
-                int order = 1;
-                var variableElems = CurrentTemplate.Elements.Where(e => e.IsVariable).OrderBy(e => e.InputOrder).ToList();
-                foreach (var elem in variableElems)
-                {
-                    elem.InputOrder = order;
-                    if (order <= 8)
+                    // 남은 가변 요소들의 InputOrder 재정렬 및 레거시 컬럼 동기화
+                    int order = 1;
+                    var variableElems = CurrentTemplate.Elements.Where(e => e.IsVariable).OrderBy(e => e.InputOrder).ToList();
+                    foreach (var elem in variableElems)
                     {
-                        SyncElementToLegacyColumn(elem);
+                        elem.InputOrder = order;
+                        if (order <= 8)
+                        {
+                            SyncElementToLegacyColumn(elem);
+                        }
+                        order++;
                     }
-                    order++;
+
+                    ActiveColumnCount = variableElems.Count;
+
+                    for (int c = ActiveColumnCount + 1; c <= 8; c++)
+                    {
+                        ClearColumnData(c);
+                    }
+
+                    ClearSelectedElements();
+                    SelectedElement = CurrentTemplate.Elements.LastOrDefault();
+                    SelectedItemIndex = (SelectedElement != null && SelectedElement.IsVariable && SelectedElement.InputOrder <= 8)
+                        ? SelectedElement.InputOrder - 1
+                        : -1;
+
+                    StatusMessage = targets.Count > 1 ? $"{targets.Count}개 요소가 삭제되었습니다 (Del)." : "선택한 라벨 요소가 삭제되었습니다 (Del).";
                 }
-
-                ActiveColumnCount = Math.Max(1, Math.Min(8, variableElems.Count));
-
-                for (int c = ActiveColumnCount + 1; c <= 8; c++)
-                {
-                    ClearColumnData(c);
-                }
-
-                ClearSelectedElements();
-                SelectedElement = CurrentTemplate.Elements.LastOrDefault();
-                SelectedItemIndex = (SelectedElement != null && SelectedElement.IsVariable && SelectedElement.InputOrder <= 8)
-                    ? SelectedElement.InputOrder - 1
-                    : -1;
-
-                StatusMessage = targets.Count > 1 ? $"{targets.Count}개 요소가 삭제되었습니다 (Del)." : "선택한 라벨 요소가 삭제되었습니다 (Del).";
             }
 
             OnPropertyChanged(nameof(TemplateElements));
@@ -2127,21 +2427,24 @@ namespace BarcodePrint.ViewModel
             int idx = elem.InputOrder;
             if (idx >= 1 && idx <= 8)
             {
-                SetHeaderByIndex(idx, elem.HeaderName);
-                SetInputByIndex(idx, elem.Content);
-                SetSizeByIndex(idx, (int)Math.Round(elem.FontSize));
-                SetFontByIndex(idx, elem.FontName);
-                SetBoldByIndex(idx, elem.IsBold);
-                SetItalicByIndex(idx, elem.IsItalic);
-                SetAlignByIndex(idx, elem.Alignment);
-                SetBarcodeByIndex(idx, elem.Type == ElementType.BARCODE || elem.Type == ElementType.QR_CODE);
-                SetBarcodeTypeByIndex(idx, elem.BarcodeType);
-                SetOffsetXByIndex(idx, (int)Math.Round(elem.X));
-                SetOffsetYByIndex(idx, (int)Math.Round(elem.Y));
-                SetWidthByIndex(idx, (int)Math.Round(elem.Width));
-                SetIncludeHeaderByIndex(idx, elem.IncludeHeaderOnLabel);
-                SetPriceByIndex(idx, elem.IsPriceFormat);
-                SetKeepByIndex(idx, elem.IsKeep);
+                using (SuppressPreviewUpdate())
+                {
+                    SetHeaderByIndex(idx, elem.HeaderName);
+                    SetInputByIndex(idx, elem.Content);
+                    SetSizeByIndex(idx, (int)Math.Round(elem.FontSize));
+                    SetFontByIndex(idx, elem.FontName);
+                    SetBoldByIndex(idx, elem.IsBold);
+                    SetItalicByIndex(idx, elem.IsItalic);
+                    SetAlignByIndex(idx, elem.Alignment);
+                    SetBarcodeByIndex(idx, elem.Type == ElementType.BARCODE || elem.Type == ElementType.QR_CODE);
+                    SetBarcodeTypeByIndex(idx, elem.BarcodeType);
+                    SetOffsetXByIndex(idx, (int)Math.Round(elem.X));
+                    SetOffsetYByIndex(idx, (int)Math.Round(elem.Y));
+                    SetWidthByIndex(idx, (int)Math.Round(elem.Width));
+                    SetIncludeHeaderByIndex(idx, elem.IncludeHeaderOnLabel);
+                    SetPriceByIndex(idx, elem.IsPriceFormat);
+                    SetKeepByIndex(idx, elem.IsKeep);
+                }
             }
         }
 

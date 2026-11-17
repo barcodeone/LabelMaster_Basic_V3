@@ -97,7 +97,9 @@ namespace BarcodePrint.Services
         {
             try
             {
-                return UsbPrinterHelper.GetConnectedUsbPrinters(null, authenticatedSerials) ?? new List<UsbPrinterInfo>();
+                // LabelMaster Basic v2는 모든 Xprinter 라벨 프린터를 시리얼 제한 없이 지원하므로
+                // 암호화 시리얼 필터(authenticatedSerials)로 인해 실제 연결된 프린터가 배제되지 않도록 전체 조회
+                return UsbPrinterHelper.GetConnectedUsbPrinters(null, null) ?? new List<UsbPrinterInfo>();
             }
             catch (Exception ex)
             {
@@ -148,9 +150,8 @@ namespace BarcodePrint.Services
                 }
 
                 // 3) AppSettings에 저장/선택된 BluetoothPortName 확인 (현재 시스템에 실제로 존재하는 포트일 때만 반영)
-                var st = new AppSettings();
-                st.Load();
-                if (!string.IsNullOrEmpty(st.BluetoothPortName) && Regex.IsMatch(st.BluetoothPortName, @"COM\d+", RegexOptions.IgnoreCase))
+                var st = AppSettings.Default;
+                if (st != null && !string.IsNullOrEmpty(st.BluetoothPortName) && Regex.IsMatch(st.BluetoothPortName, @"COM\d+", RegexOptions.IgnoreCase))
                 {
                     string configuredPort = Regex.Match(st.BluetoothPortName, @"COM\d+", RegexOptions.IgnoreCase).Value.ToUpper();
                     var available = UsbPrinterHelper.GetAvailableComPorts();
@@ -189,16 +190,67 @@ namespace BarcodePrint.Services
                 {
                     return printer.PortName;
                 }
-                var st = new AppSettings();
-                st.Load();
-                return $"{st.TcpPrinterIp}:{st.TcpPrinterPort}";
+                var st = AppSettings.Default;
+                return $"{st?.TcpPrinterIp ?? "192.168.0.50"}:{st?.TcpPrinterPort ?? 9100}";
+            }
+
+            if (!string.IsNullOrEmpty(printer?.PortName) && !printer.PortName.Equals("USB001", StringComparison.OrdinalIgnoreCase))
+            {
+                return printer.PortName;
+            }
+
+            if (!string.IsNullOrEmpty(pName))
+            {
+                string spoolerPort = GetSpoolerPrinterPort(pName);
+                if (!string.IsNullOrEmpty(spoolerPort))
+                {
+                    if (printer != null) printer.PortName = spoolerPort;
+                    return spoolerPort;
+                }
             }
 
             return (!string.IsNullOrEmpty(printer?.PortName)) ? printer.PortName : "USB001";
         }
 
+        public static string GetSpoolerPrinterPort(string printerName)
+        {
+            if (string.IsNullOrWhiteSpace(printerName)) return null;
+            IntPtr hPrinter = IntPtr.Zero;
+            PRINTER_DEFAULTS defaults = new PRINTER_DEFAULTS { DesiredAccess = 0x00000008 };
+            try
+            {
+                if (!OpenPrinter(printerName, out hPrinter, ref defaults)) return null;
+                int pcbNeeded = 0;
+                GetPrinter(hPrinter, 2, IntPtr.Zero, 0, ref pcbNeeded);
+                if (pcbNeeded <= 0) return null;
+
+                IntPtr pPrinter = Marshal.AllocHGlobal(pcbNeeded);
+                try
+                {
+                    if (GetPrinter(hPrinter, 2, pPrinter, pcbNeeded, ref pcbNeeded))
+                    {
+                        var pInfo = Marshal.PtrToStructure<PRINTER_INFO_2>(pPrinter);
+                        if (!string.IsNullOrWhiteSpace(pInfo.pPortName))
+                        {
+                            return pInfo.pPortName.Trim();
+                        }
+                    }
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(pPrinter);
+                }
+            }
+            catch { }
+            finally
+            {
+                if (hPrinter != IntPtr.Zero) ClosePrinter(hPrinter);
+            }
+            return null;
+        }
+
         /// <summary>
-        /// New_xPix WindowsPrinterDriverService.GetDriverStatus 와 100% 동일한 검증된 스풀러 상태 감지
+        /// 백그라운드 상태 감지 (포트 점유/블로킹을 유발하지 않는 경량 상태 점검)
         /// </summary>
         public void CheckRealtimePrinterStatus(string printerName, List<UsbPrinterInfo> cachedPrinters, out string badgeText, out string badgeColor)
         {
@@ -209,52 +261,77 @@ namespace BarcodePrint.Services
                 return;
             }
 
-            // 1. New_xPix TSPL 실시간 통신 (하드웨어 칩셋 1:1 다이렉트 질의 - 헤드 열림, 용지 없음, 용지 걸림 정밀 감지)
+            var info = cachedPrinters?.FirstOrDefault(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
+            if (info != null && (!info.IsPaired || printerName.Contains("(페어링 필요)")))
+            {
+                badgeText = "🟠 미페어링 (페어링 필요)";
+                badgeColor = "#F59E0B";
+                return;
+            }
+
+            bool isBt = printerName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) ||
+                        printerName.Contains("블루투스") ||
+                        (info != null && info.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase));
+            bool isLan = printerName.StartsWith("[네트워크]", StringComparison.OrdinalIgnoreCase) ||
+                         (info != null && info.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase));
+
+            string connType = isBt ? "Bluetooth" : (isLan ? "LAN" : "USB");
+            string portName = GetEffectivePrinterPort(info, printerName);
+
             try
             {
-                var info = cachedPrinters?.FirstOrDefault(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
-                if (info != null && (!info.IsPaired || printerName.Contains("(페어링 필요)")))
+                // 1) 블루투스 프린터: 주기적 백그라운드 타이머에서 실제 RFCOMM 시리얼 포트를 Open/Close 하면 드라이버 병목 및 딜레이가 발생하므로,
+                //    할당된 가상 COM 포트의 시스템 존재 여부로 즉시 판별
+                if (isBt)
                 {
-                    badgeText = "🟠 미페어링 (페어링 필요)";
-                    badgeColor = "#F59E0B";
-                    return;
-                }
-
-                bool isBt = printerName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) ||
-                            printerName.Contains("블루투스") ||
-                            (info != null && info.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase));
-                bool isLan = printerName.StartsWith("[네트워크]", StringComparison.OrdinalIgnoreCase) ||
-                             (info != null && info.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase));
-
-                string connType = isBt ? "Bluetooth" : (isLan ? "LAN" : "USB");
-                string portName = GetEffectivePrinterPort(info, printerName);
-
-                string tsplStatus = QueryTsplLiveStatus(portName, connType);
-                if (!string.IsNullOrEmpty(tsplStatus))
-                {
-                    if (tsplStatus.Contains("정상 준비") || tsplStatus.Equals("Ready", StringComparison.OrdinalIgnoreCase))
+                    string cleanPort = Regex.Match(portName ?? "", @"COM\d+", RegexOptions.IgnoreCase).Value;
+                    if (!string.IsNullOrEmpty(cleanPort) && UsbPrinterHelper.GetAvailableComPorts().Contains(cleanPort, StringComparer.OrdinalIgnoreCase))
                     {
                         badgeText = "🟢 정상 준비 (Ready)";
                         badgeColor = "#22C55E";
                     }
                     else
                     {
-                        badgeText = "🔴 " + tsplStatus;
+                        badgeText = "🔴 오프라인 (블루투스 미연결 / 전원 꺼짐)";
                         badgeColor = "#DC2626";
                     }
                     return;
                 }
 
-                // 🔍 블루투스 및 네트워크 프린터는 TSPL 질의 응답이 없으면 Windows Spooler로 빠지지 않고 즉시 오프라인 확정
-                if (isBt || isLan)
+                // 2) 네트워크(LAN) 프린터: 9100 포트에 TSPL 바이트를 매번 송신하지 않고 빠른 ARP 또는 WMI 온라인 여부로 경량 확인
+                if (isLan)
                 {
-                    badgeText = isBt ? "🔴 오프라인 (블루투스 미연결 / 전원 꺼짐)" : "🔴 오프라인 (네트워크 응답 없음 / 전원 꺼짐)";
+                    string ip = Regex.Match(portName ?? "", @"(\d{1,3}\.){3}\d{1,3}").Value;
+                    if (!string.IsNullOrEmpty(ip))
+                    {
+                        string mac = UsbPrinterHelper.GetMacAddressFromIp(ip);
+                        if (!string.IsNullOrEmpty(mac) && mac != "-")
+                        {
+                            badgeText = "🟢 정상 준비 (Ready)";
+                            badgeColor = "#22C55E";
+                            return;
+                        }
+                    }
+                    if (PrinterOnlineDetector.CheckIsPrinterOnline(printerName))
+                    {
+                        badgeText = "🟢 정상 준비 (Ready)";
+                        badgeColor = "#22C55E";
+                        return;
+                    }
+                    badgeText = "🔴 오프라인 (네트워크 응답 없음 / 전원 꺼짐)";
                     badgeColor = "#DC2626";
                     return;
                 }
 
-                // 🔍 USB 프린터인 경우 물리적 USBPRINT 연결 장치가 존재하는지 확인
-                if (connType == "USB" && !HasConnectedUsbPrinters())
+                // 3) USB 프린터: 실제 물리적 포트 연결 여부를 SetupAPI로 즉시 확인
+                string realPort = GetSpoolerPrinterPort(printerName);
+                if (!string.IsNullOrEmpty(realPort))
+                {
+                    portName = realPort;
+                    if (info != null) info.PortName = realPort;
+                }
+
+                if (!HasConnectedUsbPrinters() || !IsUsbPortConnected(portName, printerName))
                 {
                     badgeText = "🔴 오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
                     badgeColor = "#DC2626";
@@ -263,7 +340,7 @@ namespace BarcodePrint.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"TSPL 실시간 상태 조회 예외: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"실시간 상태 조회 예외: {ex.Message}");
             }
 
             // 2. 폴백: Windows Spooler API 기반 상태 확인
@@ -275,14 +352,6 @@ namespace BarcodePrint.Services
                 if (!OpenPrinter(printerName, out hPrinter, ref defaults))
                 {
                     badgeText = "🔴 오프라인 (장치 없음)";
-                    badgeColor = "#D32F2F";
-                    return;
-                }
-
-                // USB 프린터인데 물리적 연결이 없는 경우 스풀러 상태가 0이어도 오프라인 처리
-                if (!HasConnectedUsbPrinters())
-                {
-                    badgeText = "🔴 오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
                     badgeColor = "#D32F2F";
                     return;
                 }
@@ -301,18 +370,35 @@ namespace BarcodePrint.Services
                 {
                     if (GetPrinter(hPrinter, 2, pPrinter, pcbNeeded, ref pcbNeeded))
                     {
-                        var info = Marshal.PtrToStructure<PRINTER_INFO_2>(pPrinter);
-                        uint status = info.Status;
-                        bool isWorkOffline = (info.Attributes & 0x00000400) != 0;
+                        var pInfo = Marshal.PtrToStructure<PRINTER_INFO_2>(pPrinter);
+                        uint status = pInfo.Status;
+                        bool isWorkOffline = (pInfo.Attributes & 0x00000400) != 0;
 
-                        if (isWorkOffline)
+                        if (!string.IsNullOrEmpty(pInfo.pPortName))
+                        {
+                            portName = pInfo.pPortName.Trim();
+                            if (info != null) info.PortName = portName;
+                        }
+
+                        bool isUsbPhysicallyOnline = (connType == "USB") && IsUsbPortConnected(portName, printerName);
+
+                        // USB 프린터인데 실제 물리적 USB 포트가 연결되지 않은 경우 즉시 오프라인 처리
+                        if (connType == "USB" && !isUsbPhysicallyOnline)
+                        {
+                            badgeText = "🔴 오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
+                            badgeColor = "#DC2626";
+                            return;
+                        }
+
+                        // 물리적으로 USB 전원이 켜져 연결된 상태라면 Windows 스풀러의 지연된 WorkOffline/Offline 플래그를 무시하고 즉시 온라인 복구
+                        if (isWorkOffline && !isUsbPhysicallyOnline)
                         {
                             badgeText = "🔴 오프라인 (WorkOffline)";
                             badgeColor = "#D32F2F";
                             return;
                         }
 
-                        if (status == 0)
+                        if (status == 0 || (isUsbPhysicallyOnline && (status & ~0x00000080u) == 0))
                         {
                             badgeText = "🟢 정상 준비 (Ready)";
                             badgeColor = "#22C55E";
@@ -324,7 +410,7 @@ namespace BarcodePrint.Services
                         if ((status & 0x00000002) != 0) statusList.Add("오류");
                         if ((status & 0x00000008) != 0) statusList.Add("용지 걸림");
                         if ((status & 0x00000010) != 0) statusList.Add("용지 없음");
-                        if ((status & 0x00000080) != 0) statusList.Add("오프라인");
+                        if ((status & 0x00000080) != 0 && !isUsbPhysicallyOnline) statusList.Add("오프라인");
                         if ((status & 0x00000200) != 0) statusList.Add("바쁨 (Busy)");
                         if ((status & 0x00000400) != 0) statusList.Add("인쇄 중");
                         if ((status & 0x00100000) != 0) statusList.Add("사용자 조치 필요");
@@ -332,8 +418,8 @@ namespace BarcodePrint.Services
 
                         if (statusList.Count > 0)
                         {
-                            badgeText = ((status & 0x00000010) != 0 || (status & 0x00000080) != 0 ? "🔴 " : "🟡 ") + string.Join(", ", statusList);
-                            badgeColor = ((status & 0x00000010) != 0 || (status & 0x00000080) != 0) ? "#EF4444" : "#F59E0B";
+                            badgeText = ((status & 0x00000010) != 0 || ((status & 0x00000080) != 0 && !isUsbPhysicallyOnline) ? "🔴 " : "🟡 ") + string.Join(", ", statusList);
+                            badgeColor = ((status & 0x00000010) != 0 || ((status & 0x00000080) != 0 && !isUsbPhysicallyOnline)) ? "#EF4444" : "#F59E0B";
                         }
                         else
                         {
@@ -545,7 +631,7 @@ namespace BarcodePrint.Services
                 {
                     rawTsplResponse = QueryTsplHardwareInfoBluetooth(portName);
                 }
-                else
+                else if (IsUsbPortConnected(portName))
                 {
                     rawTsplResponse = QueryTsplHardwareInfoDirect(portName);
                 }
@@ -577,7 +663,7 @@ namespace BarcodePrint.Services
                 {
                     liveStatus = "오프라인 (네트워크 응답 없음 / 전원 꺼짐)";
                 }
-                else if (connType == "USB" && !HasConnectedUsbPrinters())
+                else if (connType == "USB" && (!HasConnectedUsbPrinters() || !IsUsbPortConnected(portName)))
                 {
                     liveStatus = "오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
                 }
@@ -591,11 +677,34 @@ namespace BarcodePrint.Services
                 }
             }
 
-            if (string.IsNullOrEmpty(liveStatus))
+            bool isSpoolerOnline = false;
+            if (string.IsNullOrEmpty(liveStatus) || liveStatus.Contains("오프라인"))
             {
-                if (isBt || isLan || (connType == "USB" && !HasConnectedUsbPrinters()))
+                if (isBt || isLan)
                 {
-                    liveStatus = "오프라인 (통신 응답 없음)";
+                    // 블루투스/LAN 장치 중 TSPL 미회신인 경우에도 가상 COM 포트 또는 WSD/IP 포트 유효성 확인
+                    if (connType == "Bluetooth")
+                    {
+                        var availableComs = UsbPrinterHelper.GetAvailableComPorts();
+                        if (availableComs.Contains(portName, StringComparer.OrdinalIgnoreCase))
+                        {
+                            isSpoolerOnline = true;
+                            liveStatus = "정상 준비 (블루투스 직렬 모드)";
+                        }
+                        else
+                        {
+                            liveStatus = "오프라인 (통신 응답 없음)";
+                        }
+                    }
+                    else
+                    {
+                        liveStatus = "오프라인 (통신 응답 없음)";
+                    }
+                }
+                else if (connType == "USB" && (!HasConnectedUsbPrinters() || !IsUsbPortConnected(portName)))
+                {
+                    isSpoolerOnline = false;
+                    liveStatus = "오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
                 }
                 else
                 {
@@ -619,9 +728,17 @@ namespace BarcodePrint.Services
                                             var pInfo = Marshal.PtrToStructure<PRINTER_INFO_2>(pPrinter);
                                             uint status = pInfo.Status;
                                             bool isWorkOffline = (pInfo.Attributes & 0x00000400) != 0;
+                                            bool isUsbPhysicallyOnline = (connType == "USB") && IsUsbPortConnected(portName, printerName);
 
-                                            if (isWorkOffline) liveStatus = "오프라인 (WorkOffline)";
-                                            else if (status == 0) liveStatus = (rawDetails.Count > 0) ? "정상 준비 (Ready)" : "오프라인 (응답 없음)";
+                                            if (isWorkOffline && !isUsbPhysicallyOnline)
+                                            {
+                                                liveStatus = "오프라인 (WorkOffline)";
+                                            }
+                                            else if (status == 0 || (isUsbPhysicallyOnline && (status & ~0x00000080u) == 0))
+                                            {
+                                                isSpoolerOnline = true;
+                                                liveStatus = (rawDetails.Count > 0) ? "정상 준비 (Ready)" : "정상 준비 (스풀러 인쇄 모드)";
+                                            }
                                             else
                                             {
                                                 List<string> statusList = new List<string>();
@@ -629,12 +746,21 @@ namespace BarcodePrint.Services
                                                 if ((status & 0x00000002) != 0) statusList.Add("오류");
                                                 if ((status & 0x00000008) != 0) statusList.Add("용지 걸림");
                                                 if ((status & 0x00000010) != 0) statusList.Add("용지 없음");
-                                                if ((status & 0x00000080) != 0) statusList.Add("오프라인");
+                                                if ((status & 0x00000080) != 0 && !isUsbPhysicallyOnline) statusList.Add("오프라인");
                                                 if ((status & 0x00000200) != 0) statusList.Add("바쁨 (Busy)");
                                                 if ((status & 0x00000400) != 0) statusList.Add("인쇄 중");
                                                 if ((status & 0x00100000) != 0) statusList.Add("사용자 조치 필요");
                                                 if ((status & 0x00400000) != 0) statusList.Add("커버 열림");
-                                                liveStatus = statusList.Count > 0 ? string.Join(", ", statusList) : ((rawDetails.Count > 0) ? "정상 준비 (Ready)" : "오프라인 (응답 없음)");
+
+                                                bool hasFatalError = ((status & 0x00000002) != 0) || (((status & 0x00000080) != 0) && !isUsbPhysicallyOnline);
+                                                if (!hasFatalError && (!isWorkOffline || isUsbPhysicallyOnline))
+                                                {
+                                                    isSpoolerOnline = true;
+                                                }
+
+                                                liveStatus = statusList.Count > 0 
+                                                    ? string.Join(", ", statusList) 
+                                                    : ((rawDetails.Count > 0) ? "정상 준비 (Ready)" : (isSpoolerOnline ? "정상 준비 (스풀러 인쇄 모드)" : "오프라인 (응답 없음)"));
                                             }
                                         }
                                     }
@@ -654,14 +780,30 @@ namespace BarcodePrint.Services
                 }
             }
 
+            // 💡 [2차 안전 폴백]: WMI 및 OS 레벨에서 프린터 온라인 상태 보조 확인
+            if (!isSpoolerOnline && rawDetails.Count == 0)
+            {
+                try
+                {
+                    if (PrinterOnlineDetector.CheckIsPrinterOnline(printerName))
+                    {
+                        isSpoolerOnline = true;
+                        liveStatus = "정상 준비 (스풀러 인쇄 모드)";
+                    }
+                }
+                catch { }
+            }
+
             if (string.IsNullOrEmpty(liveStatus))
             {
-                liveStatus = (rawDetails.Count > 0) ? "정상 준비 (Ready)" : "오프라인 (통신 응답 없음)";
+                liveStatus = (rawDetails.Count > 0) ? "정상 준비 (Ready)" : (isSpoolerOnline ? "정상 준비 (스풀러 인쇄 모드)" : "오프라인 (통신 응답 없음)");
             }
 
             // 3. New_xPix 기준 정렬된 결과 Dictionary 생성
             var details = new Dictionary<string, string>();
-            details["IS_SUCCESS"] = (rawDetails.Count > 0) ? "true" : "false";
+            bool isSuccess = (rawDetails.Count > 0) || isSpoolerOnline;
+            details["IS_SUCCESS"] = isSuccess ? "true" : "false";
+            details["통신 모드"] = (rawDetails.Count > 0) ? "TSPL 양방향 모드" : "Windows 스풀러 인쇄 모드";
 
             // 해상도
             if (rawDetails.TryGetValue("DPI", out string dpiVal)) details["해상도"] = dpiVal;
@@ -803,16 +945,220 @@ namespace BarcodePrint.Services
             public IntPtr Reserved;
         }
 
+        public static void InvalidateUsbCache()
+        {
+            _cachedUsbPrinterPaths = null;
+            _lastUsbPathsCheckTime = DateTime.MinValue;
+            lock (_pathResolveLock)
+            {
+                _portToPathMap.Clear();
+            }
+        }
+
+        private static HashSet<string> _cachedPresentQueues = null;
+        private static DateTime _lastPresentQueuesTime = DateTime.MinValue;
+        private static readonly object _presentQueuesLock = new object();
+
+        private static Dictionary<string, string> _cachedUsbPrintDevices = null; // Port -> Name
+        private static DateTime _lastUsbPrintDevicesTime = DateTime.MinValue;
+        private static readonly object _usbPrintDevicesLock = new object();
+
+        /// <summary>
+        /// 현재 Windows PnP 스택(Win32_PnPEntity)에서 Status == 'OK'인 활성 USBPRINT 하드웨어 장치 목록 조회 (Port -> DeviceName)
+        /// </summary>
+        public static Dictionary<string, string> GetActiveUsbPrintPortMap()
+        {
+            lock (_usbPrintDevicesLock)
+            {
+                if (_cachedUsbPrintDevices != null && (DateTime.Now - _lastUsbPrintDevicesTime).TotalSeconds < 1.0)
+                {
+                    return new Dictionary<string, string>(_cachedUsbPrintDevices, StringComparer.OrdinalIgnoreCase);
+                }
+
+                var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    using (var searcher = new System.Management.ManagementObjectSearcher(
+                        "SELECT Name, DeviceID, Status FROM Win32_PnPEntity WHERE DeviceID LIKE 'USBPRINT%'"))
+                    using (var collection = searcher.Get())
+                    {
+                        foreach (System.Management.ManagementObject obj in collection)
+                        {
+                            using (obj)
+                            {
+                                string status = obj["Status"]?.ToString() ?? "";
+                                if (!status.Equals("OK", StringComparison.OrdinalIgnoreCase)) continue;
+
+                                string name = obj["Name"]?.ToString() ?? "";
+                                string devId = obj["DeviceID"]?.ToString() ?? "";
+
+                                var match = Regex.Match(devId, @"(USB\d+)", RegexOptions.IgnoreCase);
+                                if (match.Success)
+                                {
+                                    string port = match.Value.ToUpper();
+                                    map[port] = name;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                _cachedUsbPrintDevices = map;
+                _lastUsbPrintDevicesTime = DateTime.Now;
+                return new Dictionary<string, string>(map, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        /// <summary>
+        /// Windows PnP 스택(Win32_PnPEntity)에서 현재 실제로 연결되어 켜져 있는(Present == True) PrintQueue 목록 조회
+        /// </summary>
+        public static HashSet<string> GetPresentPrintQueueNames()
+        {
+            lock (_presentQueuesLock)
+            {
+                if (_cachedPresentQueues != null && (DateTime.Now - _lastPresentQueuesTime).TotalSeconds < 1.0)
+                {
+                    return new HashSet<string>(_cachedPresentQueues, StringComparer.OrdinalIgnoreCase);
+                }
+
+                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    using (var searcher = new System.Management.ManagementObjectSearcher(
+                        "SELECT Name FROM Win32_PnPEntity WHERE PNPClass = 'PrintQueue' AND Present = True"))
+                    using (var collection = searcher.Get())
+                    {
+                        foreach (System.Management.ManagementObject obj in collection)
+                        {
+                            using (obj)
+                            {
+                                string qName = obj["Name"]?.ToString();
+                                if (!string.IsNullOrEmpty(qName))
+                                {
+                                    set.Add(qName.Trim());
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                _cachedPresentQueues = set;
+                _lastPresentQueuesTime = DateTime.Now;
+                return new HashSet<string>(set, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        public static bool IsPrinterQueuePresent(string printerName)
+        {
+            if (string.IsNullOrWhiteSpace(printerName)) return false;
+            var presentSet = GetPresentPrintQueueNames();
+            if (presentSet.Contains(printerName)) return true;
+
+            string cleanName = printerName.Replace("[블루투스]", "").Replace("[네트워크]", "").Trim();
+            if (presentSet.Contains(cleanName)) return true;
+
+            foreach (var q in presentSet)
+            {
+                if (q.IndexOf(cleanName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    cleanName.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool IsUsbPortConnected(string portName)
+        {
+            return IsUsbPortConnected(portName, null);
+        }
+
+        public static bool IsUsbPortConnected(string portName, string printerName)
+        {
+            if (string.IsNullOrWhiteSpace(portName)) return false;
+            try
+            {
+                if (!portName.StartsWith("USB", StringComparison.OrdinalIgnoreCase)) return false;
+
+                // 1순위: PnP 활성 USBPRINT 장치 포트 매핑 확인 (0.01초 초고속 하드웨어 직결 감지)
+                var activeUsbMap = GetActiveUsbPrintPortMap();
+                if (activeUsbMap.Count > 0)
+                {
+                    if (activeUsbMap.ContainsKey(portName.Trim()))
+                    {
+                        return true;
+                    }
+
+                    if (!string.IsNullOrEmpty(printerName))
+                    {
+                        string cleanTarget = printerName.Replace("[블루투스]", "").Replace("[네트워크]", "").Trim();
+                        foreach (var kvp in activeUsbMap)
+                        {
+                            if (kvp.Value.IndexOf(cleanTarget, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                cleanTarget.IndexOf(kvp.Value, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+
+                    // 활성 USBPRINT 하드웨어가 시스템에 존재하는데 매칭되지 않는다면 확실한 오프라인!
+                    return false;
+                }
+
+                // 2순위: 활성 USBPRINT를 WMI로 못 찾은 경우 SetupDi USB 경로 매핑 확인 (구형 OS 폴백)
+                var activePaths = FindUsbPrinterPaths();
+                if (activePaths != null && activePaths.Count > 0)
+                {
+                    string resolved = ResolveUsbPathCore(portName, allowFallbackToAnyUsb: false);
+                    if (!string.IsNullOrEmpty(resolved)) return true;
+                }
+
+                // 3순위: PnP PrintQueue Present 상태 확인
+                if (!string.IsNullOrEmpty(printerName))
+                {
+                    return IsPrinterQueuePresent(printerName);
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private string ResolveUsbPath(string portName)
+        {
+            return ResolveUsbPathCore(portName, allowFallbackToAnyUsb: false);
+        }
+
+        private static string ResolveUsbPathCore(string portName, bool allowFallbackToAnyUsb)
         {
             if (string.IsNullOrEmpty(portName)) return null;
             portName = portName.Trim().ToUpper();
+
+            var activePaths = FindUsbPrinterPaths();
+            if (activePaths.Count == 0)
+            {
+                lock (_pathResolveLock)
+                {
+                    _portToPathMap.Clear();
+                }
+                return null;
+            }
 
             lock (_pathResolveLock)
             {
                 if (_portToPathMap.TryGetValue(portName, out string cachedPath) && !string.IsNullOrEmpty(cachedPath))
                 {
-                    return cachedPath;
+                    if (activePaths.Any(p => string.Equals(p, cachedPath, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return cachedPath;
+                    }
+                    _portToPathMap.Remove(portName);
                 }
             }
 
@@ -821,7 +1167,10 @@ namespace BarcodePrint.Services
 
             Guid classGuid = UsbPrintGuid;
             IntPtr deviceInfoSet = SetupDiGetClassDevs(ref classGuid, IntPtr.Zero, IntPtr.Zero, 0x12);
-            if (deviceInfoSet == (IntPtr)(-1)) return null;
+            if (deviceInfoSet == (IntPtr)(-1))
+            {
+                return allowFallbackToAnyUsb && activePaths.Count > 0 ? activePaths[0] : null;
+            }
 
             IntPtr detailDataBuffer = IntPtr.Zero;
             uint deviceIndex = 0;
@@ -853,6 +1202,19 @@ namespace BarcodePrint.Services
                         if (SetupDiGetDeviceInstanceId(deviceInfoSet, ref devInfoData, sbId, sbId.Capacity, out _))
                         {
                             deviceInstanceId = sbId.ToString().ToUpper();
+                        }
+
+                        // 0순위: deviceInstanceId 자체에 포트명(&USB257 등)이 포함되어 있는지 즉시 확인 (권한/레지스트리 불필요 초고속 매칭)
+                        if (!string.IsNullOrEmpty(deviceInstanceId) &&
+                            (deviceInstanceId.EndsWith("&" + portName, StringComparison.OrdinalIgnoreCase) ||
+                             deviceInstanceId.IndexOf("&" + portName + "&", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             deviceInstanceId.IndexOf("&" + portName, StringComparison.OrdinalIgnoreCase) >= 0))
+                        {
+                            lock (_pathResolveLock)
+                            {
+                                _portToPathMap[portName] = path;
+                            }
+                            return path;
                         }
 
                         // 본체의 ParentIdPrefix 가져오기
@@ -903,16 +1265,6 @@ namespace BarcodePrint.Services
                                 }
                             } while (CM_Get_Sibling(out childInst, childInst, 0) == 0);
                         }
-
-                        // 자식 노드가 없으면 첫 번째 유효 경로 캐시
-                        if (!_portToPathMap.ContainsKey(portName))
-                        {
-                            lock (_pathResolveLock)
-                            {
-                                _portToPathMap[portName] = path;
-                            }
-                            return path;
-                        }
                     }
                     Marshal.FreeHGlobal(detailDataBuffer);
                     detailDataBuffer = IntPtr.Zero;
@@ -924,12 +1276,14 @@ namespace BarcodePrint.Services
                 SetupDiDestroyDeviceInfoList(deviceInfoSet);
             }
 
-            // 폴백: 첫 번째 탐색 경로 사용
-            var allPaths = FindUsbPrinterPaths();
-            return allPaths.Count > 0 ? allPaths[0] : null;
+            if (allowFallbackToAnyUsb && (string.IsNullOrEmpty(portName) || portName == "USB"))
+            {
+                return activePaths.Count > 0 ? activePaths[0] : null;
+            }
+            return null;
         }
 
-        private string GetDeviceParentPrefix(string instanceId)
+        private static string GetDeviceParentPrefix(string instanceId)
         {
             try
             {
@@ -944,7 +1298,7 @@ namespace BarcodePrint.Services
             catch { return null; }
         }
 
-        private string GetPortNameFromInstanceId(string instanceId)
+        private static string GetPortNameFromInstanceId(string instanceId)
         {
             try
             {
@@ -959,7 +1313,7 @@ namespace BarcodePrint.Services
             catch { return null; }
         }
 
-        private string FindInstanceIdByPortName(string portName)
+        private static string FindInstanceIdByPortName(string portName)
         {
             try
             {
@@ -973,6 +1327,13 @@ namespace BarcodePrint.Services
                             if (hardwareKey == null) continue;
                             foreach (var instanceId in hardwareKey.GetSubKeyNames())
                             {
+                                if (instanceId.EndsWith("&" + portName, StringComparison.OrdinalIgnoreCase) ||
+                                    instanceId.IndexOf("&" + portName + "&", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    instanceId.IndexOf("&" + portName, StringComparison.OrdinalIgnoreCase) >= 0)
+                                {
+                                    return $"{hardwareId}\\{instanceId}";
+                                }
+
                                 using (var instanceKey = hardwareKey.OpenSubKey(instanceId + @"\Device Parameters"))
                                 {
                                     if (instanceKey == null) continue;
@@ -991,11 +1352,17 @@ namespace BarcodePrint.Services
             return null;
         }
 
+        private static List<string> _cachedUsbPrinterPaths;
+        private static DateTime _lastUsbPathsCheckTime = DateTime.MinValue;
+
         public static bool HasConnectedUsbPrinters()
         {
             try
             {
-                return FindUsbPrinterPaths().Count > 0;
+                if (GetActiveUsbPrintPortMap().Count > 0) return true;
+                if (FindUsbPrinterPaths().Count > 0) return true;
+                var queues = GetPresentPrintQueueNames();
+                return queues.Any(q => UsbPrinterHelper.IsXprinterDevice(q, q));
             }
             catch
             {
@@ -1005,6 +1372,11 @@ namespace BarcodePrint.Services
 
         public static List<string> FindUsbPrinterPaths()
         {
+            if (_cachedUsbPrinterPaths != null && (DateTime.Now - _lastUsbPathsCheckTime).TotalSeconds < 1.0)
+            {
+                return new List<string>(_cachedUsbPrinterPaths);
+            }
+
             var paths = new List<string>();
             Guid classGuid = UsbPrintGuid;
             IntPtr devInfoSet = SetupDiGetClassDevs(ref classGuid, IntPtr.Zero, IntPtr.Zero, 0x12);
@@ -1047,7 +1419,9 @@ namespace BarcodePrint.Services
                 SetupDiDestroyDeviceInfoList(devInfoSet);
             }
 
-            return paths;
+            _cachedUsbPrinterPaths = paths;
+            _lastUsbPathsCheckTime = DateTime.Now;
+            return new List<string>(paths);
         }
 
         private string QueryTsplHardwareInfoDirect(string portName)
@@ -1716,7 +2090,7 @@ namespace BarcodePrint.Services
             return ParseTsplLiveStatusResponse(response);
         }
 
-        private string SendAndReceiveLiveStatusUsb(string usbPath, byte[] cmdBytes)
+        private string SendAndReceiveLiveStatusUsb(string usbPath, byte[] cmdBytes, int maxWaitMs = 1500)
         {
             try
             {
@@ -1729,16 +2103,16 @@ namespace BarcodePrint.Services
                     fs.Write(cmdBytes, 0, cmdBytes.Length);
                     fs.Flush();
 
-                    Thread.Sleep(120);
+                    Thread.Sleep(Math.Min(80, maxWaitMs / 3));
 
                     List<byte> accumulated = new List<byte>();
                     byte[] buf = new byte[1024];
                     DateTime startTime = DateTime.Now;
 
-                    while ((DateTime.Now - startTime).TotalMilliseconds < 1500)
+                    while ((DateTime.Now - startTime).TotalMilliseconds < maxWaitMs)
                     {
                         var readTask = fs.ReadAsync(buf, 0, buf.Length);
-                        if (readTask.Wait(250))
+                        if (readTask.Wait(Math.Min(200, maxWaitMs)))
                         {
                             int r = readTask.Result;
                             if (r > 0)
@@ -1844,9 +2218,8 @@ namespace BarcodePrint.Services
                 string cleanPort = Regex.Match(portName ?? "", @"COM\d+", RegexOptions.IgnoreCase).Value;
                 if (string.IsNullOrEmpty(cleanPort))
                 {
-                    var st = new AppSettings();
-                    st.Load();
-                    cleanPort = Regex.Match(st.BluetoothPortName ?? "", @"COM\d+", RegexOptions.IgnoreCase).Value;
+                    var st = AppSettings.Default;
+                    cleanPort = Regex.Match(st?.BluetoothPortName ?? "", @"COM\d+", RegexOptions.IgnoreCase).Value;
                 }
                 if (string.IsNullOrEmpty(cleanPort)) return null;
 

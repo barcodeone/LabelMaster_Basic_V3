@@ -39,21 +39,18 @@ def main():
         else:
             print(f"[WARN] File not found: {filename}")
 
-    # 4. Info/app_settings.json 및 Info/quick_tools.html 복사
+    # 4. Info/app_settings.json 복사 (배너 파일은 원격 고정이므로 패키지 제외)
     settings_src = os.path.join(base_dir, "Info", "app_settings.json")
     if os.path.exists(settings_src):
         shutil.copy2(settings_src, os.path.join(deploy_dir, "Info", "app_settings.json"))
         print("[OK] Copied Info/app_settings.json")
 
-    quick_tools_src = os.path.join(base_dir, "Info", "quick_tools.html")
-    if os.path.exists(quick_tools_src):
-        shutil.copy2(quick_tools_src, os.path.join(deploy_dir, "Info", "quick_tools.html"))
-        print("[OK] Copied Info/quick_tools.html")
-
-    banner_url_src = os.path.join(base_dir, "Info", "banner_url.txt")
-    if os.path.exists(banner_url_src):
-        shutil.copy2(banner_url_src, os.path.join(deploy_dir, "Info", "banner_url.txt"))
-        print("[OK] Copied Info/banner_url.txt")
+    # 배포 디렉터리 내 배너 관련 파일 정리 (패키지 제외 규정)
+    for excluded_file in ["banner_url.txt", "quick_tools.html", "banner.html"]:
+        excluded_path = os.path.join(deploy_dir, "Info", excluded_file)
+        if os.path.exists(excluded_path):
+            os.remove(excluded_path)
+            print(f"[CLEAN] Removed excluded banner file: {excluded_file}")
 
     # 5. 버전 읽기
     version_file = os.path.join(base_dir, "version.txt")

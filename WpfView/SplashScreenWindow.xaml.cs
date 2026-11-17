@@ -12,9 +12,14 @@ namespace BarcodePrint.WpfView
             try
             {
                 var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-                if (ver != null && TxtSplashVersion != null)
+                if (ver != null)
                 {
-                    TxtSplashVersion.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
+                    string verStr = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
+                    this.Title = $"라벨마스터 {verStr} 시작 중...";
+                    if (TxtSplashVersion != null)
+                    {
+                        TxtSplashVersion.Text = verStr;
+                    }
                 }
             }
             catch { }

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>메인 파트너 배너 (가로 4등분 광고 슬롯)</title>
+    <!--
+        ============================================================================
+        [서버 배너 4분할 광고 관리 가이드]
+        - 하단 바닥 끝까지 1픽셀의 여백도 없이 100% 꽉 차게 렌더링되도록 구현.
+        - 가로 4등분(25%씩 4개 슬롯)으로 가로 한 줄에 4개 업체 배너가 표시됩니다.
+        - 1번 슬롯(테리스)은 배경 커버 및 이미지 모두 하단까지 100% 꽉 채웁니다.
+        - 수정 후 Cloudflare R2 버킷의 'banner.html'로 업로드하면 즉시 반영됩니다.
+        ============================================================================
+    -->
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #FFFFFF;
+            font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif;
+        }
+        /* 테이블: 뷰포트 전체 높이(100%)와 너비를 하단 끝까지 꽉 채움 */
+        .banner-table {
+            width: 100%;
+            height: 100%;
+            border-collapse: separate;
+            border-spacing: 10px 0;
+            table-layout: fixed;
+            margin: 0;
+            padding: 0;
+        }
+        .banner-td {
+            width: 25%;
+            height: 100%;
+            vertical-align: top;
+            padding: 0;
+        }
+        /* 각 광고 슬롯 카드: 상단부터 하단 끝까지 100% 꽉 채움 */
+        .ad-slot {
+            display: block;
+            width: 100%;
+            height: 100%;
+            min-height: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            text-decoration: none;
+            border: 1px solid #E2E8F0;
+            background: #FFFFFF;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .ad-slot:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+        }
+
+        /* 1번 슬롯 (테리스 배너): 새로 생성한 16:9 가로형 배너 이미지 + 테리스 브랜드 텍스트 오버레이 */
+        .slot-1 {
+            background-color: #0E1D3A;
+            border-color: rgba(29, 58, 115, 0.4);
+            padding: 0;
+            position: relative;
+        }
+        .slot-img {
+            width: 100%;
+            height: 100%;
+            min-height: 100%;
+            object-fit: cover;
+            object-position: center center;
+            display: block;
+            border: 0;
+        }
+        /* 테리스 브랜드 텍스트 오버레이 레이어 (상단 고정 및 반응형 동적 폰트) */
+        .slot-overlay {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 20, 42, 0.65);
+            background: linear-gradient(180deg, rgba(10, 20, 42, 0.94) 0%, rgba(10, 20, 42, 0.70) 55%, rgba(10, 20, 42, 0.12) 100%);
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: flex-start;
+            color: #FFFFFF;
+            pointer-events: none;
+            box-sizing: border-box;
+        }
+        .brand-tag {
+            background: #FF6B00;
+            color: #FFFFFF;
+            font-size: 10.5px;
+            font-weight: 800;
+            padding: 2px 7px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+            display: inline-block;
+            text-transform: uppercase;
+        }
+        .brand-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #FFFFFF;
+            letter-spacing: -0.3px;
+            line-height: 1.25;
+            margin-bottom: 3px;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+        }
+        .brand-sub {
+            font-size: 11.5px;
+            color: #E2E8F0;
+            font-weight: 500;
+            line-height: 1.25;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        }
+        .brand-btn {
+            margin-top: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #FFA94D;
+            display: inline-block;
+            letter-spacing: -0.2px;
+        }
+
+        /* 2, 3, 4번 슬롯 (신규 광고 대기 슬롯) */
+        .empty-slot {
+            background: #F8FAFC;
+            border: 1.5px dashed #CBD5E1;
+            text-align: center;
+            color: #94A3B8;
+        }
+        .empty-slot:hover {
+            background: #F1F5F9;
+            border-color: #94A3B8;
+            color: #64748B;
+        }
+        .empty-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            min-height: 100%;
+            padding: 8px;
+        }
+        .empty-icon {
+            font-size: 24px;
+            margin-bottom: 6px;
+            opacity: 0.8;
+            line-height: 1;
+        }
+        .empty-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #64748B;
+            letter-spacing: -0.2px;
+            margin-bottom: 3px;
+            display: block;
+        }
+        .empty-desc {
+            font-size: 11px;
+            color: #94A3B8;
+            display: block;
+        }
+
+        /* ============================================================== */
+        /* [반응형 동적 폰트 조절] 와이드 화면 및 전체창(최대화) 자동 확대   */
+        /* ============================================================== */
+        @media screen and (min-width: 1150px) {
+            .slot-overlay {
+                padding: 13px 16px;
+            }
+            .brand-tag {
+                font-size: 12px;
+                padding: 2.5px 8px;
+                margin-bottom: 5px;
+            }
+            .brand-title {
+                font-size: 19px;
+                margin-bottom: 3.5px;
+            }
+            .brand-sub {
+                font-size: 12.5px;
+            }
+            .brand-btn {
+                margin-top: 8px;
+                font-size: 12px;
+            }
+            .empty-icon {
+                font-size: 28px;
+                margin-bottom: 7px;
+            }
+            .empty-title {
+                font-size: 14.5px;
+            }
+            .empty-desc {
+                font-size: 12px;
+            }
+        }
+
+        @media screen and (min-width: 1400px) {
+            .slot-overlay {
+                padding: 16px 20px;
+            }
+            .brand-tag {
+                font-size: 13px;
+                padding: 3px 10px;
+                border-radius: 5px;
+                margin-bottom: 6px;
+            }
+            .brand-title {
+                font-size: 22px;
+                margin-bottom: 5px;
+            }
+            .brand-sub {
+                font-size: 14px;
+            }
+            .brand-btn {
+                margin-top: 10px;
+                font-size: 13.5px;
+            }
+            .empty-icon {
+                font-size: 34px;
+                margin-bottom: 9px;
+            }
+            .empty-title {
+                font-size: 16px;
+            }
+            .empty-desc {
+                font-size: 13px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <table class="banner-table" cellpadding="0" cellspacing="0" width="100%" height="100%">
+        <tr height="100%">
+            <!-- ======================================================== -->
+            <!-- [1번째 칸] 1번 업체: 테리스 (하단 끝까지 100% 꽉 채움)     -->
+            <!-- ======================================================== -->
+            <td class="banner-td" height="100%">
+                <a href="https://terrys.kr/" target="_blank" class="ad-slot slot-1" title="테리스 영어 (terrys.kr) 바로가기">
+                    <img src="https://pub-50e160c2ce5d41f6a4e2edcf7267f555.r2.dev/terrys_ad.jpg" alt="테리스 영어" class="slot-img" width="100%" height="100%">
+                    <div class="slot-overlay">
+                        <span class="brand-tag">terrys.kr</span>
+                        <div class="brand-title">테리스 영어</div>
+                        <div class="brand-sub">나도 모르게 그래머 · 4주 완성</div>
+                        <div class="brand-btn">공식 사이트 바로가기 ➔</div>
+                    </div>
+                </a>
+            </td>
+
+            <!-- ======================================================== -->
+            <!-- [2번째 칸] 2번 업체 (이미지 삽입 시 <img> 태그 추가)        -->
+            <!-- ======================================================== -->
+            <td class="banner-td" height="100%">
+                <a href="#" class="ad-slot empty-slot" title="광고 문의">
+                    <div class="empty-inner">
+                        <div class="empty-icon">📢</div>
+                        <span class="empty-title">광고 제휴 문의</span>
+                        <span class="empty-desc">스폰서 배너 02</span>
+                    </div>
+                </a>
+            </td>
+
+            <!-- ======================================================== -->
+            <!-- [3번째 칸] 3번 업체 (이미지 삽입 시 <img> 태그 추가)        -->
+            <!-- ======================================================== -->
+            <td class="banner-td" height="100%">
+                <a href="#" class="ad-slot empty-slot" title="광고 문의">
+                    <div class="empty-inner">
+                        <div class="empty-icon">📢</div>
+                        <span class="empty-title">광고 제휴 문의</span>
+                        <span class="empty-desc">스폰서 배너 03</span>
+                    </div>
+                </a>
+            </td>
+
+            <!-- ======================================================== -->
+            <!-- [4번째 칸] 4번 업체 (이미지 삽입 시 <img> 태그 추가)        -->
+            <!-- ======================================================== -->
+            <td class="banner-td" height="100%">
+                <a href="#" class="ad-slot empty-slot" title="광고 문의">
+                    <div class="empty-inner">
+                        <div class="empty-icon">📢</div>
+                        <span class="empty-title">광고 제휴 문의</span>
+                        <span class="empty-desc">스폰서 배너 04</span>
+                    </div>
+                </a>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:BarcodePrint.WpfView"
         mc:Ignorable="d"
         Title="⚙️ 프린터 환경 설정 &amp; 하드웨어 유틸리티 - LabelMaster"
-        Width="940" Height="780" MinWidth="840" MinHeight="660"
+        Width="940" Height="820" MinWidth="840" MinHeight="680"
         WindowStartupLocation="CenterOwner"
         FontFamily="Malgun Gothic"
         Background="#F8FAFC">
@@ -255,7 +255,7 @@
             <!-- ============================================================== -->
             <!-- [탭 1: 첫 화면 - 기본 설정 (프린터 검색/선택 + 배출/센서보정)]    -->
             <!-- ============================================================== -->
-            <TabItem Header="⚡ 기본 설정 (프린터 선택 &amp; 점검)">
+            <TabItem Header="⚡ 기본 설정 (프린터 &amp; 인쇄 옵션)">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel HorizontalAlignment="Stretch" Margin="4,2,4,8">
 
@@ -353,8 +353,157 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- [카드 2] 🛠️ 기본 동작 및 용지 점검 (연결테스트 + 용지센싱 + 테스트인쇄) -->
-                        <Border Background="{StaticResource CardBackgroundBrush}" CornerRadius="10" Padding="16,12" Margin="0,0,0,10" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                        <!-- [카드 2] ⚙️ 인쇄 기본 설정 (인쇄속도, 농도, 인쇄방식, 센서, 인쇄후작업) -->
+                        <Border Background="{StaticResource CardBackgroundBrush}" CornerRadius="10" Padding="16,14" Margin="0,0,0,10" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,10">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="⚙️ 인쇄 기본 설정" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PrimaryAccentBrush}"/>
+                                        <TextBlock Text="인쇄 속도, 농도, 방식, 용지 센서 및 인쇄 후 동작을 한곳에서 즉시 조정합니다." FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DockPanel>
+
+                                <!-- 2열 분할 레이아웃 -->
+                                <Grid Margin="0,2,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="20"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- 좌측: 인쇄 속도, 인쇄 농도, 인쇄 방식 -->
+                                    <StackPanel Grid.Column="0">
+                                        <!-- 1. 인쇄 속도 (Speed) -->
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="인쇄 속도:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <ComboBox Grid.Column="1" Height="30" ItemsSource="{Binding SpeedOptions}" SelectedItem="{Binding PrintSpeed}" VerticalContentAlignment="Center" FontSize="12">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate><TextBlock Text="{Binding StringFormat='{}{0} inch/sec'}" FontSize="12"/></DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </Grid>
+
+                                        <!-- 2. 인쇄 농도 (Darkness) -->
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="인쇄 농도:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <ComboBox Grid.Column="1" Height="30" ItemsSource="{Binding DarknessOptions}" SelectedItem="{Binding PrintDarkness}" VerticalContentAlignment="Center" FontSize="12">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate><TextBlock Text="{Binding StringFormat='{}농도 {0}'}" FontSize="12"/></DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </Grid>
+
+                                        <!-- 3. 인쇄 방식 (Method: 열전사/감열) -->
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="인쇄 방식:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <CheckBox Grid.Column="1" Content="열전사 (리본 사용)" IsChecked="{Binding IsRibbon}" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" ToolTip="체크 시 열전사 리본 사용, 미체크 시 직접 감열 방식"/>
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <!-- 우측: 센서 / 간격, 인쇄 후 작업 -->
+                                    <StackPanel Grid.Column="2">
+                                        <!-- 4. 센서 / 간격 -->
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="95"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="센서 / 간격:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <StackPanel Grid.Column="1" Orientation="Vertical">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <ComboBox Width="100" Height="30" SelectedValuePath="Tag" SelectedValue="{Binding PaperType}" VerticalContentAlignment="Center" FontSize="11.5">
+                                                        <ComboBoxItem Content="GAP (갭)" Tag="GAP"/>
+                                                        <ComboBoxItem Content="BLINE (블랙)" Tag="BLINE"/>
+                                                        <ComboBoxItem Content="CONTINUOUS" Tag="CONTINUOUS"/>
+                                                    </ComboBox>
+                                                    <TextBlock Text="간격:" VerticalAlignment="Center" Margin="6,0,3,0" FontSize="11.5"/>
+                                                    <Button Content="-" Command="{Binding DecreaseGapHeightCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="24"/>
+                                                    <TextBox Text="{Binding GapHeight, UpdateSourceTrigger=PropertyChanged}" Width="26" Height="24" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="2,0"/>
+                                                    <Button Content="+" Command="{Binding IncreaseGapHeightCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="24" Margin="0,0,3,0"/>
+                                                    <TextBlock Text="mm" VerticalAlignment="Center" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                </StackPanel>
+
+                                                <!-- 블랙마크(BLINE) 전용 이탈량 -->
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,0" Visibility="{Binding IsBlineMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <TextBlock Text="표시 오프셋:" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource PrimaryAccentBrush}" FontWeight="SemiBold"/>
+                                                    <Button Content="-" Command="{Binding DecreaseBlineOffsetCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="16" Height="22" Margin="4,0,0,0"/>
+                                                    <TextBox Text="{Binding BlineOffset, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:F1}'}" Width="30" Height="22" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                                    <Button Content="+" Command="{Binding IncreaseBlineOffsetCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="16" Height="22" Margin="0,0,2,0"/>
+                                                    <TextBlock Text="mm" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- 5. 인쇄 후 작업 -->
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="95"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="인쇄 후 작업:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <StackPanel Grid.Column="1">
+                                                <ComboBox Width="135" Height="30" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding PostPrintAction}" VerticalContentAlignment="Center" FontSize="11.5">
+                                                    <ComboBoxItem Content="없음 (NONE)" Tag="NONE"/>
+                                                    <ComboBoxItem Content="절단 (CUTTER)" Tag="CUTTER"/>
+                                                    <ComboBoxItem Content="뜯어내기 (TEAR)" Tag="TEAR"/>
+                                                    <ComboBoxItem Content="잘라내기 (PEEL)" Tag="PEEL"/>
+                                                    <ComboBoxItem Content="현재프린터기본" Tag="DEFAULT"/>
+                                                </ComboBox>
+
+                                                <!-- 절단(CUTTER) 세부 옵션 -->
+                                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,4,0,0" Visibility="{Binding IsCutOptionsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <StackPanel>
+                                                        <DockPanel Margin="0,1">
+                                                            <TextBlock Text="발생:" Width="45" FontSize="10.5" VerticalAlignment="Center"/>
+                                                            <ComboBox SelectedValuePath="Tag" SelectedValue="{Binding PostPrintCutTrigger}" Height="22" FontSize="10.5" VerticalContentAlignment="Center">
+                                                                <ComboBoxItem Content="모든 페이지 뒤" Tag="EVERY_PAGE"/>
+                                                                <ComboBoxItem Content="동일한 사본 뒤" Tag="AFTER_COPIES"/>
+                                                                <ComboBoxItem Content="작업 뒤" Tag="AFTER_JOB"/>
+                                                                <ComboBoxItem Content="지정한 간격 뒤" Tag="CUSTOM_INTERVAL"/>
+                                                            </ComboBox>
+                                                        </DockPanel>
+                                                        <Grid Margin="0,3,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <TextBlock Text="간격:" FontSize="10" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                                <Button Content="-" Command="{Binding DecreasePostPrintCutIntervalCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="14" Height="18"/>
+                                                                <TextBox Text="{Binding PostPrintCutInterval, UpdateSourceTrigger=PropertyChanged}" Width="18" Height="18" FontSize="10" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                                                <Button Content="+" Command="{Binding IncreasePostPrintCutIntervalCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="14" Height="18"/>
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                                <TextBlock Text="공급:" FontSize="10" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                                                                <Button Content="-" Command="{Binding DecreasePostPrintOffsetCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="14" Height="18"/>
+                                                                <TextBox Text="{Binding PostPrintOffset, UpdateSourceTrigger=PropertyChanged}" Width="18" Height="18" FontSize="10" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
+                                                                <Button Content="+" Command="{Binding IncreasePostPrintOffsetCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="14" Height="18"/>
+                                                                <TextBlock Text="mm" FontSize="10" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- [카드 3] 🛠️ 기본 동작 및 용지 점검 (연결테스트 + 용지센싱 + 테스트인쇄) -->
+                        <Border Background="{StaticResource CardBackgroundBrush}" CornerRadius="10" Padding="16,12" Margin="0,0,0,4" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,10">
                                     <StackPanel VerticalAlignment="Center">
@@ -400,29 +549,18 @@
                                 </UniformGrid>
                             </StackPanel>
                         </Border>
-
-                        <!-- [카드 3] 💡 상세 설정 안내 및 바로가기 배너 -->
-                        <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1.2" CornerRadius="10" Padding="14,10">
-                            <DockPanel LastChildFill="True">
-                                <Button DockPanel.Dock="Right" Content="⚙️ 상세 설정 열기 ➔" Click="GoToAdvancedSettings_Click" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="32" Padding="12,0" FontSize="11.5" FontWeight="Bold" VerticalAlignment="Center" Margin="12,0,0,0" ToolTip="인쇄 속도/농도, 커터, X/Y 위치 보정 및 하드웨어 스펙 조회 탭으로 이동합니다."/>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="⚙️ 인쇄 농도, 속도, 위치(X/Y) 보정, 하드웨어 스펙 조회가 필요하신가요?" FontWeight="Bold" FontSize="12" Foreground="#1E40AF"/>
-                                    <TextBlock Text="상단 [상세 설정 &amp; 하드웨어 정보] 탭에서 프린터의 모든 정밀 옵션을 변경하고 상태를 조회할 수 있습니다." FontSize="10.5" Foreground="#3B82F6" Margin="0,2,0,0"/>
-                                </StackPanel>
-                            </DockPanel>
-                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- ============================================================== -->
-            <!-- [탭 2: 분리된 상세 설정 & 하드웨어 정보 (정밀 옵션 + 전체 스펙)] -->
+            <!-- [탭 2: 분리된 상세 설정 & 하드웨어 정보 (위치보정/회전 + 전체 스펙)] -->
             <!-- ============================================================== -->
-            <TabItem Header="⚙️ 상세 설정 &amp; 하드웨어 정보">
-                <!-- 2 Columns: 좌측(정밀설정+고급유틸) + 우측(하드웨어 스펙 정보) -->
+            <TabItem Header="⚙️ 기기 관리 &amp; 상세 스펙">
+                <!-- 2 Columns: 좌측(위치보정/회전+고급유틸) + 우측(하드웨어 스펙 정보) -->
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <!-- 좌측: 하드웨어 설정 + 고급 유틸리티 -->
+                        <!-- 좌측: 위치 보정 + 고급 유틸리티 -->
                         <ColumnDefinition Width="380" MinWidth="340"/>
                         <!-- 구분선 -->
                         <ColumnDefinition Width="6"/>
@@ -430,23 +568,21 @@
                         <ColumnDefinition Width="*" MinWidth="380"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- [좌측 영역] 프린터 하드웨어 설정 & 고급 유틸리티 도구 -->
+                    <!-- [좌측 영역] 위치 보정/회전 및 고급 유틸리티 도구 -->
                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="0,0,4,0">
 
-                            <!-- 1. 프린터 하드웨어 설정 카드 -->
+                            <!-- 1. 위치 보정 및 방향 회전 카드 -->
                             <Border Background="{StaticResource CardBackgroundBrush}" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
                                 <StackPanel>
                                     <DockPanel Margin="0,0,0,10">
-                                        <TextBlock Text="⚙️ 프린터 하드웨어 정밀 설정" FontWeight="Bold" FontSize="13.5" Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="📐 인쇄 위치 보정 및 방향" FontWeight="Bold" FontSize="13.5" Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center"/>
                                         <TextBlock Text="{Binding SelectedPrinterName, StringFormat=' ({0})'}" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="6,0,0,0" TextTrimming="CharacterEllipsis"/>
                                     </DockPanel>
 
                                     <Grid Margin="0,0,0,4">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
                                         <Grid.ColumnDefinitions>
@@ -454,55 +590,9 @@
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <!-- 1. Speed -->
-                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="인쇄 속도 (Speed):" VerticalAlignment="Center" Margin="0,4" FontSize="11.5"/>
-                                        <ComboBox Grid.Row="0" Grid.Column="1" Width="135" Height="24" HorizontalAlignment="Left" ItemsSource="{Binding SpeedOptions}" SelectedItem="{Binding PrintSpeed}" VerticalContentAlignment="Center" Margin="0,2">
-                                            <ComboBox.ItemTemplate>
-                                                <DataTemplate><TextBlock Text="{Binding StringFormat='{}{0} inch/sec'}" FontSize="11"/></DataTemplate>
-                                            </ComboBox.ItemTemplate>
-                                        </ComboBox>
-
-                                        <!-- 2. Darkness -->
-                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="인쇄 농도 (Darkness):" VerticalAlignment="Center" Margin="0,4" FontSize="11.5"/>
-                                        <ComboBox Grid.Row="1" Grid.Column="1" Width="135" Height="24" HorizontalAlignment="Left" ItemsSource="{Binding DarknessOptions}" SelectedItem="{Binding PrintDarkness}" VerticalContentAlignment="Center" Margin="0,2">
-                                            <ComboBox.ItemTemplate>
-                                                <DataTemplate><TextBlock Text="{Binding StringFormat='{}농도 {0}'}" FontSize="11"/></DataTemplate>
-                                            </ComboBox.ItemTemplate>
-                                        </ComboBox>
-
-                                        <!-- 3. Ribbon Mode -->
-                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="인쇄 방식 (Method):" VerticalAlignment="Center" Margin="0,4" FontSize="11.5"/>
-                                        <CheckBox Grid.Row="2" Grid.Column="1" Content="열전사 (리본 사용)" IsChecked="{Binding IsRibbon}" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold" Margin="0,2"/>
-
-                                        <!-- 4. Sensor & Gap & Bline Offset -->
-                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="센서 / 간격 / 오프셋:" VerticalAlignment="Center" Margin="0,4" FontSize="11.5"/>
-                                        <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Vertical" Margin="0,2">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <ComboBox Width="90" Height="24" SelectedValuePath="Tag" SelectedValue="{Binding PaperType}" VerticalContentAlignment="Center" FontSize="10.5">
-                                                    <ComboBoxItem Content="GAP (갭)" Tag="GAP"/>
-                                                    <ComboBoxItem Content="BLINE (블랙)" Tag="BLINE"/>
-                                                    <ComboBoxItem Content="CONTINUOUS" Tag="CONTINUOUS"/>
-                                                </ComboBox>
-                                                <TextBlock Text="간격:" VerticalAlignment="Center" Margin="4,0,2,0" FontSize="10.5"/>
-                                                <Button Content="-" Command="{Binding DecreaseGapHeightCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="15" Height="20"/>
-                                                <TextBox Text="{Binding GapHeight, UpdateSourceTrigger=PropertyChanged}" Width="22" Height="20" FontSize="10.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                                <Button Content="+" Command="{Binding IncreaseGapHeightCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="15" Height="20" Margin="0,0,2,0"/>
-                                                <TextBlock Text="mm" VerticalAlignment="Center" FontSize="10.5"/>
-                                            </StackPanel>
-
-                                            <!-- 블랙마크(BLINE) 전용 이탈량 / 표시 오프셋 설정 (BLINE 모드일 때만 표시) -->
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,0" Visibility="{Binding IsBlineMode, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                <TextBlock Text="표시 오프셋(이탈량):" VerticalAlignment="Center" FontSize="10.5" Foreground="{StaticResource PrimaryAccentBrush}" FontWeight="SemiBold"/>
-                                                <Button Content="-" Command="{Binding DecreaseBlineOffsetCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="15" Height="20" Margin="4,0,0,0"/>
-                                                <TextBox Text="{Binding BlineOffset, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:F1}'}" Width="28" Height="20" FontSize="10.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                                <Button Content="+" Command="{Binding IncreaseBlineOffsetCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="15" Height="20" Margin="0,0,2,0"/>
-                                                <TextBlock Text="mm" VerticalAlignment="Center" FontSize="10.5" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                            </StackPanel>
-                                        </StackPanel>
-
-                                        <!-- 5. Offsets -->
-                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="인쇄 위치 보정:" VerticalAlignment="Center" Margin="0,4" FontSize="11.5" FontWeight="SemiBold"/>
-                                        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2">
+                                        <!-- 1. Offsets (위치 보정) -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="인쇄 위치 보정:" VerticalAlignment="Center" Margin="0,4" FontSize="11.5" FontWeight="SemiBold"/>
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2">
                                             <TextBlock Text="X:" VerticalAlignment="Center" FontSize="11" FontWeight="Bold"/>
                                             <Button Content="-" Command="{Binding DecreasePrinterOffsetXCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="22" Margin="3,0,0,0"/>
                                             <TextBox Text="{Binding PrinterOffsetXStr, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" Width="32" Height="22" Margin="1,0" FontSize="11" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip="가로 출력 위치 보정 (양수: 우측, 음수: 좌측, mm)"/>
@@ -515,62 +605,9 @@
                                             <TextBlock Text="mm" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
                                         </StackPanel>
 
-                                        <!-- 6. Post Print Action -->
-                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="인쇄 후 작업:" VerticalAlignment="Center" Margin="0,4" FontSize="11.5"/>
-                                        <StackPanel Grid.Row="5" Grid.Column="1" Margin="0,2">
-                                            <ComboBox Width="135" Height="24" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding PostPrintAction}" VerticalContentAlignment="Center" FontSize="10.5">
-                                                <ComboBoxItem Content="없음 (NONE)" Tag="NONE"/>
-                                                <ComboBoxItem Content="절단 (CUTTER)" Tag="CUTTER"/>
-                                                <ComboBoxItem Content="뜯어내기 (TEAR)" Tag="TEAR"/>
-                                                <ComboBoxItem Content="잘라내기 (PEEL)" Tag="PEEL"/>
-                                                <ComboBoxItem Content="현재프린터기본" Tag="DEFAULT"/>
-                                            </ComboBox>
-
-                                            <!-- 절단(CUTTER) 세부 동작 옵션 패널 (발생, 간격, 용지 공급 오프셋 - 절단 모드일 때만 표시) -->
-                                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,2" Visibility="{Binding IsCutOptionsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                <StackPanel>
-                                                    <!-- 발생(C) 콤보박스 -->
-                                                    <DockPanel Margin="0,2">
-                                                        <TextBlock Text="발생(C):" Width="60" FontSize="10.5" VerticalAlignment="Center"/>
-                                                        <ComboBox SelectedValuePath="Tag" SelectedValue="{Binding PostPrintCutTrigger}" Height="22" FontSize="10.5" VerticalContentAlignment="Center">
-                                                            <ComboBoxItem Content="모든 페이지 뒤" Tag="EVERY_PAGE"/>
-                                                            <ComboBoxItem Content="동일한 사본 뒤" Tag="AFTER_COPIES"/>
-                                                            <ComboBoxItem Content="작업 뒤" Tag="AFTER_JOB"/>
-                                                            <ComboBoxItem Content="지정한 간격 뒤" Tag="CUSTOM_INTERVAL"/>
-                                                        </ComboBox>
-                                                    </DockPanel>
-
-                                                    <!-- 간격(I) 및 용지 공급 오프셋(F) -->
-                                                    <Grid Margin="0,4,0,0">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="*"/>
-                                                        </Grid.ColumnDefinitions>
-
-                                                        <!-- 간격(I) -->
-                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                                            <TextBlock Text="간격(I):" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                            <Button Content="-" Command="{Binding DecreasePostPrintCutIntervalCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="15" Height="19"/>
-                                                            <TextBox Text="{Binding PostPrintCutInterval, UpdateSourceTrigger=PropertyChanged}" Width="20" Height="19" FontSize="10" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                                            <Button Content="+" Command="{Binding IncreasePostPrintCutIntervalCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="15" Height="19"/>
-                                                        </StackPanel>
-
-                                                        <!-- 용지 공급 오프셋(F) -->
-                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                                            <TextBlock Text="공급 오프셋(F):" FontSize="10" VerticalAlignment="Center" Margin="0,0,2,0"/>
-                                                            <Button Content="-" Command="{Binding DecreasePostPrintOffsetCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="14" Height="19"/>
-                                                            <TextBox Text="{Binding PostPrintOffset, UpdateSourceTrigger=PropertyChanged}" Width="20" Height="19" FontSize="10" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Margin="1,0"/>
-                                                            <Button Content="+" Command="{Binding IncreasePostPrintOffsetCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="14" Height="19" Margin="0,0,1,0"/>
-                                                            <TextBlock Text="mm" FontSize="10" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
-
-                                        <!-- 7. Print Orientation (Rotation) -->
-                                        <TextBlock Grid.Row="6" Grid.Column="0" Text="인쇄 방향 (회전):" VerticalAlignment="Center" Margin="0,4" FontSize="11.5" FontWeight="SemiBold"/>
-                                        <ComboBox Grid.Row="6" Grid.Column="1" Width="145" Height="26" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding LabelRotationAngleStr, Mode=TwoWay}" VerticalContentAlignment="Center" FontSize="11" Margin="0,2">
+                                        <!-- 2. Print Orientation (Rotation) -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="인쇄 방향 (회전):" VerticalAlignment="Center" Margin="0,4" FontSize="11.5" FontWeight="SemiBold"/>
+                                        <ComboBox Grid.Row="1" Grid.Column="1" Width="145" Height="26" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding LabelRotationAngleStr, Mode=TwoWay}" VerticalContentAlignment="Center" FontSize="11" Margin="0,2">
                                             <ComboBoxItem Content="가로 (0° 기본)" Tag="0"/>
                                             <ComboBoxItem Content="세로 (90° 회전)" Tag="90"/>
                                             <ComboBoxItem Content="가로 반전 (180°)" Tag="180"/>
@@ -658,8 +695,8 @@
             <DockPanel>
                 <TextBlock Text="💡 프린터 통신 포트와 속도/농도 등의 하드웨어 스펙이 실시간으로 확인 및 적용됩니다." FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <Button Content="💾 저장" Command="{Binding SaveSettingsCommand}" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="32" Padding="20,0" FontSize="12.5" FontWeight="Bold" Margin="0,0,8,0" ToolTip="변경된 프린터 설정을 저장합니다."/>
-                    <Button Content="✔️ 닫기" Click="CloseButton_Click" Style="{StaticResource ModernButtonStyle}" Background="#475569" Height="32" Padding="18,0" FontSize="12.5" FontWeight="Bold"/>
+                    <Button Content="💾 저장" Command="{Binding SaveSettingsCommand}" Style="{StaticResource ModernButtonStyle}" Background="#2563EB" Height="36" Padding="18,0" FontSize="12.5" FontWeight="Bold" Margin="0,0,8,0" ToolTip="변경된 프린터 설정을 저장합니다."/>
+                    <Button Content="✔️ 닫기" Click="CloseButton_Click" Style="{StaticResource ModernButtonStyle}" Background="#64748B" Height="36" Padding="16,0" FontSize="12.5" FontWeight="Bold"/>
                 </StackPanel>
             </DockPanel>
         </Border>

@@ -17,9 +17,23 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var asm = System.Reflection.Assembly.GetExecutingAssembly();
+                var asm = typeof(AboutWindow).Assembly;
                 var ver = asm.GetName().Version;
-                string verStr = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "v1.0.1";
+                string verStr = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "v1.0.7";
+                
+                try
+                {
+                    if (!string.IsNullOrEmpty(asm.Location) && System.IO.File.Exists(asm.Location))
+                    {
+                        var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(asm.Location);
+                        if (!string.IsNullOrEmpty(fvi.ProductVersion))
+                        {
+                            verStr = "v" + fvi.ProductVersion.Trim().TrimStart('v');
+                        }
+                    }
+                }
+                catch { }
+
                 if (TxtVersionBadge != null)
                 {
                     TxtVersionBadge.Text = verStr;

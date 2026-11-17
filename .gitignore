@@ -39,3 +39,6 @@ UpgradeLog.htm
 
 ## Obfuscar Output
 **/Obfuscated/
+
+__pycache__/
+*.log

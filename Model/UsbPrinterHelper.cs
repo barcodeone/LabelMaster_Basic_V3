@@ -27,6 +27,9 @@ namespace BarcodePrint.Model
 
     public static class UsbPrinterHelper
     {
+        public static volatile bool IsAppExiting = false;
+        private static object _wmiLock => PrinterOnlineDetector.WmiGlobalLock;
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         public struct BLUETOOTH_DEVICE_INFO
         {
@@ -84,8 +87,8 @@ namespace BarcodePrint.Model
         // 지원되는 Xprinter 브랜드 및 모델 키워드 리스트 (일반 사무용 프린터 배제)
         public static readonly List<string> SupportedKeywords = new List<string>
         {
-            "XPRINTER", "XP-", "XP", "423B", "T265B", "T4501", "TT428", "TT424", 
-            "237B", "375B", "370B", "DT108B", "326B", "427B",
+            "XPRINTER", "XP-", "XP", "423B", "T265B", "T4501", "T467B", "TT428", "TT424", 
+            "237B", "375B", "370B", "DT108B", "326B", "427B", "DT325B", "325B",
             "D4601B", "D4602B", "D4604B", "P423B", "D461B", "D481B", "D480B", "D481", "D480", "D46", "481B",
             "XP420B", "XP433B", "XP423B", "XP481B"
         };
@@ -101,8 +104,70 @@ namespace BarcodePrint.Model
             return SupportedKeywords.Any(k => target.Contains(k));
         }
 
+        /// <summary>
+        /// 가상 복사본("1 복사", "Copy 1" 등) 및 통신 접두사를 정규화하여 기본 프린터 모델명 추출
+        /// </summary>
+        public static string GetBasePrinterName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "";
+            string baseName = name;
+            baseName = Regex.Replace(baseName, @"^\[(블루투스|네트워크)\]\s*", "", RegexOptions.IgnoreCase);
+            baseName = Regex.Replace(baseName, @"\s*\(\d+\s*복사\)", "", RegexOptions.IgnoreCase);
+            baseName = Regex.Replace(baseName, @"\s*\(\s*Copy\s*\d+\)", "", RegexOptions.IgnoreCase);
+            baseName = Regex.Replace(baseName, @"\s*\(\s*복사\s*\d+\)", "", RegexOptions.IgnoreCase);
+            baseName = Regex.Replace(baseName, @"\s*Copy\s*\d+", "", RegexOptions.IgnoreCase);
+            return baseName.Trim();
+        }
+
+        /// <summary>
+        /// 복사본 표기("1 복사", "Copy 1")가 없는 오리지널 등록 장치명인지 확인
+        /// </summary>
+        public static bool IsOriginalPrinterName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            return !Regex.IsMatch(name, @"(\(\d+\s*복사\)|\(\s*Copy\s*\d+\)|\(\s*복사\s*\d+\)|Copy\s*\d+)", RegexOptions.IgnoreCase);
+        }
+
+        private static List<string> _cachedComPorts;
+        private static DateTime _lastComPortsCheckTime = DateTime.MinValue;
+        private static List<UsbPrinterInfo> _cachedUsbPrinters;
+        private static DateTime _lastUsbPrintersCheckTime = DateTime.MinValue;
+        private static Dictionary<string, string> _cachedBtDeviceMap;
+        private static DateTime _lastBtDeviceMapTime = DateTime.MinValue;
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _btPortToNameCache = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _btNameToPortCache = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _netIpToNameCache = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static DateTime _lastLookupCacheClearTime = DateTime.Now;
+
+        public static void InvalidatePrinterCache()
+        {
+            _lastComPortsCheckTime = DateTime.MinValue;
+            _lastUsbPrintersCheckTime = DateTime.MinValue;
+            _lastBtDeviceMapTime = DateTime.MinValue;
+            _btPortToNameCache.Clear();
+            _btNameToPortCache.Clear();
+            _netIpToNameCache.Clear();
+            _lastLookupCacheClearTime = DateTime.Now;
+        }
+
+        private static void CheckLookupCacheExpiration()
+        {
+            if ((DateTime.Now - _lastLookupCacheClearTime).TotalSeconds > 15)
+            {
+                _btPortToNameCache.Clear();
+                _btNameToPortCache.Clear();
+                _netIpToNameCache.Clear();
+                _lastLookupCacheClearTime = DateTime.Now;
+            }
+        }
+
         public static List<string> GetAvailableComPorts()
         {
+            if (_cachedComPorts != null && (DateTime.Now - _lastComPortsCheckTime).TotalSeconds < 3.0)
+            {
+                return new List<string>(_cachedComPorts);
+            }
+
             var ports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
@@ -113,12 +178,11 @@ namespace BarcodePrint.Model
             }
             catch { }
 
-            // 현재 설정된 블루투스 포트 포함
+            // 현재 설정된 블루투스 포트 포함 (디스크 재로드 없이 메모리 싱글톤 사용)
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
-                if (!string.IsNullOrWhiteSpace(settings.BluetoothPortName))
+                var settings = AppSettings.Default;
+                if (settings != null && !string.IsNullOrWhiteSpace(settings.BluetoothPortName))
                 {
                     ports.Add(settings.BluetoothPortName.Trim().ToUpper());
                 }
@@ -130,20 +194,41 @@ namespace BarcodePrint.Model
                 ports.Add("COM3");
             }
 
-            return ports.OrderBy(p =>
+            var sorted = ports.OrderBy(p =>
             {
                 var match = Regex.Match(p, @"\d+");
                 return match.Success ? int.Parse(match.Value) : 999;
             }).ToList();
+
+            _cachedComPorts = sorted;
+            _lastComPortsCheckTime = DateTime.Now;
+            return new List<string>(sorted);
         }
 
         public static List<UsbPrinterInfo> GetConnectedUsbPrinters(string targetPrinterName = null, IEnumerable<string> targetSerials = null)
         {
-            var printers = new List<UsbPrinterInfo>();
             Func<string, string> normalize = (s) => (s ?? "").ToUpperInvariant().Trim().Replace(" ", "");
             var normalizedTargetSerials = targetSerials != null
                 ? new HashSet<string>(targetSerials.Select(normalize).Where(s => !string.IsNullOrEmpty(s)))
                 : null;
+
+            bool hasSerialFilter = normalizedTargetSerials != null && normalizedTargetSerials.Count > 0;
+            if (!hasSerialFilter && _cachedUsbPrinters != null && (DateTime.Now - _lastUsbPrintersCheckTime).TotalSeconds < 1.5)
+            {
+                return _cachedUsbPrinters.Select(p => new UsbPrinterInfo
+                {
+                    Name = p.Name,
+                    FriendlyName = p.FriendlyName,
+                    PortName = p.PortName,
+                    Serial = p.Serial,
+                    Type = p.Type,
+                    Address = p.Address,
+                    IsPaired = p.IsPaired
+                }).ToList();
+            }
+
+            var printers = new List<UsbPrinterInfo>();
+            var rawCandidates = new List<Tuple<UsbPrinterInfo, bool, bool>>();
 
             // [1단계] USBPRINT 레지스트리를 통한 하드웨어 시리얼 매핑 테이블 구축
             var serialParentMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -182,11 +267,22 @@ namespace BarcodePrint.Model
             // [2단계] WMI를 통한 프린터 장치 및 포트 스캔
             try
             {
-                string usbPrintPath = @"SYSTEM\CurrentControlSet\Enum\USBPRINT";
-                using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, PortName, DriverName, WorkOffline FROM Win32_Printer"))
+                if (IsAppExiting) return printers;
+
+                lock (_wmiLock)
                 {
-                    foreach (System.Management.ManagementObject obj in searcher.Get())
+                    if (IsAppExiting) return printers;
+
+                    string usbPrintPath = @"SYSTEM\CurrentControlSet\Enum\USBPRINT";
+                    using (var searcher = new System.Management.ManagementObjectSearcher(
+                        "SELECT Name, PortName, DriverName, WorkOffline FROM Win32_Printer"))
+                    using (var collection = searcher.Get())
                     {
+                        foreach (System.Management.ManagementObject obj in collection)
+                        {
+                            if (IsAppExiting) break;
+                            using (obj)
+                            {
                         string name = obj["Name"]?.ToString() ?? "";
                         string port = obj["PortName"]?.ToString() ?? "";
                         string driver = obj["DriverName"]?.ToString() ?? "";
@@ -211,7 +307,20 @@ namespace BarcodePrint.Model
                         else if (isBtPort) connType = "Bluetooth";
                         else connType = "USB";
 
-                        if (connType == "USB" && workOffline) continue;
+                        // 물리적/통신 연결 상태 사전 판별 (후보 우선순위 선정에 활용)
+                        bool isPhysicallyOnline = false;
+                        if (connType == "USB")
+                        {
+                            isPhysicallyOnline = BarcodePrint.Services.PrinterService.IsUsbPortConnected(port, name);
+                        }
+                        else if (connType == "LAN")
+                        {
+                            isPhysicallyOnline = PrinterOnlineDetector.IsLanPortReachable(port);
+                        }
+                        else if (connType == "Bluetooth")
+                        {
+                            isPhysicallyOnline = GetAvailableComPorts().Contains(port, StringComparer.OrdinalIgnoreCase);
+                        }
 
                         string serial = "";
 
@@ -250,23 +359,14 @@ namespace BarcodePrint.Model
                             }
                             catch { }
                         }
-                        // 2. TCP/IP (LAN) 연결 시리얼: 절대 9100 포트 소켓을 열지 않고 무출력 ARP MAC 주소만 안전하게 취득
-                        else if (connType == "LAN")
+                        // 2. TCP/IP (LAN) 또는 Bluetooth 연결: 목록 열거 중에는 물리 포트(COM/ARP) 블로킹 호출을 하지 않고 레지스트리에서 즉시 확인
+                        else if (connType == "LAN" && hasSerialFilter)
                         {
                             var ipMatch = Regex.Match(port, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b");
                             if (ipMatch.Success)
                             {
                                 string ip = ipMatch.Value;
                                 serial = GetMacAddressFromIp(ip);
-                            }
-                        }
-                        // 3. Bluetooth 연결: 기본 레지스트리/포트 정보 확인
-                        else if (connType == "Bluetooth")
-                        {
-                            var comMatch = Regex.Match(port, @"COM\d+", RegexOptions.IgnoreCase);
-                            if (comMatch.Success)
-                            {
-                                serial = QueryTsplSerialViaCom(comMatch.Value, 9600, 600);
                             }
                         }
 
@@ -278,7 +378,7 @@ namespace BarcodePrint.Model
 
                         // 인증 시리얼 필터링
                         bool isAllowed = true;
-                        if (normalizedTargetSerials != null && normalizedTargetSerials.Count > 0)
+                        if (hasSerialFilter)
                         {
                             string norm = normalize(serial);
                             isAllowed = !string.IsNullOrEmpty(norm) && normalizedTargetSerials.Contains(norm);
@@ -286,25 +386,73 @@ namespace BarcodePrint.Model
 
                         if (isAllowed)
                         {
-                            if (!printers.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                            rawCandidates.Add(Tuple.Create(new UsbPrinterInfo
                             {
-                                printers.Add(new UsbPrinterInfo
-                                {
-                                    Name = name,
-                                    FriendlyName = driver,
-                                    PortName = port,
-                                    Serial = !string.IsNullOrEmpty(serial) ? serial : "-",
-                                    Type = connType,
-                                    Address = port
-                                });
-                            }
+                                Name = name,
+                                FriendlyName = driver,
+                                PortName = port,
+                                Serial = !string.IsNullOrEmpty(serial) ? serial : "-",
+                                Type = connType,
+                                Address = port
+                            }, workOffline, isPhysicallyOnline));
                         }
+                    }
+                }
+            }
+            }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"프린터 탐색 오류: {ex.Message}");
+            }
+
+            // [3단계] 시스템에 설치된 프린터 목록 수집 (온라인 상태 필터 제거)
+            // Windows에 등록된 모든 Xprinter 라벨 프린터를 표시하며, 동일 포트의 중복 복사본만 정규화
+            try
+            {
+                // 기본 모델명, 포트명, 연결 방식을 기준으로 그룹화하여 동일 포트 중복만 정리
+                var grouped = rawCandidates.GroupBy(c => new
+                {
+                    BaseName = GetBasePrinterName(c.Item1.Name),
+                    Port = (c.Item1.PortName ?? "").Trim().ToUpperInvariant(),
+                    Type = c.Item1.Type
+                });
+
+                foreach (var g in grouped)
+                {
+                    // 동일 포트에 원본과 복사본이 중복된 경우: 원본 장치명 우선, 스풀러 온라인 우선
+                    var best = g.OrderByDescending(c => !c.Item2) // !isWorkOffline 우선
+                                .ThenByDescending(c => IsOriginalPrinterName(c.Item1.Name))
+                                .ThenBy(c => c.Item1.Name)
+                                .First();
+
+                    if (!printers.Any(p => p.Name.Equals(best.Item1.Name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        printers.Add(best.Item1);
                     }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"프린터 탐색 오류: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"프린터 목록 정리 오류: {ex.Message}");
+                foreach (var c in rawCandidates)
+                {
+                    if (!printers.Any(p => p.Name.Equals(c.Item1.Name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        printers.Add(c.Item1);
+                    }
+                }
+            }
+
+            printers = printers
+                .OrderByDescending(p => p.Type == "USB")
+                .ThenBy(p => p.Name)
+                .ToList();
+
+            if (!hasSerialFilter)
+            {
+                _cachedUsbPrinters = printers;
+                _lastUsbPrintersCheckTime = DateTime.Now;
             }
 
             return printers;
@@ -407,16 +555,29 @@ namespace BarcodePrint.Model
             // 3차 시도: 포트가 이미 스풀러나 드라이버에 의해 열려있는 경우 Windows Spooler 점검
             try
             {
-                using (var searcher = new System.Management.ManagementObjectSearcher($"SELECT Name, PortName, PrinterStatus, WorkOffline FROM Win32_Printer WHERE PortName LIKE '%{cleanPort}%'"))
+                if (IsAppExiting) return null;
+
+                lock (_wmiLock)
                 {
-                    foreach (System.Management.ManagementObject obj in searcher.Get())
+                    if (IsAppExiting) return null;
+
+                    using (var searcher = new System.Management.ManagementObjectSearcher(
+                        $"SELECT Name, PortName, PrinterStatus, WorkOffline FROM Win32_Printer WHERE PortName LIKE '%{cleanPort}%'"))
+                    using (var collection = searcher.Get())
                     {
-                        bool offline = (bool)(obj["WorkOffline"] ?? false);
-                        if (!offline)
+                        foreach (System.Management.ManagementObject obj in collection)
                         {
-                            string pName = obj["Name"]?.ToString() ?? cleanPort;
-                            PrinterSerialLogger.WriteCommLog("COM-TEST", $"[{cleanPort}] 스풀러 드라이버 온라인 감지: '{pName}'");
-                            return $"정상 준비 (드라이버 {pName})";
+                            if (IsAppExiting) break;
+                            using (obj)
+                            {
+                                bool offline = (bool)(obj["WorkOffline"] ?? false);
+                                if (!offline)
+                                {
+                                    string pName = obj["Name"]?.ToString() ?? cleanPort;
+                                    PrinterSerialLogger.WriteCommLog("COM-TEST", $"[{cleanPort}] 스풀러 드라이버 온라인 감지: '{pName}'");
+                                    return $"정상 준비 (드라이버 {pName})";
+                                }
+                            }
                         }
                     }
                 }
@@ -657,7 +818,7 @@ namespace BarcodePrint.Model
             return "-";
         }
 
-        private static string ExtractSerialFromPortOrRegistry(string port)
+        public static string ExtractSerialFromPortOrRegistry(string port)
         {
             if (string.IsNullOrEmpty(port)) return "-";
             try
@@ -754,20 +915,35 @@ namespace BarcodePrint.Model
                     var installedNetPrinters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     try
                     {
-                        using (var searcher = new ManagementObjectSearcher("SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                        if (!IsAppExiting)
                         {
-                            foreach (ManagementObject p in searcher.Get())
+                            lock (_wmiLock)
                             {
-                                string pName = p["Name"]?.ToString() ?? "";
-                                string pPort = p["PortName"]?.ToString() ?? "";
-                                string pDriver = p["DriverName"]?.ToString() ?? "";
-
-                                var match = Regex.Match(pPort, @"(\d{1,3}\.){3}\d{1,3}");
-                                if (match.Success)
+                                if (!IsAppExiting)
                                 {
-                                    string ip = match.Value;
-                                    string model = !string.IsNullOrEmpty(pName) ? pName : pDriver;
-                                    installedNetPrinters[ip] = model;
+                                    using (var searcher = new ManagementObjectSearcher(
+                                        "SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                                    using (var collection = searcher.Get())
+                                    {
+                                        foreach (ManagementObject p in collection)
+                                        {
+                                            if (IsAppExiting) break;
+                                            using (p)
+                                            {
+                                                string pName = p["Name"]?.ToString() ?? "";
+                                                string pPort = p["PortName"]?.ToString() ?? "";
+                                                string pDriver = p["DriverName"]?.ToString() ?? "";
+
+                                                var match = Regex.Match(pPort, @"(\d{1,3}\.){3}\d{1,3}");
+                                                if (match.Success)
+                                                {
+                                                    string ip = match.Value;
+                                                    string model = !string.IsNullOrEmpty(pName) ? pName : pDriver;
+                                                    installedNetPrinters[ip] = model;
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -922,6 +1098,11 @@ namespace BarcodePrint.Model
         /// </summary>
         public static Dictionary<string, string> GetPairedBluetoothDeviceMap()
         {
+            if (_cachedBtDeviceMap != null && (DateTime.Now - _lastBtDeviceMapTime).TotalSeconds < 15.0)
+            {
+                return new Dictionary<string, string>(_cachedBtDeviceMap, StringComparer.OrdinalIgnoreCase);
+            }
+
             var macToDeviceNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
@@ -962,40 +1143,55 @@ namespace BarcodePrint.Model
 
             try
             {
-                // 2. WMI Win32_PnPEntity 에서 추가 블루투스 장치명 수집
-                using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, Caption, Description, DeviceID, PNPDeviceID FROM Win32_PnPEntity WHERE PNPDeviceID LIKE '%BTH%' OR ClassGuid = '{e0cbf06c-cdb3-4647-bb8a-263b43f0f974}'"))
+                if (!IsAppExiting)
                 {
-                    foreach (System.Management.ManagementObject obj in searcher.Get())
+                    lock (_wmiLock)
                     {
-                        string name = obj["Name"]?.ToString() ?? obj["Caption"]?.ToString() ?? "";
-                        string pnpId = obj["PNPDeviceID"]?.ToString() ?? "";
-
-                        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(pnpId)) continue;
-
-                        if (name.StartsWith("Generic ", StringComparison.OrdinalIgnoreCase) ||
-                            name.StartsWith("Microsoft ", StringComparison.OrdinalIgnoreCase) ||
-                            name.StartsWith("Bluetooth LE ", StringComparison.OrdinalIgnoreCase) ||
-                            name.StartsWith("Bluetooth Device ", StringComparison.OrdinalIgnoreCase) ||
-                            name.StartsWith("표준 Bluetooth", StringComparison.OrdinalIgnoreCase) ||
-                            name.StartsWith("Service Discovery", StringComparison.OrdinalIgnoreCase) ||
-                            name.StartsWith("Device Information", StringComparison.OrdinalIgnoreCase) ||
-                            name.Contains("Adapter") || name.Contains("어댑터") || name.Contains("Enumerator") || name.Contains("열거자"))
+                        if (!IsAppExiting)
                         {
-                            continue;
-                        }
-
-                        var macMatch = Regex.Match(pnpId, @"DEV_([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
-                        if (!macMatch.Success)
-                        {
-                            macMatch = Regex.Match(pnpId, @"([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
-                        }
-
-                        if (macMatch.Success)
-                        {
-                            string rawMac = macMatch.Groups[1].Value.ToUpper();
-                            if (!rawMac.StartsWith("000000000000") && !macToDeviceNameMap.ContainsKey(rawMac))
+                            // 2. WMI Win32_PnPEntity 에서 추가 블루투스 장치명 수집
+                            using (var searcher = new System.Management.ManagementObjectSearcher(
+                                "SELECT Name, Caption, Description, DeviceID, PNPDeviceID FROM Win32_PnPEntity WHERE PNPDeviceID LIKE '%BTH%' OR ClassGuid = '{e0cbf06c-cdb3-4647-bb8a-263b43f0f974}'"))
+                            using (var collection = searcher.Get())
                             {
-                                macToDeviceNameMap[rawMac] = name.Trim();
+                                foreach (System.Management.ManagementObject obj in collection)
+                                {
+                                    if (IsAppExiting) break;
+                                    using (obj)
+                                    {
+                                        string name = obj["Name"]?.ToString() ?? obj["Caption"]?.ToString() ?? "";
+                                        string pnpId = obj["PNPDeviceID"]?.ToString() ?? "";
+
+                                        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(pnpId)) continue;
+
+                                        if (name.StartsWith("Generic ", StringComparison.OrdinalIgnoreCase) ||
+                                            name.StartsWith("Microsoft ", StringComparison.OrdinalIgnoreCase) ||
+                                            name.StartsWith("Bluetooth LE ", StringComparison.OrdinalIgnoreCase) ||
+                                            name.StartsWith("Bluetooth Device ", StringComparison.OrdinalIgnoreCase) ||
+                                            name.StartsWith("표준 Bluetooth", StringComparison.OrdinalIgnoreCase) ||
+                                            name.StartsWith("Service Discovery", StringComparison.OrdinalIgnoreCase) ||
+                                            name.StartsWith("Device Information", StringComparison.OrdinalIgnoreCase) ||
+                                            name.Contains("Adapter") || name.Contains("어댑터") || name.Contains("Enumerator") || name.Contains("열거자"))
+                                        {
+                                            continue;
+                                        }
+
+                                        var macMatch = Regex.Match(pnpId, @"DEV_([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
+                                        if (!macMatch.Success)
+                                        {
+                                            macMatch = Regex.Match(pnpId, @"([0-9A-Fa-f]{12})", RegexOptions.IgnoreCase);
+                                        }
+
+                                        if (macMatch.Success)
+                                        {
+                                            string rawMac = macMatch.Groups[1].Value.ToUpper();
+                                            if (!rawMac.StartsWith("000000000000") && !macToDeviceNameMap.ContainsKey(rawMac))
+                                            {
+                                                macToDeviceNameMap[rawMac] = name.Trim();
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1003,7 +1199,9 @@ namespace BarcodePrint.Model
             }
             catch { }
 
-            return macToDeviceNameMap;
+            _cachedBtDeviceMap = macToDeviceNameMap;
+            _lastBtDeviceMapTime = DateTime.Now;
+            return new Dictionary<string, string>(macToDeviceNameMap, StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -1063,7 +1261,12 @@ namespace BarcodePrint.Model
         /// </summary>
         public static string GetBluetoothDeviceNameForPort(string portName)
         {
+            CheckLookupCacheExpiration();
             string cleanPort = (portName ?? "").Trim().ToUpper();
+            if (!string.IsNullOrEmpty(cleanPort) && _btPortToNameCache.TryGetValue(cleanPort, out string cachedName))
+            {
+                return cachedName;
+            }
 
             // 1. 레지스트리 BTHENUM에서 포트명에 직접 매핑된 장치명 검색
             try
@@ -1097,6 +1300,7 @@ namespace BarcodePrint.Model
                                                         string rawMac = macMatch.Groups[1].Value.ToUpper();
                                                         if (macMap.TryGetValue(rawMac, out string mName) && !string.IsNullOrWhiteSpace(mName))
                                                         {
+                                                            _btPortToNameCache[cleanPort] = mName;
                                                             return mName;
                                                         }
                                                     }
@@ -1106,6 +1310,7 @@ namespace BarcodePrint.Model
                                                     string targetName = !string.IsNullOrEmpty(friendly) ? friendly : devDesc;
                                                     if (!string.IsNullOrEmpty(targetName) && !targetName.StartsWith("표준", StringComparison.OrdinalIgnoreCase))
                                                     {
+                                                        _btPortToNameCache[cleanPort] = targetName;
                                                         return targetName;
                                                     }
                                                 }
@@ -1124,6 +1329,7 @@ namespace BarcodePrint.Model
             var pairedPrinters = GetPairedBluetoothPrinterNames();
             if (pairedPrinters.Count > 0)
             {
+                if (!string.IsNullOrEmpty(cleanPort)) _btPortToNameCache[cleanPort] = pairedPrinters[0];
                 return pairedPrinters[0];
             }
 
@@ -1137,6 +1343,7 @@ namespace BarcodePrint.Model
         public static string GetBluetoothPortForDeviceName(string deviceName)
         {
             if (string.IsNullOrWhiteSpace(deviceName)) return "";
+            CheckLookupCacheExpiration();
             string cleanTarget = deviceName
                 .Replace("[블루투스]", "")
                 .Replace("(페어링 필요)", "")
@@ -1147,6 +1354,10 @@ namespace BarcodePrint.Model
                 .ToUpperInvariant();
 
             if (string.IsNullOrEmpty(cleanTarget)) return "";
+            if (_btNameToPortCache.TryGetValue(cleanTarget, out string cachedPort))
+            {
+                return cachedPort;
+            }
 
             // 1. 레지스트리 BTHENUM 키에서 PortName 역조회
             try
@@ -1182,6 +1393,7 @@ namespace BarcodePrint.Model
                                                     if (cleanF.Contains(cleanTarget) || cleanTarget.Contains(cleanF) ||
                                                         cleanD.Contains(cleanTarget) || cleanTarget.Contains(cleanD))
                                                     {
+                                                        _btNameToPortCache[cleanTarget] = port;
                                                         return port;
                                                     }
 
@@ -1195,6 +1407,7 @@ namespace BarcodePrint.Model
                                                             string cleanM = (mName ?? "").Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
                                                             if (cleanM.Contains(cleanTarget) || cleanTarget.Contains(cleanM))
                                                             {
+                                                                _btNameToPortCache[cleanTarget] = port;
                                                                 return port;
                                                             }
                                                         }
@@ -1214,20 +1427,35 @@ namespace BarcodePrint.Model
             // 2. WMI Win32_PnPEntity 역조회
             try
             {
-                using (var searcher = new System.Management.ManagementObjectSearcher(
-                    "SELECT Name, Caption, PNPDeviceID FROM Win32_PnPEntity WHERE ClassGuid = '{4d36e978-e325-11ce-bfc1-08002be10318}' OR Name LIKE '%(COM%'"))
+                if (!IsAppExiting)
                 {
-                    foreach (System.Management.ManagementObject obj in searcher.Get())
+                    lock (_wmiLock)
                     {
-                        string pnpName = obj["Name"]?.ToString() ?? obj["Caption"]?.ToString() ?? "";
-                        var match = Regex.Match(pnpName, @"(COM\d+)", RegexOptions.IgnoreCase);
-                        if (match.Success)
+                        if (!IsAppExiting)
                         {
-                            string port = match.Groups[1].Value.ToUpper();
-                            string cleanPnp = pnpName.Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
-                            if (cleanPnp.Contains(cleanTarget) || cleanTarget.Contains(cleanPnp))
+                            using (var searcher = new System.Management.ManagementObjectSearcher(
+                                "SELECT Name, Caption, PNPDeviceID FROM Win32_PnPEntity WHERE ClassGuid = '{4d36e978-e325-11ce-bfc1-08002be10318}' OR Name LIKE '%(COM%'"))
+                            using (var collection = searcher.Get())
                             {
-                                return port;
+                                foreach (System.Management.ManagementObject obj in collection)
+                                {
+                                    if (IsAppExiting) break;
+                                    using (obj)
+                                    {
+                                        string pnpName = obj["Name"]?.ToString() ?? obj["Caption"]?.ToString() ?? "";
+                                        var match = Regex.Match(pnpName, @"(COM\d+)", RegexOptions.IgnoreCase);
+                                        if (match.Success)
+                                        {
+                                            string port = match.Groups[1].Value.ToUpper();
+                                            string cleanPnp = pnpName.Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
+                                            if (cleanPnp.Contains(cleanTarget) || cleanTarget.Contains(cleanPnp))
+                                            {
+                                                _btNameToPortCache[cleanTarget] = port;
+                                                return port;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1235,6 +1463,7 @@ namespace BarcodePrint.Model
             }
             catch { }
 
+            _btNameToPortCache[cleanTarget] = "";
             return "";
         }
 
@@ -1244,23 +1473,57 @@ namespace BarcodePrint.Model
         public static string GetNetworkPrinterDeviceName(string ip)
         {
             if (string.IsNullOrWhiteSpace(ip)) return "네트워크 라벨 프린터";
+            CheckLookupCacheExpiration();
             string cleanIp = ip.Trim();
+            if (_netIpToNameCache.TryGetValue(cleanIp, out string cachedNetName))
+            {
+                return cachedNetName;
+            }
 
             // 1. Windows 스풀러 드라이버 목록에서 해당 IP 포트를 사용하는 프린터 검색
             try
             {
-                using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                var installed = GetConnectedUsbPrinters();
+                if (installed != null)
                 {
-                    foreach (System.Management.ManagementObject obj in searcher.Get())
+                    var matched = installed.FirstOrDefault(p => !string.IsNullOrEmpty(p.PortName) && p.PortName.IndexOf(cleanIp, StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (matched != null && !string.IsNullOrEmpty(matched.Name))
                     {
-                        string pName = obj["Name"]?.ToString() ?? "";
-                        string port = obj["PortName"]?.ToString() ?? "";
-                        string driver = obj["DriverName"]?.ToString() ?? "";
+                        _netIpToNameCache[cleanIp] = matched.Name;
+                        return matched.Name;
+                    }
+                }
 
-                        if (!string.IsNullOrEmpty(port) && port.IndexOf(cleanIp, StringComparison.OrdinalIgnoreCase) >= 0)
+                if (!IsAppExiting)
+                {
+                    lock (_wmiLock)
+                    {
+                        if (!IsAppExiting)
                         {
-                            if (!string.IsNullOrEmpty(pName)) return pName;
-                            if (!string.IsNullOrEmpty(driver)) return driver;
+                            using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                            using (var collection = searcher.Get())
+                            {
+                                foreach (System.Management.ManagementObject obj in collection)
+                                {
+                                    if (IsAppExiting) break;
+                                    using (obj)
+                                    {
+                                        string pName = obj["Name"]?.ToString() ?? "";
+                                        string port = obj["PortName"]?.ToString() ?? "";
+                                        string driver = obj["DriverName"]?.ToString() ?? "";
+
+                                        if (!string.IsNullOrEmpty(port) && port.IndexOf(cleanIp, StringComparison.OrdinalIgnoreCase) >= 0)
+                                        {
+                                            string found = !string.IsNullOrEmpty(pName) ? pName : driver;
+                                            if (!string.IsNullOrEmpty(found))
+                                            {
+                                                _netIpToNameCache[cleanIp] = found;
+                                                return found;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1270,15 +1533,17 @@ namespace BarcodePrint.Model
             // 2. 이전에 저장된 네트워크 프린터 모델명 확인
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
-                if (!string.IsNullOrWhiteSpace(settings.LastTcpPrinterModel))
+                var settings = AppSettings.Default;
+                if (settings != null && !string.IsNullOrWhiteSpace(settings.LastTcpPrinterModel))
                 {
-                    return settings.LastTcpPrinterModel.Trim();
+                    string saved = settings.LastTcpPrinterModel.Trim();
+                    _netIpToNameCache[cleanIp] = saved;
+                    return saved;
                 }
             }
             catch { }
 
+            _netIpToNameCache[cleanIp] = "Xprinter 라벨 프린터";
             return "Xprinter 라벨 프린터";
         }
 
@@ -1310,32 +1575,46 @@ namespace BarcodePrint.Model
                     }
 
                     // 2. 포트명이 COMx이거나 BTH로 시작하는 기타 등록된 Xprinter 드라이버 보강
-                    using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                    if (!IsAppExiting)
                     {
-                        foreach (System.Management.ManagementObject obj in searcher.Get())
+                        lock (_wmiLock)
                         {
-                            string name = obj["Name"]?.ToString() ?? "";
-                            string port = obj["PortName"]?.ToString() ?? "";
-                            string driver = obj["DriverName"]?.ToString() ?? "";
-
-                            if (string.IsNullOrEmpty(name)) continue;
-                            if (!IsXprinterDevice(name, driver)) continue;
-
-                            bool isBtPort = port.ToUpper().Contains("COM") || port.ToUpper().Contains("BTH") || port.ToUpper().Contains("BLUETOOTH");
-                            if (isBtPort)
+                            if (!IsAppExiting)
                             {
-                                if (!list.Any(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase) || x.PortName.Equals(port, StringComparison.OrdinalIgnoreCase)))
+                                using (var searcher = new System.Management.ManagementObjectSearcher("SELECT Name, PortName, DriverName FROM Win32_Printer"))
+                                using (var collection = searcher.Get())
                                 {
-                                    list.Add(new UsbPrinterInfo
+                                    foreach (System.Management.ManagementObject obj in collection)
                                     {
-                                        Name = name,
-                                        FriendlyName = !string.IsNullOrEmpty(driver) ? driver : name,
-                                        PortName = port,
-                                        Serial = "-",
-                                        Type = "Bluetooth",
-                                        Address = port,
-                                        IsPaired = true
-                                    });
+                                        if (IsAppExiting) break;
+                                        using (obj)
+                                        {
+                                            string name = obj["Name"]?.ToString() ?? "";
+                                            string port = obj["PortName"]?.ToString() ?? "";
+                                            string driver = obj["DriverName"]?.ToString() ?? "";
+
+                                            if (string.IsNullOrEmpty(name)) continue;
+                                            if (!IsXprinterDevice(name, driver)) continue;
+
+                                            bool isBtPort = port.ToUpper().Contains("COM") || port.ToUpper().Contains("BTH") || port.ToUpper().Contains("BLUETOOTH");
+                                            if (isBtPort)
+                                            {
+                                                if (!list.Any(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase) || x.PortName.Equals(port, StringComparison.OrdinalIgnoreCase)))
+                                                {
+                                                    list.Add(new UsbPrinterInfo
+                                                    {
+                                                        Name = name,
+                                                        FriendlyName = !string.IsNullOrEmpty(driver) ? driver : name,
+                                                        PortName = port,
+                                                        Serial = "-",
+                                                        Type = "Bluetooth",
+                                                        Address = port,
+                                                        IsPaired = true
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

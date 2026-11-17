@@ -32,6 +32,18 @@ namespace BarcodePrint.View
             try
             {
                 var app = new System.Windows.Application();
+                app.Exit += (s, e) =>
+                {
+                    BarcodePrint.Model.PrinterOnlineDetector.IsAppExiting = true;
+                    BarcodePrint.Model.UsbPrinterHelper.IsAppExiting = true;
+                    BarcodePrint.Model.PrinterOnlineDetector.WaitForWmiCompletion(600);
+                };
+                AppDomain.CurrentDomain.ProcessExit += (s, e) =>
+                {
+                    BarcodePrint.Model.PrinterOnlineDetector.IsAppExiting = true;
+                    BarcodePrint.Model.UsbPrinterHelper.IsAppExiting = true;
+                    BarcodePrint.Model.PrinterOnlineDetector.WaitForWmiCompletion(600);
+                };
                 app.DispatcherUnhandledException += (s, e) =>
                 {
                     System.Diagnostics.Debug.WriteLine($"Dispatcher Unhandled Exception: {e.Exception.Message}");
@@ -53,33 +65,16 @@ namespace BarcodePrint.View
                 {
                     try
                     {
-                        Thread.Sleep(200);
-                        splash.UpdateProgress(35, "USB 프린터 통신 및 드라이버 검색 중...");
-
-                        Thread.Sleep(250);
+                        // 백그라운드에서 환경설정 싱글톤 사전 로드 (UI 스레드 디스크 I/O 제로화)
+                        _ = BarcodePrint.Model.AppSettings.Default;
                         splash.UpdateProgress(60, "홈 대시보드 및 시스템 컴포넌트 로드 중...");
 
-                        // 메인 UI 스레드에서 StartWindow 생성
+                        // 메인 UI 스레드에서 StartWindow 생성 및 즉시 표시 (인위적 Thread.Sleep 지연 완전 제거)
                         app.Dispatcher.Invoke(() =>
                         {
                             startWindow = new StartWindow();
-                        });
-
-                        Thread.Sleep(200);
-                        splash.UpdateProgress(85, "라벨 서식 템플릿 및 사용자 환경설정 복원 중...");
-
-                        Thread.Sleep(200);
-                        splash.UpdateProgress(100, "준비 완료! 프로그램을 시작합니다.");
-                        Thread.Sleep(200);
-
-                        // 홈 대시보드 창 표시 및 스플래시 종료
-                        app.Dispatcher.Invoke(() =>
-                        {
-                            if (startWindow != null)
-                            {
-                                app.MainWindow = startWindow;
-                                startWindow.Show();
-                            }
+                            app.MainWindow = startWindow;
+                            startWindow.Show();
                             splash.Close();
                         });
                     }

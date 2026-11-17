@@ -21,3 +21,8 @@
 - 기능 구현이나 버그 수정 요청을 받으면 코드 수정 후 터미널 빌드를 즉시 실행할 것.
 - 빌드 실패 시 컴파일 오류 로그를 스스로 파싱하고 해결할 때까지 코드를 다시 수정할 것.
 - 빌드가 완전히 성공하기 전에는 작업을 완료 처리하지 말 것.
+
+## 3. Target Version & Scope Policy
+- **Windows 버전은 `LabelMaster_Basic_v3`만 사용한다.**
+- **`LabelMaster_Basic_v2` 및 이전 구버전(`LabelMaaster_Basic`)은 절대 수정하거나 건드리지 말 것.**
+- 크로스 플랫폼 점검 시 대상은 Windows(`LabelMaster_Basic_v3`), Android(`Android/Label_Master`), iOS(`iOS/LabelMaster_iOS`), Mac(`Mac/LabelMaster_MacPC`) 4개 버전으로 한정한다.

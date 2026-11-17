@@ -35,8 +35,7 @@ namespace BarcodePrint.WpfView
             {
                 try
                 {
-                    var settings = new AppSettings();
-                    settings.Load();
+                    var settings = AppSettings.Default;
                     if (settings.PaperWidth > 0 && settings.PaperHeight > 0)
                     {
                         initW = settings.PaperWidth;
@@ -71,8 +70,7 @@ namespace BarcodePrint.WpfView
             try
             {
                 _customSizes.Clear();
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
 
                 string raw = settings.CustomPaperSizes ?? "";
                 if (!string.IsNullOrWhiteSpace(raw))
@@ -102,8 +100,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
 
                 var strList = _customSizes.Select(s => $"{s.Width.ToString("0.#", CultureInfo.InvariantCulture)},{s.Height.ToString("0.#", CultureInfo.InvariantCulture)}");
                 settings.CustomPaperSizes = string.Join(";", strList);
@@ -202,9 +199,9 @@ namespace BarcodePrint.WpfView
         private void OnSaveCustomSizeClick(object sender, RoutedEventArgs e)
         {
             if (!double.TryParse(TxtWidth.Text.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double w) || w <= 0 ||
-                !double.TryParse(TxtHeight.Text.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double h) || h <= 0)
+                !double.TryParse(TxtHeight.Text.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double h) || h <= 0 || h > AppSettings.MAX_PAPER_HEIGHT)
             {
-                MessageBox.Show("올바른 가로 및 세로 크기(mm)를 입력한 후 저장 버튼을 눌러주세요.", "입력 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show($"올바른 가로 및 세로 크기(1 ~ {AppSettings.MAX_PAPER_HEIGHT} mm)를 입력한 후 저장 버튼을 눌러주세요.", "입력 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -244,9 +241,9 @@ namespace BarcodePrint.WpfView
         {
             // 1단계: 라벨 규격(Width, Height) 유효성 검사 및 설정
             if (!double.TryParse(TxtWidth.Text.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double w) || w <= 0 ||
-                !double.TryParse(TxtHeight.Text.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double h) || h <= 0)
+                !double.TryParse(TxtHeight.Text.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double h) || h <= 0 || h > AppSettings.MAX_PAPER_HEIGHT)
             {
-                MessageBox.Show("올바른 가로 및 세로 크기(mm)를 입력해주세요.", "입력 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show($"올바른 가로 및 세로 크기(1 ~ {AppSettings.MAX_PAPER_HEIGHT} mm)를 입력해주세요.", "입력 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -277,8 +274,7 @@ namespace BarcodePrint.WpfView
         {
             try
             {
-                var settings = new AppSettings();
-                settings.Load();
+                var settings = AppSettings.Default;
                 settings.PaperWidth = (int)Math.Round(w);
                 settings.PaperHeight = (int)Math.Round(h);
                 settings.Save();
@@ -366,7 +362,7 @@ namespace BarcodePrint.WpfView
         {
             if (double.TryParse(TxtHeight.Text.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double h))
             {
-                h = Math.Min(300, h + (Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 5));
+                h = Math.Min(AppSettings.MAX_PAPER_HEIGHT, h + (Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 5));
                 TxtHeight.Text = h.ToString("0.#", CultureInfo.InvariantCulture);
             }
         }
@@ -453,6 +449,14 @@ namespace BarcodePrint.WpfView
                 case 3:
                     TxtStepTitle.Text = "인쇄 방향 선택";
                     TxtStepDesc.Text = "라벨의 기본 회전각 및 인쇄 출력 방향을 선택하세요.";
+                    if (TxtOrientPortraitDimsDesc != null)
+                    {
+                        TxtOrientPortraitDimsDesc.Text = $"• 크기: 가로 {SelectedWidth:0.#}mm × 세로 {SelectedHeight:0.#}mm";
+                    }
+                    if (TxtOrientLandscapeDimsDesc != null)
+                    {
+                        TxtOrientLandscapeDimsDesc.Text = $"• 크기: 가로 {SelectedHeight:0.#}mm × 세로 {SelectedWidth:0.#}mm (회전 적용)";
+                    }
                     break;
                 case 4:
                     TxtStepTitle.Text = "인쇄 방식 및 리본 유무";

@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -100,17 +101,134 @@ namespace BarcodePrint.ViewModel
             return false;
         }
 
-        public void RefreshPrinters()
+        private bool _isScanningPrinters = false;
+
+        public void RefreshPrinters(bool runAsync = true)
         {
-            try
+            if (runAsync)
             {
-                var printers = _printerService.GetVerifiedPrinters(_authenticatedSerials);
-                _cachedPrinters = printers ?? new List<UsbPrinterInfo>();
-                ApplyPrinterFilter();
+                if (_isScanningPrinters) return;
+                _isScanningPrinters = true;
+
+                // 1) 초기 진입 시 캐시 컬렉션 준비
+                if (_cachedPrinters == null)
+                {
+                    _cachedPrinters = new List<UsbPrinterInfo>();
+                }
+
+                // 2) 백그라운드 스레드에서 WMI/레지스트리 전수조사 및 이름/포트 캐시 워밍업 비동기 실행 (UI 스레드 완전 무차단)
+                Task.Run(() =>
+                {
+                    if (PrinterOnlineDetector.IsAppExiting || UsbPrinterHelper.IsAppExiting) return;
+                    try
+                    {
+                        var printers = _printerService.GetVerifiedPrinters(_authenticatedSerials);
+                        if (PrinterOnlineDetector.IsAppExiting || UsbPrinterHelper.IsAppExiting) return;
+                        var freshList = printers ?? new List<UsbPrinterInfo>();
+
+                        // 페어링된 블루투스 라벨 프린터 중 가상 COM 포트가 활성화된 장치도 목록에 병합 (대시보드 PrinterOnlineDetector와 1:1 일치)
+                        try
+                        {
+                            var pairedBtNames = UsbPrinterHelper.GetPairedBluetoothPrinterNames();
+                            var availComs = new HashSet<string>(UsbPrinterHelper.GetAvailableComPorts(), StringComparer.OrdinalIgnoreCase);
+                            foreach (var bthName in pairedBtNames)
+                            {
+                                string btPort = UsbPrinterHelper.GetBluetoothPortForDeviceName(bthName);
+                                if (string.IsNullOrEmpty(btPort) || !availComs.Contains(btPort)) continue;
+
+                                string dispName = $"[블루투스] {bthName}";
+                                if (!freshList.Any(x => x.PortName.Equals(btPort, StringComparison.OrdinalIgnoreCase) ||
+                                                        x.Name.Equals(dispName, StringComparison.OrdinalIgnoreCase) ||
+                                                        x.Name.Equals(bthName, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    freshList.Add(new UsbPrinterInfo
+                                    {
+                                        Name = dispName,
+                                        FriendlyName = bthName,
+                                        PortName = btPort,
+                                        Serial = "-",
+                                        Type = "Bluetooth",
+                                        Address = btPort,
+                                        IsPaired = true
+                                    });
+                                }
+                            }
+                        }
+                        catch { }
+
+                        // 백그라운드 스레드에서 블루투스/네트워크 이름 및 포트 조회를 미리 수행하여 UI 스레드 블로킹 원천 제거
+                        foreach (var p in freshList)
+                        {
+                            if (p.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase))
+                            {
+                                UsbPrinterHelper.GetBluetoothDeviceNameForPort(p.PortName);
+                                UsbPrinterHelper.GetBluetoothPortForDeviceName(p.FriendlyName ?? p.Name);
+                            }
+                            else if (p.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase))
+                            {
+                                UsbPrinterHelper.GetNetworkPrinterDeviceName(p.Address);
+                            }
+                        }
+                        UsbPrinterHelper.GetAvailableComPorts();
+
+                        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                        if (dispatcher != null)
+                        {
+                            dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                try
+                                {
+                                    string prevSelected = SelectedPrinterName;
+                                    _cachedPrinters = freshList;
+                                    ApplyPrinterFilter();
+
+                                    if (!string.IsNullOrEmpty(prevSelected) && AvailablePrinters.Contains(prevSelected))
+                                    {
+                                        SelectedPrinterName = prevSelected;
+                                    }
+                                    else if (!string.IsNullOrEmpty(_settings?.LastSelectedPrinterName) && AvailablePrinters.Contains(_settings.LastSelectedPrinterName))
+                                    {
+                                        SelectedPrinterName = _settings.LastSelectedPrinterName;
+                                    }
+                                    else if (AvailablePrinters.Count > 0)
+                                    {
+                                        SelectedPrinterName = AvailablePrinters[0];
+                                    }
+                                    else
+                                    {
+                                        SelectedPrinterName = null;
+                                    }
+                                }
+                                finally
+                                {
+                                    _isScanningPrinters = false;
+                                }
+                            }));
+                        }
+                        else
+                        {
+                            _isScanningPrinters = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _isScanningPrinters = false;
+                        PrinterSerialLogger.LogError("비동기 프린터 목록 갱신 실패", ex);
+                    }
+                });
             }
-            catch (Exception ex)
+            else
             {
-                PrinterSerialLogger.LogError("프린터 목록 갱신 실패", ex);
+                try
+                {
+                    var printers = _printerService.GetVerifiedPrinters(_authenticatedSerials);
+                    _cachedPrinters = printers ?? new List<UsbPrinterInfo>();
+                    ApplyPrinterFilter();
+                }
+                catch (Exception ex)
+                {
+                    PrinterSerialLogger.LogError("프린터 목록 갱신 실패", ex);
+                }
             }
         }
 
@@ -151,15 +269,6 @@ namespace BarcodePrint.ViewModel
                 if (SelectedConnectionType == "USB")
                 {
                     filtered = _cachedPrinters.Where(p => p.Type.Equals("USB", StringComparison.OrdinalIgnoreCase)).ToList();
-                    if (filtered.Count == 0)
-                    {
-                        var freshPrinters = _printerService.GetVerifiedPrinters(_authenticatedSerials);
-                        if (freshPrinters != null && freshPrinters.Count > 0)
-                        {
-                            _cachedPrinters = freshPrinters;
-                            filtered = _cachedPrinters.Where(p => p.Type.Equals("USB", StringComparison.OrdinalIgnoreCase)).ToList();
-                        }
-                    }
                 }
                 else if (SelectedConnectionType == "LAN")
                 {
@@ -211,8 +320,7 @@ namespace BarcodePrint.ViewModel
                         }
                     }
 
-                    string cleanCurrent = getCleanName(p.Name);
-                    if (!AvailablePrinters.Any(existing => getCleanName(existing).Equals(cleanCurrent, StringComparison.OrdinalIgnoreCase)))
+                    if (!AvailablePrinters.Any(existing => existing.Equals(p.Name, StringComparison.OrdinalIgnoreCase)))
                     {
                         AvailablePrinters.Add(p.Name);
                     }
@@ -286,6 +394,7 @@ namespace BarcodePrint.ViewModel
 
             Task.Run(() =>
             {
+                if (PrinterOnlineDetector.IsAppExiting || UsbPrinterHelper.IsAppExiting) return;
                 try
                 {
                     // 캐시된 프린터 정보에서 시리얼 검증
@@ -294,19 +403,16 @@ namespace BarcodePrint.ViewModel
                     bool isAuthorized = ValidatePrinterAuthorization(cachedSerial);
                     var licenseMode = TrialLicenseManager.EvaluateLicense(isAuthorized, cachedSerial, printerName);
 
+                    if (PrinterOnlineDetector.IsAppExiting || UsbPrinterHelper.IsAppExiting) return;
                     _printerService.CheckRealtimePrinterStatus(printerName, _cachedPrinters, out string badge, out string color);
+                    if (PrinterOnlineDetector.IsAppExiting || UsbPrinterHelper.IsAppExiting) return;
 
                     Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
                     {
-                        UpdateTrialLicenseState();
+                        bool statusChanged = (PrinterStatusBadge != badge) || (PrinterStatusColor != color) || !IsCurrentPrinterAuthorized;
 
-                        if (isAuthorized)
+                        if (!IsCurrentPrinterAuthorized)
                         {
-                            IsCurrentPrinterAuthorized = true;
-                        }
-                        else
-                        {
-                            // 체험판 모드: 1회 30장 제한으로 인쇄 허용
                             IsCurrentPrinterAuthorized = true;
                         }
 
@@ -315,8 +421,11 @@ namespace BarcodePrint.ViewModel
                         PrinterStatusBadge = badge;
                         PrinterStatusColor = color;
 
-                        // UI 바인딩 강제 갱신
-                        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+                        if (statusChanged)
+                        {
+                            UpdateTrialLicenseState();
+                            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+                        }
                     }));
                 }
                 finally
@@ -444,9 +553,14 @@ namespace BarcodePrint.ViewModel
             }
         }
 
-        private void DrawTextOnDc(DrawingContext dc, string text, double fontSizeMm, double offsetXMm, double offsetYMm, double dotsPerMm, System.Windows.Media.Brush brush, string fontName = "맑은 고딕", bool isBold = true, bool isItalic = false, double cellWidthMm = 0, string align = "LEFT", double cellHeightMm = 0, double cellPaddingMm = 0, bool isUnderline = false, double fontScaleX = 1.0, double lineSpacing = 1.0, double letterSpacing = 0.0)
+        private void DrawTextOnDc(DrawingContext dc, string text, double fontSizeMm, double offsetXMm, double offsetYMm, double dotsPerMm, System.Windows.Media.Brush brush, string fontName = "맑은 고딕", bool isBold = true, bool isItalic = false, double cellWidthMm = 0, string align = "LEFT", double cellHeightMm = 0, double cellPaddingMm = 0, bool isUnderline = false, double fontScaleX = 1.0, double lineSpacing = 1.0, double letterSpacing = 0.0, bool isVertical = false, bool isMirrored = false, bool isInverse = false)
         {
             if (string.IsNullOrEmpty(text)) return;
+
+            if (isVertical)
+            {
+                text = ConvertToVerticalText(text);
+            }
 
             // 화면 96 DPI(1mm = 3.779527559px, FontSize = size * 1.35) 대비 인쇄 해상도(1mm = dotsPerMm px) 1:1 완벽 비례 환산
             double scale = dotsPerMm / (96.0 / 25.4);
@@ -461,12 +575,26 @@ namespace BarcodePrint.ViewModel
             double effScaleX = (fontScaleX > 0) ? fontScaleX : 1.0;
             double effLineSpacing = (lineSpacing > 0) ? lineSpacing : 1.0;
 
+            // 미러(좌우 반전) 변환 적용
+            bool pushedMirror = false;
+            if (isMirrored)
+            {
+                double centerX = leftPx + (cellWidthMm > 0 ? (cellWidthMm * dotsPerMm) / 2.0 : 20.0);
+                dc.PushTransform(new ScaleTransform(-1.0, 1.0, centerX, topPx));
+                pushedMirror = true;
+            }
+
             // 장평(가로 비율) 변환 적용
             bool pushedScale = false;
             if (Math.Abs(effScaleX - 1.0) > 0.001)
             {
                 dc.PushTransform(new ScaleTransform(effScaleX, 1.0, leftPx, topPx));
                 pushedScale = true;
+            }
+
+            if (isInverse)
+            {
+                brush = System.Windows.Media.Brushes.White;
             }
 
             var ft = new FormattedText(
@@ -488,32 +616,114 @@ namespace BarcodePrint.ViewModel
                 ft.LineHeight = Math.Max(6, targetPxSize) * effLineSpacing;
             }
 
-            if (cellWidthMm > 0)
+            TextAlignment targetAlignment = TextAlignment.Left;
+            if (string.Equals(align, "CENTER", StringComparison.OrdinalIgnoreCase))
             {
-                // 셀 또는 박스 너비가 지정된 경우: 내부 패딩(cellPaddingMm)을 정확히 제외한 순수 콘텐츠 너비로 줄바꿈 폭 지정
-                double cellWidthPx = (cellWidthMm * dotsPerMm) / effScaleX;
-                double padPx = (cellPaddingMm * dotsPerMm) / effScaleX;
-                double contentWidthPx = Math.Max(1.0, cellWidthPx - (padPx * 2.0));
-                ft.MaxTextWidth = contentWidthPx;
-
-                if (align == "CENTER")
-                {
-                    leftPx += Math.Max(0, (cellWidthPx - ft.Width) / 2.0);
-                }
-                else if (align == "RIGHT")
-                {
-                    leftPx += Math.Max(padPx, cellWidthPx - ft.Width - padPx);
-                }
-                else
-                {
-                    leftPx += padPx;
-                }
+                targetAlignment = TextAlignment.Center;
             }
+            else if (string.Equals(align, "RIGHT", StringComparison.OrdinalIgnoreCase))
+            {
+                targetAlignment = TextAlignment.Right;
+            }
+            ft.TextAlignment = targetAlignment;
 
             if (cellHeightMm > 0)
             {
                 double cellHeightPx = cellHeightMm * dotsPerMm;
                 topPx += Math.Max(0, (cellHeightPx - ft.Height) / 2.0);
+            }
+
+            double renderOriginX = leftPx;
+            bool pushedAutoFit = false;
+
+            if (cellWidthMm > 0)
+            {
+                // 셀 또는 박스 너비가 지정된 경우: 내부 패딩을 제외한 콘텐츠 너비로 줄바꿈 폭 지정
+                double cellWidthPx = (cellWidthMm * dotsPerMm) / effScaleX;
+                double padPx = (cellPaddingMm * dotsPerMm) / effScaleX;
+                double contentWidthPx = Math.Max(1.0, cellWidthPx - (padPx * 2.0));
+
+                double naturalWidthPx = ft.Width;
+                bool hasExplicitNewline = text.Contains("\n") || text.Contains("\r");
+
+                // [한 줄 인쇄 시 마지막 글자 줄바꿈 원천 차단]
+                // 1) 텍스트에 명시적 줄바꿈(\n, \r)이 없는 단일행 텍스트
+                // 2) 자연 너비가 콘텐츠 가용 너비 이하이거나,
+                //    화면-인쇄 DPI 변환/폰트 힌팅 오차 범위(약 1.5글자 너비 이내) 내에서 약간 초과하는 경우
+                double charTolerancePx = Math.Max(targetPxSize * 1.5, 20.0 * scale);
+                bool shouldForceSingleLine = !hasExplicitNewline && (naturalWidthPx <= contentWidthPx + charTolerancePx);
+
+                if (shouldForceSingleLine)
+                {
+                    if (naturalWidthPx > contentWidthPx)
+                    {
+                        // 콘텐츠 가용 폭보다 약간 큰 경우:
+                        // 글자를 다음 줄로 넘기지 않고, 가로 배율(ScaleTransform)을 미세 조정하여
+                        // 상자 너비 안에 100% 한 줄로 쏙 들어가도록 맞춤(Fit)
+                        double autoFitScaleX = contentWidthPx / naturalWidthPx;
+                        if (autoFitScaleX >= 0.75) // 최대 25% 이내의 미세 축소인 경우 1:1 박스 내 수용
+                        {
+                            double scaleOriginX = leftPx + padPx;
+                            if (targetAlignment == TextAlignment.Center)
+                            {
+                                scaleOriginX = leftPx + (cellWidthPx / 2.0);
+                            }
+                            else if (targetAlignment == TextAlignment.Right)
+                            {
+                                scaleOriginX = leftPx + cellWidthPx - padPx;
+                            }
+
+                            dc.PushTransform(new ScaleTransform(autoFitScaleX, 1.0, scaleOriginX, topPx));
+                            pushedAutoFit = true;
+                            ft.MaxTextWidth = naturalWidthPx + 4.0; // 줄바꿈 원천 방지
+                        }
+                        else
+                        {
+                            // 축소율이 큰 경우에도 단일행 텍스트는 줄바꿈되지 않도록 여유 폭 부여
+                            ft.MaxTextWidth = naturalWidthPx + 4.0;
+                        }
+                    }
+                    else
+                    {
+                        // 완전히 들어가는 경우:
+                        // 부동소수점 오차나 힌팅 오차로 인해 마지막 글자가 줄바꿈되는 것을 방지하기 위해
+                        // MaxTextWidth를 여유 있게 부여
+                        ft.MaxTextWidth = Math.Max(contentWidthPx, naturalWidthPx + 4.0);
+                    }
+
+                    renderOriginX = leftPx + padPx;
+                }
+                else
+                {
+                    // 명시적 줄바꿈이 있거나 여러 줄로 표시되어야 하는 긴 텍스트
+                    ft.MaxTextWidth = contentWidthPx;
+                    renderOriginX = leftPx + padPx;
+                }
+            }
+            else
+            {
+                // cellWidthMm <= 0인 경우 (자연 크기 모드, MaxTextWidth 미지정)
+                // MaxTextWidth가 없을 때 FormattedText는 TextAlignment에 따라
+                // Center는 중심축, Right는 우측 끝점을 원점으로 요구함.
+                if (targetAlignment == TextAlignment.Center)
+                {
+                    renderOriginX = leftPx + (ft.Width / 2.0);
+                }
+                else if (targetAlignment == TextAlignment.Right)
+                {
+                    renderOriginX = leftPx + ft.Width;
+                }
+                else
+                {
+                    renderOriginX = leftPx;
+                }
+            }
+
+            if (isInverse)
+            {
+                double bgWPx = cellWidthMm > 0 ? (cellWidthMm * dotsPerMm) : (ft.Width + 10.0);
+                double bgHPx = cellHeightMm > 0 ? (cellHeightMm * dotsPerMm) : (ft.Height + 8.0);
+                dc.DrawRectangle(System.Windows.Media.Brushes.Black, null, new Rect(leftPx, topPx, bgWPx, bgHPx));
             }
 
             if (Math.Abs(letterSpacing) > 0.001)
@@ -523,6 +733,22 @@ namespace BarcodePrint.ViewModel
                 double currentY = topPx;
                 double lineHeightPx = (effLineSpacing > 0) ? (Math.Max(6, targetPxSize) * effLineSpacing * 1.2) : (targetPxSize * 1.2);
                 double extraCharSpacingPx = targetPxSize * letterSpacing;
+
+                double maxLineWidthPx = 0;
+                if (lines.Length > 1 && (targetAlignment == TextAlignment.Center || targetAlignment == TextAlignment.Right))
+                {
+                    foreach (var l in lines)
+                    {
+                        if (!string.IsNullOrEmpty(l))
+                        {
+                            var ftM = new FormattedText(l, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                                new Typeface(new System.Windows.Media.FontFamily(familyName), style, weight, FontStretches.Normal),
+                                Math.Max(6, targetPxSize), brush, 1.0);
+                            double lw = ftM.Width + Math.Max(0, l.Length - 1) * extraCharSpacingPx;
+                            if (lw > maxLineWidthPx) maxLineWidthPx = lw;
+                        }
+                    }
+                }
 
                 foreach (string line in lines)
                 {
@@ -554,13 +780,24 @@ namespace BarcodePrint.ViewModel
                     if (cellWidthMm > 0)
                     {
                         double cellWPx = (cellWidthMm * dotsPerMm) / effScaleX;
-                        if (align == "CENTER")
+                        if (targetAlignment == TextAlignment.Center)
                         {
                             lineStartXPx = leftPx + Math.Max(0, (cellWPx - totalLineWidthPx) / 2.0);
                         }
-                        else if (align == "RIGHT")
+                        else if (targetAlignment == TextAlignment.Right)
                         {
                             lineStartXPx = leftPx + Math.Max(0, cellWPx - totalLineWidthPx - ((cellPaddingMm * dotsPerMm) / effScaleX));
+                        }
+                    }
+                    else if (maxLineWidthPx > 0)
+                    {
+                        if (targetAlignment == TextAlignment.Center)
+                        {
+                            lineStartXPx = leftPx + Math.Max(0, (maxLineWidthPx - totalLineWidthPx) / 2.0);
+                        }
+                        else if (targetAlignment == TextAlignment.Right)
+                        {
+                            lineStartXPx = leftPx + Math.Max(0, maxLineWidthPx - totalLineWidthPx);
                         }
                     }
 
@@ -576,10 +813,18 @@ namespace BarcodePrint.ViewModel
             }
             else
             {
-                dc.DrawText(ft, new System.Windows.Point(leftPx, topPx));
+                dc.DrawText(ft, new System.Windows.Point(renderOriginX, topPx));
             }
 
+            if (pushedAutoFit)
+            {
+                dc.Pop();
+            }
             if (pushedScale)
+            {
+                dc.Pop();
+            }
+            if (pushedMirror)
             {
                 dc.Pop();
             }
@@ -598,7 +843,7 @@ namespace BarcodePrint.ViewModel
             var drawingVisual = new DrawingVisual();
             using (var dc = drawingVisual.RenderOpen())
             {
-                dc.DrawRectangle(System.Windows.Media.Brushes.White, null, new Rect(0, 0, pxW, pxH));
+                dc.DrawRectangle(System.Windows.Media.Brushes.White, null, new Rect(-20, -20, pxW + 40, pxH + 40));
 
                 // 전체 이미지 인쇄 위치 보정 오프셋 (PrinterOffsetX, PrinterOffsetY) 적용
                 bool hasOffset = (PrinterOffsetX != 0 || PrinterOffsetY != 0);
@@ -608,7 +853,7 @@ namespace BarcodePrint.ViewModel
                 }
 
                 var colValues = new string[] { col1, col2, col3, col4, col5, col6, col7, col8 };
-                int activeCount = Math.Max(1, Math.Min(8, ActiveColumnCount));
+                int activeCount = Math.Max(0, Math.Min(8, ActiveColumnCount));
 
                 double startXMm = TableOffsetX >= 0 ? TableOffsetX : 2.0;
                 double startYMm = TableOffsetY >= 0 ? TableOffsetY : 2.0;
@@ -641,7 +886,12 @@ namespace BarcodePrint.ViewModel
                 for (int i = 0; i < activeCount; i++)
                 {
                     int colNum = i + 1;
-                    if (GetBarcodeByIndex(colNum)) barcodeColIndices.Add(colNum);
+                    TemplateElement elem = CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == colNum);
+                    bool isBarcodeCol = (elem != null)
+                        ? (elem.Type == ElementType.BARCODE || elem.Type == ElementType.QR_CODE)
+                        : GetBarcodeByIndex(colNum);
+
+                    if (isBarcodeCol) barcodeColIndices.Add(colNum);
                     else textColIndices.Add(colNum);
                 }
 
@@ -654,7 +904,7 @@ namespace BarcodePrint.ViewModel
                 // 표 기준 높이 계산: TableOffsetY 변경 시 표가 찌그러지지 않고 아래로 이동하도록 처리
                 double userSpecifiedTotalMm = 0;
                 int autoCount = 0;
-                for (int r = 0; r < textRowCount; r++)
+                for (int r = 0; r < textColIndices.Count; r++)
                 {
                     int colNum = textColIndices[r];
                     int userH = GetRowHeightByIndex(colNum);
@@ -687,12 +937,26 @@ namespace BarcodePrint.ViewModel
                 double[] rowTopsPx = new double[textRowCount];
                 double userSpecifiedTotalPx = userSpecifiedTotalMm * dotsPerMm;
 
-                if (autoCount > 0)
+                for (int r = 0; r < textColIndices.Count; r++)
+                {
+                    int colNum = textColIndices[r];
+                    int userH = GetRowHeightByIndex(colNum);
+                    if (userH > 0)
+                    {
+                        rowHeightsPx[r] = userH * dotsPerMm;
+                    }
+                }
+
+                if (textColIndices.Count == 0)
+                {
+                    rowHeightsPx[0] = tableHPx;
+                }
+                else if (autoCount > 0)
                 {
                     double remainingPx = Math.Max(autoCount * 4.0 * dotsPerMm, tableHPx - userSpecifiedTotalPx);
                     double totalWeight = 0;
                     double[] weights = new double[textRowCount];
-                    for (int r = 0; r < textRowCount; r++)
+                    for (int r = 0; r < textColIndices.Count; r++)
                     {
                         int colNum = textColIndices[r];
                         if (GetRowHeightByIndex(colNum) <= 0)
@@ -702,12 +966,12 @@ namespace BarcodePrint.ViewModel
                             totalWeight += weights[r];
                         }
                     }
-                    for (int r = 0; r < textRowCount; r++)
+                    for (int r = 0; r < textColIndices.Count; r++)
                     {
                         int colNum = textColIndices[r];
                         if (GetRowHeightByIndex(colNum) <= 0)
                         {
-                            rowHeightsPx[r] = remainingPx * (weights[r] / totalWeight);
+                            rowHeightsPx[r] = totalWeight > 0 ? remainingPx * (weights[r] / totalWeight) : (remainingPx / Math.Max(1, autoCount));
                         }
                     }
                 }
@@ -776,7 +1040,7 @@ namespace BarcodePrint.ViewModel
                         }
 
                         // 4. 각 열별 텍스트 렌더링
-                        for (int c = 0; c < colCount; c++)
+                        for (int c = 0; c < textColIndices.Count; c++)
                         {
                             int colNum = textColIndices[c];
                             int i = colNum - 1;
@@ -936,73 +1200,106 @@ namespace BarcodePrint.ViewModel
                         double wMm = (elem != null && elem.Width > 0) ? elem.Width : GetWidthByIndex(colNum);
                         double hMm = (elem != null && elem.Height > 0) ? elem.Height : 0;
                         string textPos = (elem != null && !string.IsNullOrEmpty(elem.BarcodeTextPosition)) ? elem.BarcodeTextPosition : (showBText ? "BELOW" : "NONE");
-                        BarcodeVisualHelper.RenderBarcodeOnDc(dc, val, bType, size, offX, offY, dotsPerMm, showBText, textPos, wMm, hMm);
+
+                        bool pushedBarcodeRotate = false;
+                        if (elem != null && elem.Rotation != 0)
+                        {
+                            double bLeftPx = offX * dotsPerMm;
+                            double bTopPx = offY * dotsPerMm;
+                            double bWidthPx = (wMm > 0 ? wMm : (bType != null && bType.Contains("QR") ? 18.0 : 45.0)) * dotsPerMm;
+                            double bHeightPx = (hMm > 0 ? hMm : 15.0) * dotsPerMm;
+                            dc.PushTransform(new RotateTransform(elem.Rotation, bLeftPx + (bWidthPx / 2.0), bTopPx + (bHeightPx / 2.0)));
+                            pushedBarcodeRotate = true;
+                        }
+
+                        try
+                        {
+                            BarcodeVisualHelper.RenderBarcodeOnDc(dc, val, bType, size, offX, offY, dotsPerMm, showBText, textPos, wMm, hMm);
+                        }
+                        finally
+                        {
+                            if (pushedBarcodeRotate)
+                            {
+                                dc.Pop();
+                            }
+                        }
                     }
                 }
                 else
                 {
                     // 표 비활성화 모드 (자유 레이아웃)
-                    for (int i = 0; i < activeCount; i++)
+                    if (CurrentTemplate?.Elements != null && CurrentTemplate.Elements.Count > 0)
                     {
-                        int colNum = i + 1;
-                        string val = colValues[i] ?? "";
-                        string header = GetHeaderByIndex(colNum);
-                        bool isBarcode = GetBarcodeByIndex(colNum);
-                        string bType = GetBarcodeTypeByIndex(colNum);
-                        bool showBText = GetBarcodeTextByIndex(colNum);
-                        int size = GetSizeByIndex(colNum);
-                        int offX = GetOffsetXByIndex(colNum);
-                        int offY = GetOffsetYByIndex(colNum);
-                        bool isPrice = GetPriceByIndex(colNum);
-                        bool isIncludeHeader = GetIncludeHeaderByIndex(colNum);
-                        string fontName = GetFontByIndex(colNum);
-                        bool isBold = GetBoldByIndex(colNum);
-                        bool isItalic = GetItalicByIndex(colNum);
-
-                        if (isBarcode)
+                        // 템플릿의 Z-Order(앞/뒤 순서) 리스트 그대로 1:1 완벽 인쇄
+                        foreach (var elem in CurrentTemplate.Elements)
                         {
-                            var elem = CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == colNum);
-                            double wMm = (elem != null && elem.Width > 0) ? elem.Width : GetWidthByIndex(colNum);
-                            double hMm = (elem != null && elem.Height > 0) ? elem.Height : 0;
-                            string textPos = (elem != null && !string.IsNullOrEmpty(elem.BarcodeTextPosition)) ? elem.BarcodeTextPosition : (showBText ? "BELOW" : "NONE");
-                            BarcodeVisualHelper.RenderBarcodeOnDc(dc, val, bType, size, offX, offY, dotsPerMm, showBText, textPos, wMm, hMm);
+                            if (elem.Id == "TITLE_ELEMENT") continue;
+                            if (elem.IsVariable && elem.InputOrder > ActiveColumnCount) continue;
+
+                            RenderSingleElementOnDc(dc, elem, dotsPerMm, colValues);
                         }
-                        else
+                    }
+                    else
+                    {
+                        // 레거시 폴백 렌더링
+                        for (int i = 0; i < activeCount; i++)
                         {
-                            string displayText = val;
-                            if (isPrice && !string.IsNullOrWhiteSpace(val))
-                            {
-                                displayText = PriceFormatHelper.FormatPrice(val, true);
-                            }
-                            if (isIncludeHeader && !string.IsNullOrWhiteSpace(header))
-                            {
-                                displayText = $"{header}: {displayText}";
-                            }
+                            int colNum = i + 1;
+                            string val = colValues[i] ?? "";
+                            string header = GetHeaderByIndex(colNum);
+                            bool isBarcode = GetBarcodeByIndex(colNum);
+                            string bType = GetBarcodeTypeByIndex(colNum);
+                            bool showBText = GetBarcodeTextByIndex(colNum);
+                            int size = GetSizeByIndex(colNum);
+                            int offX = GetOffsetXByIndex(colNum);
+                            int offY = GetOffsetYByIndex(colNum);
+                            bool isPrice = GetPriceByIndex(colNum);
+                            bool isIncludeHeader = GetIncludeHeaderByIndex(colNum);
+                            string fontName = GetFontByIndex(colNum);
+                            bool isBold = GetBoldByIndex(colNum);
+                            bool isItalic = GetItalicByIndex(colNum);
 
-                            if (!string.IsNullOrEmpty(displayText))
+                            if (isBarcode)
                             {
-                                string align = GetAlignByIndex(colNum);
-                                int userWMm = GetWidthByIndex(colNum);
-                                DrawTextOnDc(dc, displayText, size, offX, offY, dotsPerMm, System.Windows.Media.Brushes.Black, fontName, isBold, isItalic, userWMm, align, 0, 0);
+                                double wMm = GetWidthByIndex(colNum);
+                                string textPos = showBText ? "BELOW" : "NONE";
+                                BarcodeVisualHelper.RenderBarcodeOnDc(dc, val, bType, size, offX, offY, dotsPerMm, showBText, textPos, wMm, 0);
+                            }
+                            else
+                            {
+                                string displayText = val;
+                                if (isPrice && !string.IsNullOrWhiteSpace(val)) displayText = PriceFormatHelper.FormatPrice(val, true);
+                                if (isIncludeHeader && !string.IsNullOrWhiteSpace(header)) displayText = $"{header}: {displayText}";
+                                if (!string.IsNullOrEmpty(displayText))
+                                {
+                                    string align = GetAlignByIndex(colNum);
+                                    int userWMm = GetWidthByIndex(colNum);
+                                    DrawTextOnDc(dc, displayText, size, offX, offY, dotsPerMm, System.Windows.Media.Brushes.Black, fontName, isBold, isItalic, userWMm, align, 0, 0);
+                                }
                             }
                         }
                     }
                 }
 
-                if (IsDateTimeEnabled)
+                bool hasDateTimeInTemplate = CurrentTemplate?.Elements?.Any(el => el.Id == "DATETIME_ELEMENT" || el.Type == ElementType.DATE_TIME) ?? false;
+                if (IsDateTimeEnabled && !hasDateTimeInTemplate)
                 {
                     string currentDtStr = GetFormattedDateTimeString();
                     DrawTextOnDc(dc, currentDtStr, DateTimeSize, DateTimeOffsetX, DateTimeOffsetY, dotsPerMm, System.Windows.Media.Brushes.Black, DateTimeFont, DateTimeBold, DateTimeItalic, DateTimeWidth, "LEFT", 0, 0);
                 }
 
-                if (IsSerialEnabled)
+                bool hasSerialInTemplate = CurrentTemplate?.Elements?.Any(el => el.Id == "SERIAL_ELEMENT") ?? false;
+                if (IsSerialEnabled && !hasSerialInTemplate)
                 {
                     string serialStr = FormattedSerialPreview;
                     DrawTextOnDc(dc, serialStr, SerialSize, SerialOffsetX, SerialOffsetY, dotsPerMm, System.Windows.Media.Brushes.Black, SerialFont, SerialBold, SerialItalic, SerialWidth, SerialAlign, 0, 0);
                 }
 
-                // 자유 배치 커스텀 요소 인쇄 렌더링 (선, 도형, 추가 텍스트/바코드 등)
-                RenderCustomElementsOnDc(dc, dotsPerMm);
+                if (IsTableBorderEnabled)
+                {
+                    // 표 활성화 모드에서는 커스텀 요소 후속 렌더링
+                    RenderCustomElementsOnDc(dc, dotsPerMm);
+                }
 
                 if (hasOffset)
                 {
@@ -1013,44 +1310,125 @@ namespace BarcodePrint.ViewModel
             var rtb = new RenderTargetBitmap(pxW, pxH, 96, 96, PixelFormats.Pbgra32);
             rtb.Render(drawingVisual);
 
-            using (var ms = new MemoryStream())
-            {
-                var encoder = new PngBitmapEncoder();
-                encoder.Frames.Add(BitmapFrame.Create(rtb));
-                encoder.Save(ms);
-                ms.Position = 0;
-                var gdiBitmap = new Bitmap(ms);
+            // [일부 PC 백지 출력 원천 차단]
+            // PngBitmapEncoder/WIC 코덱 의존성을 완전히 제거하고, RenderTargetBitmap 메모리 버퍼를 직접 추출
+            // 특정 PC(내장 그래픽/RDP/고DPI 등)에서 Alpha=0 투명 픽셀이 검정/흰색으로 꼬이는 현상을 방지하기 위해
+            // 모든 픽셀을 순수 불투명 흰색(#FFFFFFFF) 배경과 완벽하게 알파 블렌딩 합성(Flatten)
+            int stride = pxW * 4;
+            byte[] pixelBytes = new byte[stride * pxH];
+            rtb.CopyPixels(pixelBytes, stride, 0);
 
-                switch (LabelRotationAngle)
+            for (int i = 0; i < pixelBytes.Length; i += 4)
+            {
+                byte a = pixelBytes[i + 3];
+                if (a == 0)
                 {
-                    case 90:
-                        gdiBitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
-                        break;
-                    case 180:
-                        gdiBitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
-                        break;
-                    case 270:
-                        gdiBitmap.RotateFlip(RotateFlipType.Rotate270FlipNone);
-                        break;
+                    // 완전 투명 영역은 라벨 용지 바탕(순수 흰색)으로 강제 변환
+                    pixelBytes[i] = 255;     // B
+                    pixelBytes[i + 1] = 255; // G
+                    pixelBytes[i + 2] = 255; // R
+                    pixelBytes[i + 3] = 255; // A
                 }
-                return new Bitmap(gdiBitmap);
+                else if (a < 255)
+                {
+                    // 반투명/안티에일리어싱 픽셀을 흰색 배경과 표준 합성
+                    int b = pixelBytes[i];
+                    int g = pixelBytes[i + 1];
+                    int r = pixelBytes[i + 2];
+                    pixelBytes[i] = (byte)Math.Min(255, b + (255 - a));
+                    pixelBytes[i + 1] = (byte)Math.Min(255, g + (255 - a));
+                    pixelBytes[i + 2] = (byte)Math.Min(255, r + (255 - a));
+                    pixelBytes[i + 3] = 255;
+                }
             }
+
+            var gdiBitmap = new Bitmap(pxW, pxH, System.Drawing.Imaging.PixelFormat.Format32bppRgb);
+            var bmpData = gdiBitmap.LockBits(
+                new Rectangle(0, 0, pxW, pxH),
+                System.Drawing.Imaging.ImageLockMode.WriteOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppRgb
+            );
+            try
+            {
+                Marshal.Copy(pixelBytes, 0, bmpData.Scan0, pixelBytes.Length);
+            }
+            finally
+            {
+                gdiBitmap.UnlockBits(bmpData);
+            }
+
+            int effectiveRotation = LabelRotationAngle;
+            if (CurrentTemplate != null && CurrentTemplate.Rotation != 0)
+            {
+                effectiveRotation = CurrentTemplate.Rotation;
+            }
+
+            switch (effectiveRotation)
+            {
+                case 90:
+                    gdiBitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
+                    break;
+                case 180:
+                    gdiBitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
+                    break;
+                case 270:
+                    gdiBitmap.RotateFlip(RotateFlipType.Rotate270FlipNone);
+                    break;
+            }
+            return gdiBitmap;
         }
 
-        private void RenderCustomElementsOnDc(DrawingContext dc, double dotsPerMm)
+        private void RenderSingleElementOnDc(DrawingContext dc, TemplateElement elem, double dotsPerMm, string[] colValues = null)
         {
-            if (CurrentTemplate == null || CurrentTemplate.Elements == null) return;
+            if (elem == null || dc == null) return;
 
-            foreach (var elem in CurrentTemplate.Elements)
+            double leftPx = elem.X * dotsPerMm;
+            double topPx = elem.Y * dotsPerMm;
+            double widthPx = elem.Width * dotsPerMm;
+            double heightPx = elem.Height * dotsPerMm;
+
+            bool pushedRotate = false;
+            if (elem.Rotation != 0)
             {
-                if (elem.IsVariable && elem.InputOrder <= 8 && elem.InputOrder <= ActiveColumnCount) continue;
-                if (elem.Id == "TITLE_ELEMENT" || elem.Id == "DATETIME_ELEMENT") continue;
+                double centerX;
+                double centerY;
 
-                double leftPx = elem.X * dotsPerMm;
-                double topPx = elem.Y * dotsPerMm;
-                double widthPx = elem.Width * dotsPerMm;
-                double heightPx = elem.Height * dotsPerMm;
+                if (elem.Type == ElementType.LINE)
+                {
+                    // LINE은 시작점(0, 0.5) 기준 회전
+                    centerX = leftPx;
+                    centerY = topPx + (heightPx / 2.0);
+                }
+                else
+                {
+                    // 그 외 모든 요소(TEXT, DATE_TIME, BARCODE, QR_CODE, SHAPE, IMAGE, TABLE)는 요소 중앙(0.5, 0.5) 기준 회전
+                    double effW = widthPx;
+                    double effH = heightPx;
 
+                    if (effW <= 0)
+                    {
+                        if (elem.Type == ElementType.BARCODE) effW = 45.0 * dotsPerMm;
+                        else if (elem.Type == ElementType.QR_CODE) effW = 18.0 * dotsPerMm;
+                        else effW = 30.0 * dotsPerMm;
+                    }
+
+                    if (effH <= 0)
+                    {
+                        if (elem.Type == ElementType.BARCODE || elem.Type == ElementType.QR_CODE) effH = 15.0 * dotsPerMm;
+                        else if (elem.Type == ElementType.TEXT || elem.Type == ElementType.DATE_TIME) effH = Math.Max(4.0, (elem.FontSize > 0 ? elem.FontSize : 10.0) * 1.35) * dotsPerMm;
+                        else effH = 10.0 * dotsPerMm;
+                    }
+
+                    centerX = leftPx + (effW / 2.0);
+                    centerY = topPx + (effH / 2.0);
+                }
+
+                dc.PushTransform(new RotateTransform(elem.Rotation, centerX, centerY));
+                pushedRotate = true;
+            }
+
+            try
+            {
                 switch (elem.Type)
                 {
                     case ElementType.LINE:
@@ -1082,18 +1460,46 @@ namespace BarcodePrint.ViewModel
                     case ElementType.BARCODE:
                     case ElementType.QR_CODE:
                         string barcodeContent = GetElementEffectiveContent(elem);
+                        if (elem.IsVariable && elem.InputOrder >= 1 && elem.InputOrder <= 8 && colValues != null && elem.InputOrder - 1 < colValues.Length)
+                        {
+                            string val = colValues[elem.InputOrder - 1];
+                            if (!string.IsNullOrEmpty(val)) barcodeContent = val;
+                        }
                         if (!string.IsNullOrWhiteSpace(barcodeContent))
                         {
-                            BarcodeVisualHelper.RenderBarcodeOnDc(dc, barcodeContent, elem.BarcodeType, (int)Math.Round(elem.FontSize), (int)Math.Round(elem.X), (int)Math.Round(elem.Y), dotsPerMm, elem.ShowBarcodeText, elem.BarcodeTextPosition, elem.Width, elem.Height);
+                            BarcodeVisualHelper.RenderBarcodeOnDc(dc, barcodeContent, elem.BarcodeType, elem.FontSize, elem.X, elem.Y, dotsPerMm, elem.ShowBarcodeText, elem.BarcodeTextPosition, elem.Width, elem.Height);
                         }
                         break;
 
                     case ElementType.TEXT:
                     case ElementType.DATE_TIME:
                         string textContent = GetElementEffectiveContent(elem);
+                        if (elem.IsVariable && elem.InputOrder >= 1 && elem.InputOrder <= 8 && colValues != null && elem.InputOrder - 1 < colValues.Length)
+                        {
+                            string val = colValues[elem.InputOrder - 1];
+                            if (elem.IsPriceFormat && !string.IsNullOrWhiteSpace(val))
+                            {
+                                val = PriceFormatHelper.FormatPrice(val, true);
+                            }
+                            if (elem.IncludeHeaderOnLabel && !string.IsNullOrWhiteSpace(elem.HeaderName))
+                            {
+                                val = $"{elem.HeaderName}: {val}";
+                            }
+                            if (!string.IsNullOrEmpty(val)) textContent = val;
+                        }
+                        else if (elem.Type == ElementType.DATE_TIME && IsDateTimeEnabled)
+                        {
+                            textContent = GetFormattedDateTimeString();
+                        }
+
                         if (!string.IsNullOrWhiteSpace(textContent))
                         {
-                            DrawTextOnDc(dc, textContent, elem.FontSize, elem.X, elem.Y, dotsPerMm, System.Windows.Media.Brushes.Black, elem.FontName, elem.IsBold, elem.IsItalic, elem.Width, elem.Alignment, 0, 0, elem.IsUnderline, elem.FontScaleX, elem.LineSpacing, elem.LetterSpacing);
+                            double effWidth = elem.Width;
+                            if (effWidth <= 0 && (elem.Alignment == "CENTER" || elem.Alignment == "RIGHT"))
+                            {
+                                effWidth = CalculateExactTextWidthMm(textContent, elem.FontName, (int)Math.Round(elem.FontSize > 0 ? elem.FontSize : 10.0), elem.IsBold, elem.IsItalic);
+                            }
+                            DrawTextOnDc(dc, textContent, elem.FontSize, elem.X, elem.Y, dotsPerMm, System.Windows.Media.Brushes.Black, elem.FontName, elem.IsBold, elem.IsItalic, effWidth, elem.Alignment, elem.Height, 0, elem.IsUnderline, elem.FontScaleX, elem.LineSpacing, elem.LetterSpacing, elem.IsVertical, elem.IsMirrored, elem.IsInverse);
                         }
                         break;
 
@@ -1116,6 +1522,25 @@ namespace BarcodePrint.ViewModel
                         }
                         break;
                 }
+            }
+            finally
+            {
+                if (pushedRotate)
+                {
+                    dc.Pop();
+                }
+            }
+        }
+
+        private void RenderCustomElementsOnDc(DrawingContext dc, double dotsPerMm)
+        {
+            if (CurrentTemplate == null || CurrentTemplate.Elements == null) return;
+
+            foreach (var elem in CurrentTemplate.Elements)
+            {
+                if (elem.IsVariable && elem.InputOrder <= 8 && elem.InputOrder <= ActiveColumnCount) continue;
+                if (elem.Id == "TITLE_ELEMENT" || elem.Id == "DATETIME_ELEMENT") continue;
+                RenderSingleElementOnDc(dc, elem, dotsPerMm);
             }
         }
 
@@ -1172,91 +1597,74 @@ namespace BarcodePrint.ViewModel
                 rowY[r + 1] = (r == rows - 1) ? y + h : currentY;
             }
 
-            bool pushedRotate = false;
-            if (elem.Rotation != 0)
+            // 3. 헤더 행 음영 (IsFilled 시)
+            if (elem.IsFilled && rows > 0)
             {
-                dc.PushTransform(new RotateTransform(elem.Rotation, x + w / 2.0, y + h / 2.0));
-                pushedRotate = true;
+                var headerRect = new Rect(x, y, w, Math.Max(1.0, rowY[1] - rowY[0]));
+                dc.DrawRectangle(new SolidColorBrush(System.Windows.Media.Color.FromRgb(226, 232, 240)), null, headerRect);
             }
 
-            try
+            // 4. 표 외곽선 및 격자선 그리기
+            double strokePx = Math.Max(1.0, elem.LineWidth * (dotsPerMm / (96.0 / 25.4)));
+            var gridPen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, strokePx);
+
+            // 외곽 테두리
+            dc.DrawRectangle(null, gridPen, new Rect(x, y, w, h));
+
+            // 내부 세로 격자선
+            for (int c = 1; c < cols; c++)
             {
-                // 3. 헤더 행 음영 (IsFilled 시)
-                if (elem.IsFilled && rows > 0)
-                {
-                    var headerRect = new Rect(x, y, w, Math.Max(1.0, rowY[1] - rowY[0]));
-                    dc.DrawRectangle(new SolidColorBrush(System.Windows.Media.Color.FromRgb(226, 232, 240)), null, headerRect);
-                }
-
-                // 4. 표 외곽선 및 격자선 그리기
-                double strokePx = Math.Max(1.0, elem.LineWidth * (dotsPerMm / (96.0 / 25.4)));
-                var gridPen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, strokePx);
-
-                // 외곽 테두리
-                dc.DrawRectangle(null, gridPen, new Rect(x, y, w, h));
-
-                // 내부 세로 격자선
-                for (int c = 1; c < cols; c++)
-                {
-                    dc.DrawLine(gridPen, new System.Windows.Point(colX[c], y), new System.Windows.Point(colX[c], y + h));
-                }
-
-                // 내부 가로 격자선
-                for (int r = 1; r < rows; r++)
-                {
-                    dc.DrawLine(gridPen, new System.Windows.Point(x, rowY[r]), new System.Windows.Point(x + w, rowY[r]));
-                }
-
-                // 5. 셀 텍스트 렌더링
-                for (int r = 0; r < rows; r++)
-                {
-                    bool isHeader = (r == 0);
-                    for (int c = 0; c < cols; c++)
-                    {
-                        string cellText = GetTableCellEffectiveContent(elem, r, c, record);
-                        if (string.IsNullOrEmpty(cellText)) continue;
-
-                        double cellLeftMm = (colX[c]) / dotsPerMm;
-                        double cellTopMm = (rowY[r]) / dotsPerMm;
-                        double cellWidthMm = (colX[c + 1] - colX[c]) / dotsPerMm;
-                        double cellHeightMm = (rowY[r + 1] - rowY[r]) / dotsPerMm;
-
-                        var (cFontName, cFontSize, cBold, cAlign) = elem.GetCellResolvedStyle(r, c);
-                        string effectiveFontName = string.IsNullOrWhiteSpace(cFontName) ? (string.IsNullOrWhiteSpace(elem.FontName) ? "맑은 고딕" : elem.FontName) : cFontName;
-
-                        DrawTextOnDc(
-                            dc,
-                            cellText,
-                            cFontSize > 0 ? cFontSize : 9.0,
-                            cellLeftMm,
-                            cellTopMm,
-                            dotsPerMm,
-                            System.Windows.Media.Brushes.Black,
-                            effectiveFontName,
-                            cBold,
-                            elem.IsItalic,
-                            cellWidthMm,
-                            cAlign ?? "CENTER",
-                            cellHeightMm,
-                            Math.Max(0.5, elem.CellPadding),
-                            elem.IsUnderline,
-                            elem.FontScaleX,
-                            elem.LineSpacing,
-                            elem.LetterSpacing
-                        );
-                    }
-                }
+                dc.DrawLine(gridPen, new System.Windows.Point(colX[c], y), new System.Windows.Point(colX[c], y + h));
             }
-            finally
+
+            // 내부 가로 격자선
+            for (int r = 1; r < rows; r++)
             {
-                if (pushedRotate)
+                dc.DrawLine(gridPen, new System.Windows.Point(x, rowY[r]), new System.Windows.Point(x + w, rowY[r]));
+            }
+
+            // 5. 셀 텍스트 렌더링
+            for (int r = 0; r < rows; r++)
+            {
+                bool isHeader = (r == 0);
+                for (int c = 0; c < cols; c++)
                 {
-                    dc.Pop();
+                    string cellText = GetTableCellEffectiveContent(elem, r, c, record);
+                    if (string.IsNullOrEmpty(cellText)) continue;
+
+                    double cellLeftMm = (colX[c]) / dotsPerMm;
+                    double cellTopMm = (rowY[r]) / dotsPerMm;
+                    double cellWidthMm = (colX[c + 1] - colX[c]) / dotsPerMm;
+                    double cellHeightMm = (rowY[r + 1] - rowY[r]) / dotsPerMm;
+
+                    var (cFontName, cFontSize, cBold, cAlign) = elem.GetCellResolvedStyle(r, c);
+                    string effectiveFontName = string.IsNullOrWhiteSpace(cFontName) ? (string.IsNullOrWhiteSpace(elem.FontName) ? "맑은 고딕" : elem.FontName) : cFontName;
+
+                    DrawTextOnDc(
+                        dc,
+                        cellText,
+                        cFontSize > 0 ? cFontSize : 9.0,
+                        cellLeftMm,
+                        cellTopMm,
+                        dotsPerMm,
+                        System.Windows.Media.Brushes.Black,
+                        effectiveFontName,
+                        cBold,
+                        elem.IsItalic,
+                        cellWidthMm,
+                        cAlign ?? "CENTER",
+                        cellHeightMm,
+                        Math.Max(0.5, elem.CellPadding),
+                        elem.IsUnderline,
+                        elem.FontScaleX,
+                        elem.LineSpacing,
+                        elem.LetterSpacing
+                    );
                 }
             }
         }
 
-        private bool SendToTsplPrinter(string col1, string col2, string col3, string col4, string col5, string col6, string col7, string col8, int copies = 1)
+        public bool SendToTsplPrinter(string col1, string col2, string col3, string col4, string col5, string col6, string col7, string col8, int copies = 1)
         {
             try
             {
@@ -1271,8 +1679,8 @@ namespace BarcodePrint.ViewModel
                 using (var labelBmp = GenerateLabelBitmapForPrint(col1, col2, col3, col4, col5, col6, col7, col8))
                 {
                     // 물리 롤 용지 규격 (SIZE 명령어)은 장착된 롤 크기(PaperWidth, PaperHeight) 그대로 유지
-                    PRINT_INFO_CLASS.PrinterInfo.Paper_Width = PaperWidth;
-                    PRINT_INFO_CLASS.PrinterInfo.Paper_Height = PaperHeight;
+                    PRINT_INFO_CLASS.PrinterInfo.Paper_Width = PaperWidth > 0 ? PaperWidth : 80;
+                    PRINT_INFO_CLASS.PrinterInfo.Paper_Height = PaperHeight > 0 ? PaperHeight : 60;
                     PRINT_INFO_CLASS.PrinterInfo.nPrintSpeed = PrintSpeed;
                     PRINT_INFO_CLASS.PrinterInfo.nDarkness = PrintDarkness;
                     PRINT_INFO_CLASS.PrinterInfo.nGAP = GapHeight;

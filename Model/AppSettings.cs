@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Argon;
 
 namespace BarcodePrint.Model
@@ -79,6 +80,15 @@ namespace BarcodePrint.Model
 
         // 시작화면 하단 배너 HTML 외부 링크 URL (비어있으면 Info/quick_tools.html 사용)
         public string QuickToolsBannerUrl { get; set; } = "";
+
+        // 공식 홈페이지 URL (기본: https://xprinter.co.kr)
+        public string OfficialWebsiteUrl { get; set; } = "https://xprinter.co.kr";
+
+        // 정품 소모품 몰 / 배너 링크 URL (기본: 공식 스마트스토어 소모품 카테고리)
+        public string SuppliesStoreUrl { get; set; } = "https://smartstore.naver.com/xprinter/category/61ccd82fe17043f59401bbfb6802fcc9?cp=1";
+
+        // 사이드바 HTML 배너 URL (비어있으면 Info/sidebar_banner.html 사용)
+        public string SidebarBannerUrl { get; set; } = "";
 
         // 주소 라벨 설정
 
@@ -169,6 +179,7 @@ namespace BarcodePrint.Model
         }
 
         // 용지 및 바코드 기본 설정 (SelectedPaperType 대신 사용)
+        public const int MAX_PAPER_HEIGHT = 1778; // TSPL 표준 최대 인쇄 길이 (70인치 = 1778.0 mm)
         public int PaperWidth { get; set; } = 80;
         public int PaperHeight { get; set; } = 60;
         public string BarcodeType { get; set; } = "QR_CODE";
@@ -386,7 +397,7 @@ namespace BarcodePrint.Model
 
         // 프린터 하드웨어 설정 (기존 프로젝트 이식)
         public int PrintDarkness { get; set; } = 8; // 인쇄 농도 (1~15)
-        public int PrintSpeed { get; set; } = 4; // 인쇄 속도 (2~6 inch/sec)
+        public int PrintSpeed { get; set; } = 4; // 인쇄 속도 (2~8 inch/sec)
         public string PaperType { get; set; } = "GAP"; // GAP, BLINE, CONTINUOUS
         public int GapHeight { get; set; } = 2; // 라벨 간격 (mm)
         public double BlineOffset { get; set; } = 0.0; // 블랙마크 이탈량 / 표시 오프셋 (mm)
@@ -410,15 +421,15 @@ namespace BarcodePrint.Model
         public int PrintRangeStart { get; set; } = 1;
         public int PrintRangeEnd { get; set; } = 1;
 
-        // 각 컬럼별 입력 삭제 방지 (값 고정/유지) 옵션
-        public bool IsCol1Keep { get; set; } = false;
-        public bool IsCol2Keep { get; set; } = false;
-        public bool IsCol3Keep { get; set; } = false;
-        public bool IsCol4Keep { get; set; } = false;
-        public bool IsCol5Keep { get; set; } = false;
-        public bool IsCol6Keep { get; set; } = false;
-        public bool IsCol7Keep { get; set; } = false;
-        public bool IsCol8Keep { get; set; } = false;
+        // 각 컬럼별 입력 삭제 방지 (값 고정/유지) 옵션 (기본값: true - 인쇄 후에도 기존값 보존)
+        public bool IsCol1Keep { get; set; } = true;
+        public bool IsCol2Keep { get; set; } = true;
+        public bool IsCol3Keep { get; set; } = true;
+        public bool IsCol4Keep { get; set; } = true;
+        public bool IsCol5Keep { get; set; } = true;
+        public bool IsCol6Keep { get; set; } = true;
+        public bool IsCol7Keep { get; set; } = true;
+        public bool IsCol8Keep { get; set; } = true;
 
         // 마지막 컬럼 Enter 키 입력 시 동작 모드 ("PRINT_AND_RECORD" 또는 "RECORD_ONLY")
         public string EnterActionType { get; set; } = "PRINT_AND_RECORD";
@@ -490,21 +501,73 @@ namespace BarcodePrint.Model
         public string SerialAlign { get; set; } = "LEFT"; // LEFT, CENTER, RIGHT
         public int DateTimeFormatIndex { get; set; } = 0; // 0: YYYY-MM-DD, 1: YYYY.MM.DD HH:mm, 2: YYYY-MM-DD HH:mm:ss, 3: HH:mm:ss, 4: YYYY년 MM월 DD일, 5: YY/MM/DD
 
+        private static readonly object _saveLock = new object();
+        private static System.Threading.Timer _debounceSaveTimer;
+        private static AppSettings _pendingSaveInstance;
+
+        static AppSettings()
+        {
+            AppDomain.CurrentDomain.ProcessExit += (s, e) =>
+            {
+                try
+                {
+                    _debounceSaveTimer?.Dispose();
+                    _pendingSaveInstance?.SaveImmediate();
+                }
+                catch { }
+            };
+        }
+
         /// <summary>
-        /// 설정을 파일에 저장
+        /// 설정을 파일에 저장 (UI 스레드 블로킹 및 디스크 I/O 폭주 방지를 위한 디바운스 비동기 저장)
         /// </summary>
         public void Save()
         {
             try
             {
-                string directory = Path.GetDirectoryName(SettingsFilePath);
-                if (!Directory.Exists(directory))
+                _default = this;
+                _pendingSaveInstance = this;
+                lock (_saveLock)
                 {
-                    Directory.CreateDirectory(directory);
+                    if (_debounceSaveTimer == null)
+                    {
+                        _debounceSaveTimer = new System.Threading.Timer(_ =>
+                        {
+                            var inst = System.Threading.Interlocked.Exchange(ref _pendingSaveInstance, null);
+                            inst?.SaveImmediate();
+                        }, null, 350, System.Threading.Timeout.Infinite);
+                    }
+                    else
+                    {
+                        _debounceSaveTimer.Change(350, System.Threading.Timeout.Infinite);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"통합 설정 저장 예약 오류: {ex.Message}");
+            }
+        }
 
-                string json = JsonConvert.SerializeObject(this, Formatting.Indented);
-                File.WriteAllText(SettingsFilePath, json, System.Text.Encoding.UTF8);
+        /// <summary>
+        /// 설정을 파일에 즉시 동기 저장
+        /// </summary>
+        public void SaveImmediate()
+        {
+            try
+            {
+                lock (_saveLock)
+                {
+                    _pendingSaveInstance = null;
+                    string directory = Path.GetDirectoryName(SettingsFilePath);
+                    if (!Directory.Exists(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                    }
+
+                    string json = JsonConvert.SerializeObject(this, Formatting.Indented);
+                    File.WriteAllText(SettingsFilePath, json, System.Text.Encoding.UTF8);
+                }
 
                 System.Diagnostics.Debug.WriteLine($"통합 설정 저장 완료 (JSON): {SettingsFilePath}");
             }
@@ -537,6 +600,18 @@ namespace BarcodePrint.Model
                     }
                 }
 
+                var fileInfo = new FileInfo(targetPath);
+                bool wasBloated = fileInfo.Length > 25 * 1024;
+
+                // 과거 PopulateObject 리스트 중복 누적 버그로 인해 파일이 비정상적으로 비대해진 경우(> 512KB) 즉시 복구하여 로딩 지연 원천 차단
+                if (fileInfo.Length > 512 * 1024)
+                {
+                    this.FavoritePresets = GetDefaultPresets();
+                    this.PdfPaperPresets = GetDefaultPdfPaperPresets();
+                    SaveImmediate();
+                    return;
+                }
+
                 string content = File.ReadAllText(targetPath, System.Text.Encoding.UTF8);
 
                 // JSON 형식인지 체크 (구버전 텍스트 호환성)
@@ -544,7 +619,16 @@ namespace BarcodePrint.Model
                 {
                     try
                     {
-                        JsonConvert.PopulateObject(content, this);
+                        this.FavoritePresets = new List<PresetLabelItem>();
+                        this.PdfPaperPresets = new List<PdfPaperPresetItem>();
+                        this.RecentWorks = new List<RecentWorkItem>();
+                        this.LastExcelColumnMappingNames = new List<string>();
+                        this.LastExcelColumnIndices = new List<int>();
+
+                        JsonConvert.PopulateObject(content, this, new JsonSerializerSettings
+                        {
+                            ObjectCreationHandling = ObjectCreationHandling.Replace
+                        });
                     }
                     catch
                     {
@@ -851,10 +935,26 @@ namespace BarcodePrint.Model
                 {
                     this.FavoritePresets = GetDefaultPresets();
                 }
+                else if (this.FavoritePresets.Count > 6)
+                {
+                    this.FavoritePresets = this.FavoritePresets
+                        .GroupBy(p => $"{p.Title}_{p.WidthMm}_{p.HeightMm}")
+                        .Select(g => g.First())
+                        .Take(20)
+                        .ToList();
+                }
 
                 if (this.PdfPaperPresets == null || this.PdfPaperPresets.Count == 0)
                 {
                     this.PdfPaperPresets = GetDefaultPdfPaperPresets();
+                }
+                else if (this.PdfPaperPresets.Count > 6)
+                {
+                    this.PdfPaperPresets = this.PdfPaperPresets
+                        .GroupBy(p => $"{p.Name}_{p.Width}_{p.Height}")
+                        .Select(g => g.First())
+                        .Take(20)
+                        .ToList();
                 }
 
                 // 구버전 기본 규격(70x28) 또는 유효하지 않은 크기는 80x60 표준으로 자동 승격
@@ -862,6 +962,11 @@ namespace BarcodePrint.Model
                 {
                     this.PaperWidth = 80;
                     this.PaperHeight = 60;
+                }
+
+                if (wasBloated)
+                {
+                    SaveImmediate();
                 }
 
                 System.Diagnostics.Debug.WriteLine($"통합 설정 로드 완료: ExcelMode={IsExcelModeEnabled}, SenderReceiverLabel={SenderReceiverLabel}");

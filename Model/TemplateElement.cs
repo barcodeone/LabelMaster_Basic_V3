@@ -30,6 +30,9 @@ namespace BarcodePrint.Model
         public double LetterSpacing { get; set; } = 0.0; // 자간 (em 단위, 예: 0.0, 0.05, 0.1, -0.05)
         public double FontScaleX { get; set; } = 1.0;    // 장평 (가로 비율, 1.0 = 100%, 0.8 = 80%, 1.2 = 120%)
         public double LineSpacing { get; set; } = 1.0;   // 줄간격 (배수, 1.0 = 100%, 1.2 = 120%, 1.5 = 150%)
+        public bool IsVertical { get; set; } = false;   // 세로쓰기 여부 (위에서 아래로 한글자씩 배치)
+        public bool IsMirrored { get; set; } = false;   // 좌우 반전 (미러) 여부
+        public bool IsInverse { get; set; } = false;    // 음영 반전 (흑백 반전) 여부
 
         // 바코드 속성
         public string BarcodeType { get; set; } = "CODE128"; // CODE128, QR_CODE, EAN13, CODE39 등
@@ -40,7 +43,7 @@ namespace BarcodePrint.Model
         public bool IsVariable { get; set; } = true;    // 우측 직접 입력 패널에 표시할 가변 항목인지 여부
         public int InputOrder { get; set; } = 1;        // 우측 입력창 탭 순서 (1열, 2열, ...)
         public string HeaderName { get; set; } = "항목"; // 입력창 상단에 표시될 라벨명
-        public bool IsKeep { get; set; } = false;       // 인쇄 후 내용 유지 여부
+        public bool IsKeep { get; set; } = true;        // 인쇄 후 내용 유지 여부 (기본: 유지)
         public bool IncludeHeaderOnLabel { get; set; } = false; // "항목: 내용" 형태로 라벨에 함께 출력 여부
         public bool IsPriceFormat { get; set; } = false; // 금액 콤마 서식(₩) 적용 여부
 

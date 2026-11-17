@@ -8,8 +8,38 @@ namespace BarcodePrint.ViewModel
 {
     public partial class MainViewModel
     {
+        private int _suppressPreviewCount = 0;
+        public bool IsPreviewSuppressed => _suppressPreviewCount > 0;
+
+        public IDisposable SuppressPreviewUpdate()
+        {
+            return new PreviewUpdateSuppressor(this);
+        }
+
+        private class PreviewUpdateSuppressor : IDisposable
+        {
+            private MainViewModel _vm;
+            public PreviewUpdateSuppressor(MainViewModel vm)
+            {
+                _vm = vm;
+                System.Threading.Interlocked.Increment(ref _vm._suppressPreviewCount);
+            }
+            public void Dispose()
+            {
+                if (_vm != null)
+                {
+                    if (System.Threading.Interlocked.Decrement(ref _vm._suppressPreviewCount) == 0)
+                    {
+                        _vm.UpdatePreview();
+                    }
+                    _vm = null;
+                }
+            }
+        }
+
         public void UpdatePreview()
         {
+            if (_suppressPreviewCount > 0 || _isInitializing) return;
             try
             {
                 RequestPreviewRedraw?.Invoke();
@@ -226,6 +256,19 @@ namespace BarcodePrint.ViewModel
 
         private void ExecuteResetLayout()
         {
+            if (HasSelectedElement && SelectedElement != null)
+            {
+                SelectedElement.X = 2;
+                SelectedElement.Y = 2;
+                SelectedElement.Rotation = 0;
+                OnPropertyChanged(nameof(SelectedElementX));
+                OnPropertyChanged(nameof(SelectedElementY));
+                OnPropertyChanged(nameof(SelectedElementRotation));
+                StatusMessage = $"선택한 '{SelectedElement.HeaderName ?? "요소"}'의 위치(X: 2mm, Y: 2mm) 및 회전각도(0°)가 초기화되었습니다.";
+                UpdatePreview();
+                return;
+            }
+
             IsTableBorderEnabled = false;
             IsTableTitleEnabled = false;
             Col1OffsetX = 2; Col1OffsetY = 2;

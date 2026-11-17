@@ -6,25 +6,25 @@ namespace BarcodePrint.Model
 {
     public static class PrinterHelper
     {
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-        public class DOCINFOA
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public class DOCINFOW
         {
-            [MarshalAs(UnmanagedType.LPStr)]
+            [MarshalAs(UnmanagedType.LPWStr)]
             public string pDocName;
-            [MarshalAs(UnmanagedType.LPStr)]
+            [MarshalAs(UnmanagedType.LPWStr)]
             public string pOutputFile;
-            [MarshalAs(UnmanagedType.LPStr)]
+            [MarshalAs(UnmanagedType.LPWStr)]
             public string pDatatype;
         }
 
-        [DllImport("winspool.drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-        public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
+        [DllImport("winspool.drv", EntryPoint = "OpenPrinterW", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+        public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPWStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
 
         [DllImport("winspool.drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
         public static extern bool ClosePrinter(IntPtr hPrinter);
 
-        [DllImport("winspool.drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
-        public static extern int StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+        [DllImport("winspool.drv", EntryPoint = "StartDocPrinterW", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+        public static extern int StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOW di);
 
         [DllImport("winspool.drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
         public static extern bool EndDocPrinter(IntPtr hPrinter);
@@ -50,7 +50,7 @@ namespace BarcodePrint.Model
 
             bool success = false;
             IntPtr hPrinter = IntPtr.Zero;
-            var di = new DOCINFOA
+            var di = new DOCINFOW
             {
                 pDocName = "LabelMaster TSPL Job",
                 pDatatype = "RAW"

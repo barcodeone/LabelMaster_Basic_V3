@@ -12,95 +12,125 @@ namespace BarcodePrint.Model
 {
     internal class PrintManager
     {
-        // 비트맵을 1bppIndexed로 변환
+        /// <summary>
+        /// Bitmap 이미지를 TSPL 1-Bit 흑백 라스터 바이너리 데이터로 직접 변환 (안드로이드/Mac 표준 엔진과 100% 동일)
+        /// TSPL BITMAP 형식: 0 = 검은색(인쇄 도트), 1 = 흰색(공백 도트)
+        /// 알파 채널(투명도)을 정확하게 처리하여 특정 PC에서 투명 픽셀이 검정/흰색으로 꼬이는 버그를 원천 차단
+        /// </summary>
+        public static byte[] ConvertBitmapToTsplRaster(Bitmap bitmap, out int widthBytes, out int heightDots)
+        {
+            if (bitmap == null)
+            {
+                widthBytes = 0;
+                heightDots = 0;
+                return new byte[0];
+            }
+
+            int originalWidth = bitmap.Width;
+            int height = bitmap.Height;
+            widthBytes = (originalWidth + 7) / 8; // 8픽셀당 1바이트
+            heightDots = height;
+
+            byte[] rasterData = new byte[widthBytes * height];
+            // 기본 전체를 0xFF (1 = 흰색/미인쇄)로 초기화하여 우측 여백 패딩을 깨끗한 공백으로 보장
+            for (int i = 0; i < rasterData.Length; i++)
+            {
+                rasterData[i] = 0xFF;
+            }
+
+            // 32bpp ARGB로 잠그면 GDI+가 내부 포맷(24bpp, 32bpp 등)에 상관없이 32비트 BGRA로 일관되게 제공
+            BitmapData srcData = bitmap.LockBits(
+                new Rectangle(0, 0, originalWidth, height),
+                ImageLockMode.ReadOnly,
+                PixelFormat.Format32bppArgb
+            );
+
+            try
+            {
+                int stride = srcData.Stride;
+                IntPtr ptr = srcData.Scan0;
+
+                unsafe
+                {
+                    byte* p = (byte*)ptr;
+
+                    for (int y = 0; y < height; y++)
+                    {
+                        byte* row = p + (y * stride);
+                        for (int x = 0; x < originalWidth; x++)
+                        {
+                            int pixelOffset = x * 4;
+                            byte b = row[pixelOffset];
+                            byte g = row[pixelOffset + 1];
+                            byte r = row[pixelOffset + 2];
+                            byte a = row[pixelOffset + 3];
+
+                            // 투명 픽셀(Alpha < 128)은 라벨 용지 배경(흰색)이므로 무조건 도트 오프(흰색 유지)
+                            if (a < 128)
+                            {
+                                continue;
+                            }
+
+                            // 표준 ITU-R BT.601 흑백 휘도 계산
+                            int luminance = (int)(r * 0.299 + g * 0.587 + b * 0.114);
+
+                            // 휘도 128 미만이면 검은색 도트 (TSPL: 0=검정, 1=흰색)
+                            if (luminance < 128)
+                            {
+                                int byteIndex = y * widthBytes + (x / 8);
+                                int bitIndex = 7 - (x % 8); // MSB First
+                                rasterData[byteIndex] &= (byte)~(1 << bitIndex);
+                            }
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                bitmap.UnlockBits(srcData);
+            }
+
+            return rasterData;
+        }
+
+        // 비트맵을 1bppIndexed로 변환 (기존 레거시 호출 호환성 유지)
         public static Bitmap ConvertTo1Bpp(Bitmap bitmap)
         {
             int originalWidth = bitmap.Width;
             int width = (bitmap.Width + 7) / 8 * 8; // 너비를 8의 배수로 조정
             int height = bitmap.Height;
 
-            // 디버깅: 너비 조정 정보 출력
-
-            if (originalWidth != width)
-            {
-                Console.WriteLine($"ConvertTo1Bpp: 원본 너비 {originalWidth} -> 조정된 너비 {width} (추가된 픽셀: {width - originalWidth})");
-            }
-
             Bitmap result = new Bitmap(width, height, PixelFormat.Format1bppIndexed);
 
-            // 원본 비트맵 데이터를 잠금
-            BitmapData sourceData = bitmap.LockBits(
-                new Rectangle(0, 0, originalWidth, height),
-                ImageLockMode.ReadOnly,
-                PixelFormat.Format24bppRgb // 24비트 RGB로 가정
-            );
+            byte[] rasterData = ConvertBitmapToTsplRaster(bitmap, out int widthBytes, out int heightDots);
 
-            // 결과 비트맵 데이터를 잠금
             BitmapData resultData = result.LockBits(
                 new Rectangle(0, 0, width, height),
                 ImageLockMode.WriteOnly,
                 PixelFormat.Format1bppIndexed
             );
 
-            int sourceStride = sourceData.Stride;
-            int resultStride = resultData.Stride;
-
-            byte[] resultPixels = new byte[resultStride * height];
-
-            // 초기화: 전체 영역을 흰색(0)으로 설정
-            for (int i = 0; i < resultPixels.Length; i++)
+            try
             {
-                resultPixels[i] = 0x00; // 흰색으로 초기화 (1bpp에서 0이 흰색)
-            }
+                int resultStride = resultData.Stride;
+                byte[] resultPixels = new byte[resultStride * height];
 
-            IntPtr sourcePtr = sourceData.Scan0;
-            unsafe
-            {
-                byte* source = (byte*)sourcePtr;
-
+                // 1bppIndexed 기본 팔레트에서 1=검정, 0=흰색이므로 rasterData(0=검정, 1=흰색)를 비트 반전하여 복사
                 for (int y = 0; y < height; y++)
                 {
-                    for (int x = 0; x < originalWidth; x++)
+                    for (int bx = 0; bx < widthBytes; bx++)
                     {
-                        // 원본 픽셀 RGB 데이터를 읽고 그레이스케일로 변환
-                        int index = y * sourceStride + x * 3;
-                        byte r = source[index];
-                        byte g = source[index + 1];
-                        byte b = source[index + 2];
-                        int grayscale = (r + g + b) / 3;
-
-                        // 1bpp 변환: 흰색(255)은 0, 검은색(0)은 1로 변환
-                        if (grayscale < 128) // 검은색 처리 (grayscale < 128)
-                        {
-                            resultPixels[y * resultStride + (x / 8)] |= (byte)(0x80 >> (x % 8)); // 검정 (1)
-                        }
-                        else
-                        {
-                            // 흰색 픽셀의 경우 0으로 설정
-                            resultPixels[y * resultStride + (x / 8)] &= (byte)~(0x80 >> (x % 8)); // 흰색 (0)
-                        }
-                    }
-
-                    // 추가된 영역(원본 너비를 초과하는 부분)을 명시적으로 흰색으로 설정
-
-                    if (originalWidth < width)
-                    {
-                        for (int x = originalWidth; x < width; x++)
-                        {
-                            resultPixels[y * resultStride + (x / 8)] &= (byte)~(0x80 >> (x % 8)); // 흰색 (0)
-                        }
+                        byte val = rasterData[y * widthBytes + bx];
+                        resultPixels[y * resultStride + bx] = (byte)~val;
                     }
                 }
+
+                Marshal.Copy(resultPixels, 0, resultData.Scan0, resultPixels.Length);
             }
-
-            // 결과 데이터를 결과 비트맵에 복사
-            Marshal.Copy(resultPixels, 0, resultData.Scan0, resultPixels.Length);
-
-            // 잠금 해제
-            bitmap.UnlockBits(sourceData);
-            result.UnlockBits(resultData);
-
-            // 디버깅용 콘솔 출력 제거
+            finally
+            {
+                result.UnlockBits(resultData);
+            }
 
             return result;
         }
@@ -109,16 +139,14 @@ namespace BarcodePrint.Model
         {
             List<byte> tsplCommandBytes = new List<byte>();
 
-            // 용지 크기 결정
-            string widthStr = PRINT_INFO_CLASS.PrinterInfo.Paper_Width.ToString();
-            string heightStr = PRINT_INFO_CLASS.PrinterInfo.Paper_Height.ToString();
+            // 용지 크기 결정 (0 이하 기본값 방어 및 InvariantCulture 포맷팅)
+            float paperW = (float)PRINT_INFO_CLASS.PrinterInfo.Paper_Width;
+            float paperH = (float)PRINT_INFO_CLASS.PrinterInfo.Paper_Height;
+            if (paperW <= 0) paperW = 80f;
+            if (paperH <= 0) paperH = 60f;
 
-            // BarcodePrintManager에서 이미 비트맵을 회전시켜서 보내므로 
-            // 여기서는 비트맵을 추가로 회전시키지 않음 (중복 회전 방지)
-            // 사용자 요청: 회전 기능 적용 시 이미지만 회전되고 용지 사이즈는 변경되지 않아야 함.
-
-            string SIZE = widthStr + " mm," + heightStr + " mm";
-            int SPEED = Math.Max(2, Math.Min(6, PRINT_INFO_CLASS.PrinterInfo.nPrintSpeed));
+            string SIZE = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.#} mm,{1:0.#} mm", paperW, paperH);
+            int SPEED = Math.Max(2, Math.Min(8, PRINT_INFO_CLASS.PrinterInfo.nPrintSpeed));
             int DENSITY = Math.Max(1, Math.Min(15, PRINT_INFO_CLASS.PrinterInfo.nDarkness));
             bool ribbon = PRINT_INFO_CLASS.PrinterInfo.bRibbon;
             int GAP = Math.Max(0, PRINT_INFO_CLASS.PrinterInfo.nGAP);
@@ -127,101 +155,79 @@ namespace BarcodePrint.Model
             int hiddenX = PRINT_INFO_CLASS.PrinterInfo.hidden_Offset_X;
             int hiddenY = PRINT_INFO_CLASS.PrinterInfo.hidden_Offset_Y;
 
-            // 1bpp 비트맵으로 변환 (인쇄 품질 및 명령 호환성)
-            using (Bitmap bitmap = ConvertTo1Bpp(originBitmap))
+            // TSPL 명령어 헤더 추가 (SIZE, SPEED, DENSITY, DIRECTION 설정)
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"SIZE {SIZE}\r\n"));
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"SPEED {SPEED}\r\n"));
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"DENSITY {DENSITY}\r\n"));
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"DIRECTION 1,0\r\n"));
+
+            if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.GAP)
             {
-                // TSPL 명령어 헤더 추가
-                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("CLS\r\n"));
-                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"SIZE {SIZE}\r\n"));
-                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"SPEED {SPEED}\r\n"));
-                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"DENSITY {DENSITY}\r\n"));
-                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"DIRECTION 1,0\r\n"));
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"GAP {GAP} mm, 0 mm\r\n"));
+            }
+            else if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.BLINE)
+            {
+                double blineOff = PRINT_INFO_CLASS.PrinterInfo.BlineOffset;
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"BLINE {GAP} mm, {blineOff} mm\r\n"));
+            }
+            else if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.CONTINEUS)
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"GAP 0 mm, 0 mm\r\n"));
+            }
 
-                if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.GAP)
-                {
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"GAP {GAP} mm, 0 mm\r\n"));
-                }
-                else if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.BLINE)
-                {
-                    double blineOff = PRINT_INFO_CLASS.PrinterInfo.BlineOffset;
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"BLINE {GAP} mm, {blineOff} mm\r\n"));
-                }
-                else if (PRINT_INFO_CLASS.PrinterInfo.PaperType == PAPER_TYPE.CONTINEUS)
-                {
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"GAP 0 mm, 0 mm\r\n"));
-                }
+            if (ribbon)
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON ON\r\n"));
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET ENCODER OFF\r\n"));   // 리본 인코더 에러 센서 비활성화
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBONEND OFF\r\n")); // 리본 엔드 에러 센서 비활성화
+            }
+            else
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON OFF\r\n"));
+            }
 
-                if (ribbon)
-                {
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON ON\r\n"));
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET ENCODER OFF\r\n"));   // 리본 인코더 에러 센서 비활성화
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBONEND OFF\r\n")); // 리본 엔드 에러 센서 비활성화
-                }
-                else
-                {
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON OFF\r\n"));
-                }
+            // REFERENCE (하드웨어 원점 오프셋: 1mm = 8 dots)
+            int totalOffX = (offX + hiddenX) * 8;
+            int totalOffY = (offY + hiddenY) * 8;
+            if (totalOffX != 0 || totalOffY != 0)
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"REFERENCE {totalOffX},{totalOffY}\r\n"));
+            }
+            else
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("REFERENCE 0,0\r\n"));
+            }
 
-                // REFERENCE (하드웨어 원점 오프셋: 1mm = 8 dots)
-                int totalOffX = (offX + hiddenX) * 8;
-                int totalOffY = (offY + hiddenY) * 8;
-                if (totalOffX != 0 || totalOffY != 0)
-                {
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"REFERENCE {totalOffX},{totalOffY}\r\n"));
-                }
-                else
-                {
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal("REFERENCE 0,0\r\n"));
-                }
+            // 프린터의 Shift 값 초기화
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SHIFT 0\r\n"));
 
-                // 프린터의 Shift 값 초기화
-                AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SHIFT 0\r\n"));
+            // 커터, 오프셋 등 후처리/추가 설정 명령어가 있으면 인쇄 전 버퍼에 주입
+            if (!string.IsNullOrEmpty(postPrintCommands))
+            {
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal(postPrintCommands));
+            }
 
-                // 커터, 오프셋 등 후처리/추가 설정 명령어가 있으면 인쇄 전 버퍼에 주입
-                if (!string.IsNullOrEmpty(postPrintCommands))
-                {
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal(postPrintCommands));
-                }
+            // TSPL 매뉴얼 20p 규격: SIZE 및 DIRECTION 설정 후 CLS로 버퍼를 완벽하게 재할당 및 초기화
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("CLS\r\n"));
+            // 한글 및 다국어 인쇄 지원을 위한 코드페이지 설정
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("CODEPAGE 949\r\n"));
 
-                try
-                {
-                    // 1bpp 비트맵의 실제 너비(8의 배수로 조정됨)를 사용
-                    int widthInBytes = bitmap.Width / 8; // ConvertTo1Bpp에서 이미 8의 배수로 조정됨
-                    int heightInPixels = bitmap.Height;
+            try
+            {
+                // 비트맵에서 직접 1-Bit TSPL 라스터 바이트 추출 (GDI+ 1bpp 변환 생략으로 특정 PC 렌더링/투명도 결함 원천 방지)
+                byte[] rasterData = ConvertBitmapToTsplRaster(originBitmap, out int widthInBytes, out int heightInPixels);
 
-                    // 디버깅: TSPL 명령 정보 출력
-                    Console.WriteLine($"TSPL BITMAP 명령: 너비={widthInBytes}바이트, 높이={heightInPixels}픽셀, 실제비트맵너비={bitmap.Width}픽셀, 인쇄매수={copy}");
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"BITMAP 0,0,{widthInBytes},{heightInPixels},0,"));
+                tsplCommandBytes.AddRange(rasterData);
 
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"BITMAP 0,0,{widthInBytes},{heightInPixels},0,"));
-
-                    BitmapData data = bitmap.LockBits(
-                        new Rectangle(0, 0, bitmap.Width, bitmap.Height),
-                        ImageLockMode.ReadOnly,
-                        PixelFormat.Format1bppIndexed
-                    );
-
-                    int stride = data.Stride;
-                    byte[] rawData = new byte[stride * data.Height];
-                    Marshal.Copy(data.Scan0, rawData, 0, rawData.Length);
-                    bitmap.UnlockBits(data);
-
-                    for (int y = 0; y < heightInPixels; y++)
-                    {
-                        for (int x = 0; x < widthInBytes; x++)
-                        {
-                            int index = y * stride + x;
-                            byte value = rawData[index];
-                            tsplCommandBytes.Add((byte)~value); // 비트 반전 (1, 0 바뀜 문제 해결)
-                        }
-                    }
-
-                    int safeCopy = Math.Max(1, copy);
-                    AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"\r\nPRINT {safeCopy}\r\n"));
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("Failed to convert bitmap to TSPL commands.", ex);
-                }
+                // TSPL 매뉴얼 공식 규격: PRINT m,n (m세트, 세트당 n매)
+                // 일부 프린터 모델/펌웨어에서 PRINT 1 단독 전달 시 매수 생략으로 빈 페이지만 배출(Feed)하는 결함 원천 방지
+                int safeCopy = Math.Max(1, copy);
+                AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"\r\nPRINT {safeCopy},1\r\n"));
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Failed to convert bitmap to TSPL commands.", ex);
             }
 
             return tsplCommandBytes.ToArray();
@@ -250,8 +256,7 @@ namespace BarcodePrint.Model
                 paperHeightMm = (float)PRINT_INFO_CLASS.PrinterInfo.Paper_Width;
             }
 
-            // TSPL 명령어 헤더 추가
-            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("CLS\r\n"));
+            // TSPL 명령어 헤더 추가 (SIZE, SPEED, DIRECTION 설정)
             AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"SIZE {SIZE}\r\n"));
             AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"SPEED {SPEED}\r\n"));
             AddToByteList(tsplCommandBytes, ConvertToHexadecimal($"DIRECTION 1\r\n"));
@@ -280,6 +285,9 @@ namespace BarcodePrint.Model
             {
                 AddToByteList(tsplCommandBytes, ConvertToHexadecimal("SET RIBBON OFF\r\n"));
             }
+
+            // TSPL 매뉴얼 20p 규격: SIZE 및 DIRECTION 설정 후 CLS로 버퍼 재할당 및 초기화
+            AddToByteList(tsplCommandBytes, ConvertToHexadecimal("CLS\r\n"));
 
             try
             {

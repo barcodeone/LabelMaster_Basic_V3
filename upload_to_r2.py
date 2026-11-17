@@ -129,18 +129,27 @@ def main():
 
     s3 = get_s3_client()
 
-    # 단일 압축 파일 업로드 실행
+    # 1. 버전별 압축 파일 업로드 실행 (예: LabelMaster_v1.0.6.zip)
     success = upload_zip_to_r2(s3, target_zip_path, target_zip_name)
     if not success:
         sys.exit(1)
 
+    # 2. 공식 최신 다운로드 링크용 공통 압축 파일(LabelMaster.zip) 업로드
+    latest_zip_path = os.path.join(base_dir, "bin", "LabelMaster.zip")
+    if os.path.exists(latest_zip_path):
+        print("\n[INFO] 공식 다운로드 링크용 최신 압축 파일(LabelMaster.zip) 갱신 업로드 중...")
+        upload_zip_to_r2(s3, latest_zip_path, "LabelMaster.zip")
+
     # 버킷 목록 검증
-    verify_bucket_contents(s3, verified_key=target_zip_name)
+    verify_bucket_contents(s3, verified_key="LabelMaster.zip")
 
     download_url = f"{PUBLIC_DOMAIN}/{target_zip_name}"
+    latest_url = f"{PUBLIC_DOMAIN}/LabelMaster.zip"
     print("\n==================================================")
-    print("[SUCCESS] Cloudflare R2 단일 압축 파일 업로드 완료!")
-    print(f"다운로드 주소: {download_url}")
+    print("[SUCCESS] Cloudflare R2 최신 압축 파일 업로드 완료!")
+    print(f"1. 버전별 주소: {download_url}")
+    print(f"2. 공식 최신 링크 주소: {latest_url}")
+    print(f"3. xpix.co.kr 공식 링크: https://xpix.co.kr/labelmaster/windows/download")
     print("==================================================")
 
 

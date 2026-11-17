@@ -31,6 +31,23 @@ namespace BarcodePrint.ViewModel
         public Action RequestPreviewRedraw;
         public Action ScrollToLatestRecordRequested;
 
+        public static string ConvertToVerticalText(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return input;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < input.Length; i++)
+            {
+                char c = input[i];
+                if (c == '\r') continue;
+                sb.Append(c);
+                if (c != '\n' && i < input.Length - 1 && input[i + 1] != '\n' && input[i + 1] != '\r')
+                {
+                    sb.Append('\n');
+                }
+            }
+            return sb.ToString();
+        }
+
         public int SelectedWorkMode
         {
             get => _selectedWorkMode;
@@ -75,7 +92,25 @@ namespace BarcodePrint.ViewModel
         {
             get
             {
-                return "v1.0";
+                try
+                {
+                    var asm = System.Reflection.Assembly.GetExecutingAssembly();
+                    var infoVerAttr = asm.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                                         .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute;
+                    if (infoVerAttr != null && !string.IsNullOrWhiteSpace(infoVerAttr.InformationalVersion))
+                    {
+                        string iv = infoVerAttr.InformationalVersion.Trim();
+                        return iv.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? iv : $"v{iv}";
+                    }
+
+                    var ver = asm.GetName().Version;
+                    if (ver != null)
+                    {
+                        return $"v{ver.Major}.{ver.Minor}.{ver.Build}";
+                    }
+                }
+                catch { }
+                return "v1.0.18";
             }
         }
 
@@ -134,7 +169,7 @@ namespace BarcodePrint.ViewModel
             get => _settings.ZoomRatio;
             set
             {
-                double clamped = Math.Max(0.5, Math.Min(3.0, value));
+                double clamped = Math.Max(0.15, Math.Min(3.0, value));
                 if (Math.Abs(_settings.ZoomRatio - clamped) > 0.01)
                 {
                     _settings.ZoomRatio = clamped;
@@ -299,10 +334,10 @@ namespace BarcodePrint.ViewModel
 
         public int ActiveColumnCount
         {
-            get => _settings.ActiveColumnCount > 0 ? _settings.ActiveColumnCount : 5;
+            get => _settings.ActiveColumnCount >= 0 ? _settings.ActiveColumnCount : 0;
             set
             {
-                int clamped = Math.Max(1, Math.Min(100, value));
+                int clamped = Math.Max(0, Math.Min(100, value));
                 if (_settings.ActiveColumnCount != clamped)
                 {
                     _settings.ActiveColumnCount = clamped;
@@ -392,7 +427,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableBorderPadding = Math.Max(0, Math.Min(10, value));
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -407,7 +441,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableOffsetX = Math.Max(0, value);
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -422,7 +455,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableOffsetY = Math.Max(0, value);
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -437,7 +469,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableWidth = Math.Max(0, value);
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -452,7 +483,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableHeight = Math.Max(0, value);
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -467,7 +497,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.IsTableTitleEnabled = value;
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -482,7 +511,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableTitleText = value;
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -497,7 +525,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableTitleSize = Math.Max(4, Math.Min(200, value));
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -512,7 +539,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableTitleHeight = Math.Max(3, Math.Min(30, value));
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -527,7 +553,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableTitleAlign = value;
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -542,7 +567,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableTitleOffsetX = value;
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -557,7 +581,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableTitleOffsetY = value;
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -573,7 +596,6 @@ namespace BarcodePrint.ViewModel
                     _settings.IsTableTitleUnderline = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsTableTitleLineEnabled));
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -594,7 +616,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableTitleSpacing = Math.Max(0, Math.Min(30, value));
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -610,7 +631,6 @@ namespace BarcodePrint.ViewModel
                     _settings.TableOrientation = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsTableHorizontalOrientation));
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -627,7 +647,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableHeaderWidthMm = Math.Max(5, Math.Min(100, value));
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -642,7 +661,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.TableHeaderHeightMm = Math.Max(3, Math.Min(50, value));
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -659,7 +677,6 @@ namespace BarcodePrint.ViewModel
                 {
                     _settings.IsSerialEnabled = value;
                     OnPropertyChanged();
-                    _settings.Save();
                     UpdatePreview();
                 }
             }
@@ -1012,7 +1029,7 @@ namespace BarcodePrint.ViewModel
         public int PrintSpeed
         {
             get => _settings.PrintSpeed;
-            set { _settings.PrintSpeed = Math.Max(2, Math.Min(6, value)); OnPropertyChanged(); _settings.Save(); }
+            set { _settings.PrintSpeed = Math.Max(2, Math.Min(8, value)); OnPropertyChanged(); _settings.Save(); }
         }
 
         public string PaperType
@@ -1165,7 +1182,7 @@ namespace BarcodePrint.ViewModel
             set { _settings.PrintRangeEnd = Math.Max(1, value); OnPropertyChanged(); }
         }
 
-        public List<int> SpeedOptions { get; } = new List<int> { 2, 3, 4, 5, 6 };
+        public List<int> SpeedOptions { get; } = new List<int> { 2, 3, 4, 5, 6, 7, 8 };
         public List<int> DarknessOptions { get; } = Enumerable.Range(1, 15).ToList();
 
         private string _loadedExcelFileName = "";
@@ -1275,7 +1292,8 @@ namespace BarcodePrint.ViewModel
 
                     if (int.TryParse(value, out int parsedVal) && parsedVal > 0)
                     {
-                        _settings.PaperHeight = parsedVal;
+                        int clampedH = Math.Min(AppSettings.MAX_PAPER_HEIGHT, parsedVal);
+                        _settings.PaperHeight = clampedH;
                         OnPropertyChanged(nameof(PaperHeight));
                         _settings.Save();
                         UpdatePreview();
@@ -1308,8 +1326,9 @@ namespace BarcodePrint.ViewModel
             {
                 if (_settings.PaperHeight != value && value > 0)
                 {
-                    _settings.PaperHeight = value;
-                    _paperHeightStr = value.ToString();
+                    int clampedH = Math.Min(AppSettings.MAX_PAPER_HEIGHT, value);
+                    _settings.PaperHeight = clampedH;
+                    _paperHeightStr = clampedH.ToString();
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(PaperHeightStr));
                     _settings.Save();
@@ -1338,12 +1357,13 @@ namespace BarcodePrint.ViewModel
                     OnPropertyChanged(nameof(EffectivePaperWidth));
                     OnPropertyChanged(nameof(EffectivePaperHeight));
                     _settings.Save();
+                    StatusMessage = $"라벨 용지 인쇄 방향이 {normalized}°로 변경되었습니다 (실제 인쇄 시 {normalized}° 회전 적용).";
                     UpdatePreview();
                 }
             }
         }
 
-        public string LabelRotationText => $"🔄 {LabelRotationAngle}° 회전";
+        public string LabelRotationText => $"🔄 용지 {LabelRotationAngle}° 회전";
 
         public string LabelRotationAngleStr
         {
@@ -1427,38 +1447,116 @@ namespace BarcodePrint.ViewModel
 
         #region Properties - Fonts & Styles
 
-        private static List<string> LoadSystemFonts()
-        {
-            var priorityFonts = new[] { "맑은 고딕", "굴림", "돋움", "바탕", "궁서", "Arial", "Segoe UI", "Tahoma", "Times New Roman", "Courier New", "나눔고딕", "나눔명조", "Pretendard" };
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var list = new List<string>();
+        private static readonly string[] PriorityFontNames = new[] { "맑은 고딕", "나눔고딕", "나눔명조", "Pretendard", "굴림", "돋움", "바탕", "궁서", "Arial", "Segoe UI", "Tahoma", "Times New Roman", "Calibri", "Verdana" };
+        private static volatile List<string> _cachedSystemFonts = null;
+        private static bool _isScanningFonts = false;
+        private static readonly object _fontScanLock = new object();
 
-            foreach (var p in priorityFonts)
+        private static List<string> LoadSystemFonts(Action onComplete = null)
+        {
+            if (_cachedSystemFonts != null)
             {
-                if (set.Add(p)) list.Add(p);
+                return _cachedSystemFonts;
             }
 
-            try
-            {
-                var installed = System.Windows.Media.Fonts.SystemFontFamilies
-                    .Select(f => f.Source)
-                    .Where(name => !string.IsNullOrWhiteSpace(name) && !name.StartsWith("@"))
-                    .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase);
+            var initialList = new List<string>(PriorityFontNames);
 
-                foreach (var fontName in installed)
+            lock (_fontScanLock)
+            {
+                if (!_isScanningFonts && _cachedSystemFonts == null)
                 {
-                    if (set.Add(fontName))
+                    _isScanningFonts = true;
+                    System.Threading.Tasks.Task.Run(() =>
                     {
-                        list.Add(fontName);
-                    }
+                        try
+                        {
+                            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            var list = new List<string>();
+
+                            var drawingFonts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            try
+                            {
+                                foreach (var f in System.Drawing.FontFamily.Families)
+                                {
+                                    if (!string.IsNullOrWhiteSpace(f.Name) && !f.Name.StartsWith("@"))
+                                    {
+                                        drawingFonts.Add(f.Name);
+                                    }
+                                }
+                            }
+                            catch { }
+
+                            var wpfFonts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            var koLang = System.Windows.Markup.XmlLanguage.GetLanguage("ko-kr");
+                            try
+                            {
+                                foreach (var fam in System.Windows.Media.Fonts.SystemFontFamilies)
+                                {
+                                    if (fam.FamilyNames.TryGetValue(koLang, out string koName) && !string.IsNullOrWhiteSpace(koName))
+                                    {
+                                        wpfFonts.Add(koName);
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(fam.Source) && !fam.Source.StartsWith("@"))
+                                    {
+                                        wpfFonts.Add(fam.Source);
+                                    }
+                                }
+                            }
+                            catch { }
+
+                            foreach (var p in PriorityFontNames)
+                            {
+                                if (drawingFonts.Contains(p) || wpfFonts.Contains(p) || p == "맑은 고딕")
+                                {
+                                    if (set.Add(p)) list.Add(p);
+                                }
+                            }
+
+                            var remainingKorean = drawingFonts.Concat(wpfFonts)
+                                .Where(name => !set.Contains(name) && name.Any(c => c >= 0xAC00 && c <= 0xD7A3))
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(name => name)
+                                .ToList();
+
+                            foreach (var kf in remainingKorean)
+                            {
+                                if (set.Add(kf)) list.Add(kf);
+                            }
+
+                            var remainingEnglish = drawingFonts.Concat(wpfFonts)
+                                .Where(name => !set.Contains(name) && !name.Any(c => c >= 0xAC00 && c <= 0xD7A3))
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+
+                            foreach (var ef in remainingEnglish)
+                            {
+                                if (set.Add(ef)) list.Add(ef);
+                            }
+
+                            _cachedSystemFonts = list;
+
+                            System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                            {
+                                onComplete?.Invoke();
+                            }));
+                        }
+                        catch { }
+                        finally
+                        {
+                            _isScanningFonts = false;
+                        }
+                    });
                 }
             }
-            catch { }
 
-            return list;
+            return initialList;
         }
 
-        public List<string> AvailableFontFamilies { get; } = LoadSystemFonts();
+        public List<string> AvailableFontFamilies => _cachedSystemFonts ?? LoadSystemFonts(() => {
+            OnPropertyChanged(nameof(AvailableFontFamilies));
+            OnPropertyChanged(nameof(AvailableFonts));
+        });
 
         public string Col1Font { get => _settings.Col1Font ?? "맑은 고딕"; set { _settings.Col1Font = value; OnPropertyChanged(); UpdatePreview(); } }
         public string Col2Font { get => _settings.Col2Font ?? "맑은 고딕"; set { _settings.Col2Font = value; OnPropertyChanged(); UpdatePreview(); } }
@@ -1791,6 +1889,12 @@ namespace BarcodePrint.ViewModel
                         OnPropertyChanged(nameof(TargetPrinterName));
                     }
 
+                    if (!string.IsNullOrEmpty(value) && _settings != null && _settings.LastSelectedPrinterName != value)
+                    {
+                        _settings.LastSelectedPrinterName = value;
+                        _settings.Save();
+                    }
+
                     SyncSelectedPrinterConnectionDetails(value);
 
                     if (!_isInitializing && !_isFilteringPrinters)
@@ -1977,8 +2081,7 @@ namespace BarcodePrint.ViewModel
                 _templateService = templateService ?? new TemplateService();
                 _printerService = printerService ?? new PrinterService();
 
-                _settings = new AppSettings();
-                _settings.Load();
+                _settings = AppSettings.Default;
 
                 LoadAuthenticationSerials();
                 TrialLicenseManager.EvaluateLicense(false);
@@ -1994,12 +2097,6 @@ namespace BarcodePrint.ViewModel
                 }
 
                 RefreshPrinters();
-
-                // 저장된 마지막 프린터 이름 복원
-                if (!string.IsNullOrEmpty(_settings.LastSelectedPrinterName) && AvailablePrinters.Contains(_settings.LastSelectedPrinterName))
-                {
-                    SelectedPrinterName = _settings.LastSelectedPrinterName;
-                }
 
                 UpdatePreview();
             }
@@ -2018,13 +2115,18 @@ namespace BarcodePrint.ViewModel
         {
             try
             {
+                StopRealtimeStatusMonitoring();
                 _realtimeStatusTimer = new System.Windows.Threading.DispatcherTimer();
-                _realtimeStatusTimer.Interval = TimeSpan.FromSeconds(3);
+                _realtimeStatusTimer.Interval = TimeSpan.FromSeconds(2.5);
                 _realtimeStatusTimer.Tick += (s, e) =>
                 {
-                    if (!string.IsNullOrEmpty(SelectedPrinterName) && AvailablePrinters.Contains(SelectedPrinterName))
+                    if (!string.IsNullOrEmpty(SelectedPrinterName))
                     {
                         CheckRealtimePrinterStatus();
+                    }
+                    else if (PrinterService.HasConnectedUsbPrinters())
+                    {
+                        RefreshPrinters(true);
                     }
                 };
                 _realtimeStatusTimer.Start();
@@ -2033,6 +2135,75 @@ namespace BarcodePrint.ViewModel
             {
                 System.Diagnostics.Debug.WriteLine($"실시간 상태 모니터링 타이머 시작 실패: {ex.Message}");
             }
+        }
+
+        public void OnHardwareDeviceChanged()
+        {
+            try
+            {
+                PrinterService.InvalidateUsbCache();
+                PrinterOnlineDetector.InvalidateCache();
+                UsbPrinterHelper.InvalidatePrinterCache();
+
+                if (!string.IsNullOrEmpty(SelectedPrinterName))
+                {
+                    CheckRealtimePrinterStatus();
+                }
+                else
+                {
+                    RefreshPrinters(true);
+                }
+
+                // USB 전원 인가 직후 드라이버 인터페이스가 마운트되는 시점(약 0.6초, 1.5초 후)에 재검증
+                Task.Run(async () =>
+                {
+                    await Task.Delay(600);
+                    PrinterService.InvalidateUsbCache();
+                    PrinterOnlineDetector.InvalidateCache();
+                    UsbPrinterHelper.InvalidatePrinterCache();
+
+                    Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                    {
+                        if (!string.IsNullOrEmpty(SelectedPrinterName))
+                        {
+                            CheckRealtimePrinterStatus();
+                        }
+                        else
+                        {
+                            RefreshPrinters(true);
+                        }
+                    }));
+
+                    await Task.Delay(1000);
+                    PrinterService.InvalidateUsbCache();
+                    PrinterOnlineDetector.InvalidateCache();
+
+                    Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                    {
+                        if (!string.IsNullOrEmpty(SelectedPrinterName))
+                        {
+                            CheckRealtimePrinterStatus();
+                        }
+                    }));
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"OnHardwareDeviceChanged 오류: {ex.Message}");
+            }
+        }
+
+        public void StopRealtimeStatusMonitoring()
+        {
+            try
+            {
+                if (_realtimeStatusTimer != null)
+                {
+                    _realtimeStatusTimer.Stop();
+                    _realtimeStatusTimer = null;
+                }
+            }
+            catch { }
         }
 
         private void LoadAuthenticationSerials()
@@ -2066,6 +2237,16 @@ namespace BarcodePrint.ViewModel
                     _settings.LastWorkedDate = DateTime.Now.ToString("yyyy.MM.dd");
                     _settings.Save();
                 }
+
+                // 현재 편집 중인 템플릿 상태를 자동 백업 파일로 보존
+                if (_currentTemplate != null)
+                {
+                    string autoSaveDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
+                    if (!Directory.Exists(autoSaveDir)) Directory.CreateDirectory(autoSaveDir);
+                    string autoSavePath = Path.Combine(autoSaveDir, "autosave_template.lbm");
+                    _templateService.ExportTemplateModel(_currentTemplate, autoSavePath, out _);
+                }
+
                 SaveHistoryRecords();
             }
             catch (Exception ex)
@@ -2103,11 +2284,49 @@ namespace BarcodePrint.ViewModel
 
         public void ExecuteExportTemplate()
         {
-            string defaultName = $"온팔로우_템플릿_{PaperWidth}x{PaperHeight}_{DateTime.Now:yyyyMMdd}.lbm";
-            if (_dialogService.ShowSaveFileDialog("LabelMaster 템플릿 (*.lbm)|*.lbm|모든 파일 (*.*)|*.*", ".lbm", defaultName, out string filePath))
+            if (CurrentTemplate == null)
             {
-                if (_templateService.ExportTemplate(_settings, filePath, out string err))
+                InitializeDefaultTemplateFromCurrentSettings();
+            }
+
+            // 1. 현재 ViewModel의 1~8열 및 용지 상태를 CurrentTemplate에 최신 동기화
+            CurrentTemplate.WidthMm = EffectivePaperWidth;
+            CurrentTemplate.HeightMm = EffectivePaperHeight;
+            CurrentTemplate.Rotation = LabelRotationAngle;
+            CurrentTemplate.PaperType = PaperType;
+
+            for (int i = 1; i <= ActiveColumnCount; i++)
+            {
+                var match = CurrentTemplate.Elements.FirstOrDefault(e => e.IsVariable && e.InputOrder == i);
+                if (match != null)
                 {
+                    match.HeaderName = GetHeaderByIndex(i);
+                    match.Content = GetInputByIndex(i) ?? "";
+                    match.FontSize = GetSizeByIndex(i);
+                    match.FontName = GetFontByIndex(i) ?? "맑은 고딕";
+                    match.IsBold = GetBoldByIndex(i);
+                    match.IsItalic = GetItalicByIndex(i);
+                    match.Alignment = GetAlignByIndex(i) ?? "LEFT";
+                    match.IncludeHeaderOnLabel = GetIncludeHeaderByIndex(i);
+                    match.IsPriceFormat = GetPriceByIndex(i);
+                    match.IsKeep = GetKeepByIndex(i);
+                    bool isBc = GetBarcodeByIndex(i);
+                    match.Type = isBc ? (GetBarcodeTypeByIndex(i) == "QR_CODE" ? ElementType.QR_CODE : ElementType.BARCODE) : ElementType.TEXT;
+                    match.BarcodeType = GetBarcodeTypeByIndex(i) ?? "CODE128";
+                    match.X = GetOffsetXByIndex(i);
+                    match.Y = GetOffsetYByIndex(i);
+                    match.Width = GetWidthByIndex(i) > 0 ? GetWidthByIndex(i) : match.Width;
+                }
+            }
+
+            string defaultName = $"라벨_템플릿_{PaperWidth}x{PaperHeight}_{DateTime.Now:yyyyMMdd}.lbm";
+            if (_dialogService.ShowSaveFileDialog("LabelMaster 템플릿 (*.lbm)|*.lbm|JSON 서식 (*.json)|*.json|모든 파일 (*.*)|*.*", ".lbm", defaultName, out string filePath))
+            {
+                if (_templateService.ExportTemplateModel(CurrentTemplate, filePath, out string err))
+                {
+                    string title = Path.GetFileNameWithoutExtension(filePath);
+                    _settings.AddRecentWork(title, (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, filePath);
+
                     StatusMessage = $"템플릿 저장 완료: {Path.GetFileName(filePath)}";
                     _dialogService.ShowMessage($"라벨 템플릿 파일이 저장되었습니다.\n\n경로: {filePath}", "템플릿 저장 완료", MessageBoxImage.Information);
                 }
@@ -2121,21 +2340,12 @@ namespace BarcodePrint.ViewModel
 
         public void ExecuteImportTemplate()
         {
-            if (_dialogService.ShowOpenFileDialog("LabelMaster 템플릿 (*.lbm)|*.lbm|모든 파일 (*.*)|*.*", ".lbm", out string filePath))
+            if (_dialogService.ShowOpenFileDialog("LabelMaster 템플릿 (*.lbm;*.json)|*.lbm;*.json|모든 파일 (*.*)|*.*", ".lbm", out string filePath))
             {
-                var loaded = _templateService.ImportTemplate(filePath, out string err);
+                var loaded = _templateService.ImportTemplateModel(filePath, out string err);
                 if (loaded != null)
                 {
-                    _settings = loaded;
-                    _settings.Save();
-
-                    OnPropertyChanged("");
-                    ActiveColumnCountChanged?.Invoke(ActiveColumnCount);
-
-                    UpdatePreview();
-                    RequestPreviewRedraw?.Invoke();
-
-                    StatusMessage = $"템플릿 로드 완료: {Path.GetFileName(filePath)}";
+                    ApplyLoadedTemplate(loaded, filePath);
                     _dialogService.ShowMessage($"라벨 템플릿을 성공적으로 불러왔습니다.\n\n파일명: {Path.GetFileName(filePath)}", "템플릿 불러오기 완료", MessageBoxImage.Information);
                 }
                 else
@@ -3067,7 +3277,7 @@ namespace BarcodePrint.ViewModel
                 ClearColumnData(i);
             }
             InputCol1 = "";
-            Column1Header = "상품명 또는 텍스트 입력";
+            Column1Header = "텍스트";
         }
 
         public bool IsAllInputsEmpty()

@@ -29,15 +29,24 @@ namespace BarcodePrint.WpfView
 
         private void PrinterSettingsWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // 진입 시 현재 선택된 프린터 동기화 및 하드웨어 스펙 확인
-            if (ViewModel != null && !string.IsNullOrEmpty(ViewModel.SelectedPrinterName))
+            if (ViewModel != null)
             {
-                ViewModel.TargetPrinterName = ViewModel.SelectedPrinterName;
-
-                // 창 진입 시 사용자를 방해하는 강제 연결 팝업을 띄우지 않고, 기존 정보가 있을 때만 백그라운드로 가볍게 갱신
-                if (ViewModel.PrinterHardwareDetailsList != null && ViewModel.PrinterHardwareDetailsList.Count > 5)
+                // 진입 시 프린터 목록이 비어 있으면 즉시 갱신
+                if (ViewModel.AvailablePrinters.Count == 0)
                 {
-                    ViewModel.ExecuteReadPrinterHardwareInfo(showLoadingPopup: false);
+                    ViewModel.RefreshPrinters(runAsync: false);
+                }
+
+                // 진입 시 현재 선택된 프린터 동기화 및 하드웨어 스펙 확인
+                if (!string.IsNullOrEmpty(ViewModel.SelectedPrinterName))
+                {
+                    ViewModel.TargetPrinterName = ViewModel.SelectedPrinterName;
+
+                    // 창 진입 시 사용자를 방해하는 강제 연결 팝업을 띄우지 않고, 기존 정보가 있을 때만 백그라운드로 가볍게 갱신
+                    if (ViewModel.PrinterHardwareDetailsList != null && ViewModel.PrinterHardwareDetailsList.Count > 5)
+                    {
+                        ViewModel.ExecuteReadPrinterHardwareInfo(showLoadingPopup: false);
+                    }
                 }
             }
         }

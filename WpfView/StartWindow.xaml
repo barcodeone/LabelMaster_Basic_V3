@@ -4,8 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="라벨마스터 - LabelMaster"
-        Width="1260" Height="800" MinWidth="1080" MinHeight="680"
+        Title="라벨마스터 - LabelMaster (v1.0.20)"
+        Width="1180" Height="720" MinWidth="960" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         FontFamily="Pretendard, 맑은 고딕, Malgun Gothic, Segoe UI, sans-serif"
         FontSize="13"
@@ -92,7 +92,9 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Height" Value="40"/>
             <Setter Property="Margin" Value="0,2"/>
-            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Width" Value="230"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Template">
@@ -162,7 +164,7 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Foreground" Value="#1E293B"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="Template">
@@ -192,9 +194,9 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Padding" Value="14,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -218,8 +220,8 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <!-- 1. Left Fixed Sidebar (Width: 230) -->
-            <ColumnDefinition Width="230"/>
+            <!-- 1. Left Fixed Sidebar (Width: 254 - 배너 230px 규격에 정확히 맞춤) -->
+            <ColumnDefinition Width="254"/>
             <!-- 2. Right Main Dashboard Workspace -->
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -228,7 +230,7 @@
         <!-- [1. LEFT DESKTOP SIDEBAR] (통합 네비게이션 허브)               -->
         <!-- ============================================================== -->
         <Border Grid.Column="0" Background="{StaticResource SidebarBgBrush}" BorderBrush="{StaticResource SidebarBorderBrush}" BorderThickness="0,0,1,0">
-            <Grid Margin="14,16,14,16">
+            <Grid Margin="12,12,12,12">
                 <Grid.RowDefinitions>
                     <!-- Brand Logo & App Name -->
                     <RowDefinition Height="Auto"/>
@@ -241,93 +243,92 @@
                 </Grid.RowDefinitions>
 
                 <!-- Brand Header -->
-                <DockPanel Grid.Row="0" Margin="4,4,4,14">
+                <DockPanel Grid.Row="0" Margin="2,2,2,10">
                     <Border Width="40" Height="40" CornerRadius="8" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Margin="0,0,10,0" VerticalAlignment="Center">
                         <Image Source="pack://application:,,,/LabelMaster;component/resource/Logo_LM.jpg" Stretch="Uniform" Margin="2" RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="LABEL MASTER" FontWeight="Bold" FontSize="17" Foreground="{StaticResource TextMainBrush}"/>
-                        <TextBlock x:Name="TxtAppVersion" Text="라벨마스터 v1.0.1" FontSize="11" Foreground="{StaticResource TextSubBrush}" Margin="0,1,0,0"/>
+                        <TextBlock x:Name="TxtAppVersion" Text="라벨마스터 v1.0.20" FontSize="11.5" Foreground="{StaticResource TextSubBrush}" Margin="0,2,0,0"/>
                     </StackPanel>
                 </DockPanel>
 
                 <!-- Divider -->
-                <Separator Grid.Row="1" Background="#E2E8F0" Margin="0,0,0,12"/>
+                <Separator Grid.Row="1" Background="#E2E8F0" Margin="0,0,0,8"/>
 
                 <!-- Navigation Menu List -->
                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
-                        <TextBlock Text="빠른 메뉴" FontSize="11" FontWeight="Bold" Foreground="#94A3B8" Margin="8,0,0,6"/>
+                        <TextBlock Text="빠른 메뉴" FontSize="11.5" FontWeight="Bold" Foreground="#94A3B8" Margin="6,0,0,4"/>
 
                         <!-- 1. 홈 (대시보드) -->
                         <Button Style="{StaticResource SidebarActiveNavItemStyle}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="🏠" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="홈 (대시보드)" FontSize="13" FontWeight="Bold" Foreground="{StaticResource MacPrimaryBlue}" VerticalAlignment="Center"/>
+                                <TextBlock Text="🏠" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="홈 (대시보드)" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource MacPrimaryBlue}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
                         <!-- 2. 새 라벨 만들기 -->
                         <Button Style="{StaticResource SidebarNavItemStyle}" Click="OnNewTemplateClick">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="➕" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="새 라벨 만들기" FontSize="13" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="➕" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="새 라벨 만들기" FontSize="13.5" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
                         <!-- 3. 서식 파일 열기 -->
                         <Button Style="{StaticResource SidebarNavItemStyle}" Click="OnLoadTemplateClick">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="📁" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="서식 파일 열기" FontSize="13" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="📁" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="서식 파일 열기" FontSize="13.5" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
                         <!-- 4. PDF 문서 인쇄 -->
                         <Button Style="{StaticResource SidebarNavItemStyle}" Click="OnPdfPrintClick">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="📄" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="PDF 문서 인쇄" FontSize="13" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="📄" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="PDF 문서 인쇄" FontSize="13.5" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
-                        <Separator Background="#F1F5F9" Margin="6,10,6,10"/>
-                        <TextBlock Text="환경 설정 및 도구" FontSize="11" FontWeight="Bold" Foreground="#94A3B8" Margin="8,0,0,6"/>
+                        <Separator Background="#F1F5F9" Margin="4,8,4,8"/>
+                        <TextBlock Text="환경 설정 및 도구" FontSize="11.5" FontWeight="Bold" Foreground="#94A3B8" Margin="6,0,0,4"/>
 
                         <!-- 5. 프린터 관리 -->
                         <Button Style="{StaticResource SidebarNavItemStyle}" Click="OnOpenPrinterSettingsClick">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="⚙️" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="프린터 관리" FontSize="13" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="⚙️" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="프린터 관리" FontSize="13.5" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
                         <!-- 6. 프로그램 정보 -->
                         <Button Style="{StaticResource SidebarNavItemStyle}" Click="OnAboutClick">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="ℹ️" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="프로그램 정보" FontSize="13" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="ℹ️" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="프로그램 정보" FontSize="13.5" FontWeight="Medium" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
-                        <!-- 7. 공식 소모품 스토어 -->
-                        <Button Style="{StaticResource SidebarNavItemStyle}" Click="OnStoreLinkClick" Margin="0,4,0,0">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="🛒" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="정품 소모품 몰" FontSize="13" FontWeight="Bold" Foreground="#2563EB" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
+                        <!-- 7. 사이드바 HTML 배너 공간 (가로 230px, 세로 230px 고정) -->
+                        <Border x:Name="SidebarBannerBorder" Width="230" Height="230" HorizontalAlignment="Center" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="10" Margin="0,8,0,0" Effect="{StaticResource CardShadow}">
+                            <Border CornerRadius="9" ClipToBounds="True">
+                                <WebBrowser x:Name="SidebarWebBrowser" Width="230" Height="230" Navigating="OnSidebarWebBrowserNavigating" LoadCompleted="OnSidebarWebBrowserLoadCompleted"/>
+                            </Border>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
 
                 <!-- Bottom Compact Printer Status Badge in Sidebar (상태 동기화 보장) -->
-                <Border Grid.Row="3" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,10,0,0">
+                <Border Grid.Row="3" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,10,0,0">
                     <DockPanel LastChildFill="True">
-                        <Ellipse x:Name="DotSidebarPrinter" Width="8" Height="8" Fill="#94A3B8" Margin="0,0,6,0" VerticalAlignment="Center" DockPanel.Dock="Left"/>
+                        <Ellipse x:Name="DotSidebarPrinter" Width="9" Height="9" Fill="#94A3B8" Margin="0,0,8,0" VerticalAlignment="Center" DockPanel.Dock="Left"/>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtSidePrinterStatusText" Text="프린터 확인 중..." FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMainBrush}" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="TxtSidePrinterName" Text="-" FontSize="10.5" Foreground="{StaticResource TextSubBrush}" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="TxtSidePrinterPort" Text="포트: -" FontSize="9.5" Foreground="#94A3B8" Visibility="Collapsed"/>
+                            <TextBlock x:Name="TxtSidePrinterStatusText" Text="프린터 확인 중..." FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextMainBrush}" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="TxtSidePrinterName" Text="-" FontSize="11" Foreground="{StaticResource TextSubBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                            <TextBlock x:Name="TxtSidePrinterPort" Text="포트: -" FontSize="10" Foreground="#94A3B8" Visibility="Collapsed"/>
                         </StackPanel>
                     </DockPanel>
                 </Border>
@@ -339,14 +340,14 @@
         <!-- ============================================================== -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
-                <!-- Top Header Bar (56px) -->
-                <RowDefinition Height="56"/>
+                <!-- Top Header Bar (64px) -->
+                <RowDefinition Height="64"/>
                 <!-- Main Content Area -->
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
             <!-- Top Header Bar (프린터 상태 및 설정 통합 단일화) -->
-            <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="24,0">
+            <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="28,0">
                 <Grid VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -355,57 +356,55 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="라벨마스터" FontWeight="Bold" FontSize="20" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
-                        <Border Background="#ECFDF5" BorderBrush="#A7F3D0" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="v1.0" FontSize="11" FontWeight="Bold" Foreground="#059669"/>
-                        </Border>
+                        <TextBlock Text="라벨마스터" FontWeight="Bold" FontSize="24" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
 
                     <!-- Top Right Single Printer Status Badge & Settings Button -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border x:Name="BorderPrinterBadge" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="18" Padding="12,5" Cursor="Hand" MouseLeftButtonDown="OnPrinterBadgeClick" ToolTip="클릭하여 프린터 검색 및 연결 마법사를 실행합니다">
+                        <Border x:Name="BorderPrinterBadge" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1.2" CornerRadius="20" Padding="14,7" Cursor="Hand" MouseLeftButtonDown="OnPrinterBadgeClick" ToolTip="클릭하여 프린터 검색 및 연결 마법사를 실행합니다">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Ellipse x:Name="DotPrinterStatus" Width="9" Height="9" Fill="#94A3B8" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="TxtPrinterStatus" Text="프린터 상태 확인 중..." FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Text=" ▾" FontSize="10" Foreground="{StaticResource TextSubBrush}" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                <Ellipse x:Name="DotPrinterStatus" Width="10" Height="10" Fill="#94A3B8" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtPrinterStatus" Text="프린터 상태 확인 중..." FontSize="13.5" FontWeight="SemiBold" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text=" ▾" FontSize="11" Foreground="{StaticResource TextSubBrush}" Margin="5,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
 
-                        <Button Click="OnOpenPrinterSettingsClick" Style="{StaticResource MacPrimaryBtnStyle}" Height="30" Padding="12,0" Margin="10,0,0,0" ToolTip="프린터 하드웨어 설정 (인쇄 농도, 속도, 용지 규격, 센서 측정)">
+                        <Button Click="OnOpenPrinterSettingsClick" Style="{StaticResource MacPrimaryBtnStyle}" Height="36" Padding="14,0" Margin="12,0,0,0" ToolTip="프린터 하드웨어 설정 (인쇄 농도, 속도, 용지 규격, 센서 측정)">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="⚙️" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="프린터 설정" FontSize="11.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                                <TextBlock Text="⚙️" FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="프린터 설정" FontSize="13" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- Main Dashboard Content -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="24,16,24,28" MaxWidth="1320">
+            <!-- Main Dashboard Content (반응형 동적 크기 조절 지원) -->
+            <ScrollViewer x:Name="MainDashboardScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" SizeChanged="OnDashboardSizeChanged">
+                <StackPanel Margin="28,20,28,32" MaxWidth="1550">
 
                     <!-- ============================================================== -->
-                    <!-- [1. 최상단] 🛒 소모품 스토어 공식 배너 (선명한 비비드 오렌지 복원) -->
+                    <!-- [1. 최상단] 🏢 한국 Xprinter 공식 홈페이지 배너                     -->
                     <!-- ============================================================== -->
                     <Border Background="{StaticResource StoreBannerGradientBrush}" 
-                            CornerRadius="12" Padding="20,16" Margin="0,0,0,20" 
-                            Cursor="Hand" MouseLeftButtonDown="OnStoreLinkClick" Effect="{StaticResource BannerShadow}">
+                            CornerRadius="12" Padding="22,18" Margin="0,0,0,20" 
+                            Cursor="Hand" MouseLeftButtonDown="OnOfficialSiteClick" Effect="{StaticResource BannerShadow}"
+                            ToolTip="클릭하여 한국 Xprinter 공식 홈페이지(xprinter.co.kr)로 이동합니다">
                         <DockPanel LastChildFill="True">
                             <!-- 우측 구매 버튼 (화이트 & 오렌지 텍스트로 가시성 극대화) -->
-                            <Border DockPanel.Dock="Right" Background="White" CornerRadius="8" Padding="16,8" VerticalAlignment="Center" Margin="14,0,0,0">
-                                <TextBlock Text="스토어 바로가기 ➔" FontSize="13" FontWeight="Bold" Foreground="#EA580C"/>
+                            <Border DockPanel.Dock="Right" Background="White" CornerRadius="8" Padding="18,10" VerticalAlignment="Center" Margin="16,0,0,0">
+                                <TextBlock Text="홈페이지 바로가기 ➔" FontSize="13.5" FontWeight="Bold" Foreground="#EA580C"/>
                             </Border>
 
                             <!-- 좌측 배너 아이콘 + 뱃지 + 텍스트 -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Width="38" Height="38" CornerRadius="19" Background="#33FFFFFF" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Text="🛒" FontSize="17" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="#33FFFFFF" VerticalAlignment="Center" Margin="0,0,14,0">
+                                    <TextBlock Text="🌐" FontSize="19" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <Border Background="#2BFFFFFF" BorderBrush="#FFFFFF" BorderThickness="1" CornerRadius="4" Padding="7,3" Margin="0,0,12,0" VerticalAlignment="Center">
-                                    <TextBlock Text="공식 인증 스토어" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                                <Border Background="#2BFFFFFF" BorderBrush="#FFFFFF" BorderThickness="1" CornerRadius="4" Padding="8,3.5" Margin="0,0,14,0" VerticalAlignment="Center">
+                                    <TextBlock Text="한국 Xprinter" FontSize="11.5" FontWeight="Bold" Foreground="White"/>
                                 </Border>
-                                <TextBlock Text="TSPL 공식 인증 감열 롤라벨 및 잉크 리본 최저가 구매 바로가기" FontSize="13.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                                <TextBlock FontSize="14.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Text="#대한민국 넘버원 택배/라벨프린터  #드라이버 설치 및 고객지원"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
@@ -414,7 +413,7 @@
                     <!-- [2. 메인 1순위] ➕ 새 라벨 만들기 (대형 블루 그라디언트 히어로 CTA - 세로 크기 확대) -->
                     <!-- ============================================================== -->
                     <Button Click="OnNewTemplateClick" Style="{StaticResource HeroNewTemplateBtnStyle}" Margin="0,0,0,26">
-                        <Grid Height="138" Margin="24,0">
+                        <Grid Height="146" Margin="28,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -422,25 +421,25 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- 큼직한 화이트 서클 플러스 아이콘 -->
-                            <Border Grid.Column="0" Width="66" Height="66" CornerRadius="33" Background="White" VerticalAlignment="Center" Margin="0,0,20,0">
-                                <TextBlock Text="➕" FontSize="28" FontWeight="Bold" Foreground="#1D4ED8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Column="0" Width="72" Height="72" CornerRadius="36" Background="White" VerticalAlignment="Center" Margin="0,0,22,0">
+                                <TextBlock Text="➕" FontSize="30" FontWeight="Bold" Foreground="#1D4ED8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
 
                             <!-- 제목 및 직관적인 안내 문구 -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="새 라벨 만들기" FontSize="21" FontWeight="Bold" Foreground="White"/>
-                                    <Border Background="#33FFFFFF" BorderBrush="#80FFFFFF" BorderThickness="1" CornerRadius="4" Padding="8,3" Margin="14,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="자유 규격 마법사" FontSize="11.5" FontWeight="Bold" Foreground="White"/>
+                                    <TextBlock Text="새 라벨 만들기" FontSize="23" FontWeight="Bold" Foreground="White"/>
+                                    <Border Background="#33FFFFFF" BorderBrush="#80FFFFFF" BorderThickness="1" CornerRadius="4" Padding="9,3.5" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="자유 규격 마법사" FontSize="12" FontWeight="Bold" Foreground="White"/>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Text="용지 크기(가로×세로 mm)와 여백, 종류를 직접 설정하여 새로운 빈 라벨을 디자인하고 인쇄합니다." FontSize="13" Foreground="#DBEAFE" Margin="0,7,0,0"/>
+                                <TextBlock Text="용지 크기(가로×세로 mm)와 여백, 종류를 직접 설정하여 새로운 빈 라벨을 디자인하고 인쇄합니다." FontSize="13.5" Foreground="#DBEAFE" Margin="0,8,0,0"/>
                             </StackPanel>
 
                             <!-- 우측 대형 강조 화이트 CTA 버튼 -->
-                            <Border Grid.Column="2" Background="White" CornerRadius="9" Padding="22,12" VerticalAlignment="Center" Cursor="Hand">
+                            <Border Grid.Column="2" Background="White" CornerRadius="9" Padding="24,14" VerticalAlignment="Center" Cursor="Hand">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="➕ 시작하기 ➔" FontSize="14.5" FontWeight="Bold" Foreground="#1D4ED8" VerticalAlignment="Center"/>
+                                    <TextBlock Text="➕ 시작하기 ➔" FontSize="15" FontWeight="Bold" Foreground="#1D4ED8" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -478,7 +477,7 @@
 
                         <!-- [0. 최근 작업 없을 때] 📭 빈 카드 (Empty Card) -->
                         <Border x:Name="CardRecentEmpty" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1.5" CornerRadius="10" Visibility="Collapsed">
-                            <Grid Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecentEmpty" Height="140" Margin="14,14">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                     <Border Width="40" Height="40" CornerRadius="20" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" HorizontalAlignment="Center" Margin="0,0,0,8">
                                         <TextBlock Text="📭" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -491,7 +490,7 @@
 
                         <!-- [1. 최신 작업 1순위] -->
                         <Button x:Name="BtnRecent0" Grid.Column="0" Style="{StaticResource PresetCardButtonStyle}" Click="OnRecentCardClick" Tag="0" Visibility="Collapsed">
-                            <Grid Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecent0" Height="140" Margin="14,14">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
@@ -519,7 +518,7 @@
 
                         <!-- [2. 최신 작업 2순위] -->
                         <Button x:Name="BtnRecent1" Grid.Column="2" Style="{StaticResource PresetCardButtonStyle}" Click="OnRecentCardClick" Tag="1" Visibility="Collapsed">
-                            <Grid Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecent1" Height="140" Margin="14,14">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
@@ -547,7 +546,7 @@
 
                         <!-- [3. 최신 작업 3순위] -->
                         <Button x:Name="BtnRecent2" Grid.Column="4" Style="{StaticResource PresetCardButtonStyle}" Click="OnRecentCardClick" Tag="2" Visibility="Collapsed">
-                            <Grid Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecent2" Height="140" Margin="14,14">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
@@ -575,7 +574,7 @@
 
                         <!-- [4. 최신 작업 4순위] -->
                         <Button x:Name="BtnRecent3" Grid.Column="6" Style="{StaticResource PresetCardButtonStyle}" Click="OnRecentCardClick" Tag="3" Visibility="Collapsed">
-                            <Grid Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecent3" Height="140" Margin="14,14">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
@@ -603,11 +602,11 @@
                     </Grid>
 
                     <!-- ============================================================== -->
-                    <!-- [4. 하단 HTML 웹뷰 배너 공간] (새 라벨 만들기 버튼과 동일한 크기)   -->
+                    <!-- [4. 하단 HTML 웹뷰 배너 공간 (반응형 동적 비율 조절)]             -->
                     <!-- ============================================================== -->
-                    <Border x:Name="QuickToolsHtmlBorder" Height="138" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Margin="0,14,0,26" Effect="{StaticResource CardShadow}">
+                    <Border x:Name="QuickToolsHtmlBorder" Height="130" MinHeight="130" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Margin="0,14,0,26" Effect="{StaticResource CardShadow}">
                         <Border CornerRadius="11" ClipToBounds="True">
-                            <WebBrowser x:Name="QuickToolsWebBrowser" Height="138" Navigating="OnQuickToolsWebBrowserNavigating" LoadCompleted="OnQuickToolsWebBrowserLoadCompleted"/>
+                            <WebBrowser x:Name="QuickToolsWebBrowser" Height="130" MinHeight="130" Navigating="OnQuickToolsWebBrowserNavigating" LoadCompleted="OnQuickToolsWebBrowserLoadCompleted"/>
                         </Border>
                     </Border>
 
