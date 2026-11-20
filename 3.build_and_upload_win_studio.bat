@@ -17,12 +17,12 @@ del /f /q "%~dp0obj\Release\*.exe" >nul 2>nul
 del /f /q "%~dp0obj\Release\*.pdb" >nul 2>nul
 
 echo ==================================================
-echo [1/5] 빌드 버전 자동 증가 및 매뉴얼 문서 최신화...
+echo [1/5] 빌드 버전 자동 증가 (끝자리 10 도달 시 중간 버전 +1) 및 매뉴얼 문서 최신화...
 python "%~dp0update_version.py"
 python "%~dp0update_docs.py"
 
 :: Read Version from version.txt
-set "APP_VERSION=1.0.1"
+set "APP_VERSION=1.1.0"
 if exist "%~dp0version.txt" (
     set /p APP_VERSION=<"%~dp0version.txt"
 )

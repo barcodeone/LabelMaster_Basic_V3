@@ -280,7 +280,7 @@ namespace BarcodePrint.WpfView
                     if (curIdx >= 0 && curIdx < _vm.Records.Count)
                     {
                         var rec = _vm.Records[curIdx];
-                        _vm.SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, copies);
+                        _vm.PrintSingleExcelRecord(rec, copies);
                         rec.Status = "인쇄 완료";
                         _vm.SaveHistoryRecords();
                         _vm.StatusMessage = $"현재 행(제 {curIdx + 1}행) 라벨 {copies}매 인쇄 완료";
@@ -310,7 +310,7 @@ namespace BarcodePrint.WpfView
                     foreach (var idx in pageIndices)
                     {
                         var rec = _vm.Records[idx];
-                        bool ok = _vm.SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, copies);
+                        bool ok = _vm.PrintSingleExcelRecord(rec, copies);
                         if (ok)
                         {
                             rec.Status = "인쇄 완료";

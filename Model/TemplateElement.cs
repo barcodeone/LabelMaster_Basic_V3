@@ -26,7 +26,7 @@ namespace BarcodePrint.Model
         public bool IsBold { get; set; } = false;
         public bool IsItalic { get; set; } = false;
         public bool IsUnderline { get; set; } = false;
-        public string Alignment { get; set; } = "LEFT"; // LEFT, CENTER, RIGHT
+        public string Alignment { get; set; } = "CENTER"; // LEFT, CENTER, RIGHT
         public double LetterSpacing { get; set; } = 0.0; // 자간 (em 단위, 예: 0.0, 0.05, 0.1, -0.05)
         public double FontScaleX { get; set; } = 1.0;    // 장평 (가로 비율, 1.0 = 100%, 0.8 = 80%, 1.2 = 120%)
         public double LineSpacing { get; set; } = 1.0;   // 줄간격 (배수, 1.0 = 100%, 1.2 = 120%, 1.5 = 150%)
@@ -64,6 +64,8 @@ namespace BarcodePrint.Model
         public double[] RowHeights { get; set; }
         public double[] ColumnWidths { get; set; }
         public double CellPadding { get; set; } = 1.0;
+        public float? TableInnerLineWidth { get; set; } = null;
+        public string TableInnerLineStyle { get; set; } = null;
 
         // 엑셀 연동 속성
         public string DataSourceColumn { get; set; } // 엑셀 매핑 컬럼명
@@ -170,6 +172,77 @@ namespace BarcodePrint.Model
             TableCellStyles?.Clear();
         }
 
+        public void SetAllCellsAlignment(string alignment)
+        {
+            if (string.IsNullOrWhiteSpace(alignment)) alignment = "CENTER";
+            this.Alignment = alignment;
+            if (TableCellStyles == null || TableCellStyles.Count == 0) return;
+
+            var keys = new List<string>(TableCellStyles.Keys);
+            foreach (var key in keys)
+            {
+                string fName = this.FontName ?? "맑은 고딕";
+                double fSize = this.FontSize > 0 ? this.FontSize : 9.0;
+                bool fBold = this.IsBold;
+                string fAlign = alignment;
+                ApplyStyleString(TableCellStyles[key], ref fName, ref fSize, ref fBold, ref fAlign);
+                TableCellStyles[key] = BuildStyleString(fName, fSize, fBold, alignment);
+            }
+        }
+
+        public void SetAllCellsFontSize(double fontSize)
+        {
+            double sz = Math.Max(4.0, Math.Min(200.0, fontSize));
+            this.FontSize = sz;
+            if (TableCellStyles == null || TableCellStyles.Count == 0) return;
+
+            var keys = new List<string>(TableCellStyles.Keys);
+            foreach (var key in keys)
+            {
+                string fName = this.FontName ?? "맑은 고딕";
+                double fSize = sz;
+                bool fBold = this.IsBold;
+                string fAlign = this.Alignment ?? "CENTER";
+                ApplyStyleString(TableCellStyles[key], ref fName, ref fSize, ref fBold, ref fAlign);
+                TableCellStyles[key] = BuildStyleString(fName, sz, fBold, fAlign);
+            }
+        }
+
+        public void SetAllCellsBold(bool isBold)
+        {
+            this.IsBold = isBold;
+            if (TableCellStyles == null || TableCellStyles.Count == 0) return;
+
+            var keys = new List<string>(TableCellStyles.Keys);
+            foreach (var key in keys)
+            {
+                string fName = this.FontName ?? "맑은 고딕";
+                double fSize = this.FontSize > 0 ? this.FontSize : 9.0;
+                bool fBold = isBold;
+                string fAlign = this.Alignment ?? "CENTER";
+                ApplyStyleString(TableCellStyles[key], ref fName, ref fSize, ref fBold, ref fAlign);
+                TableCellStyles[key] = BuildStyleString(fName, fSize, isBold, fAlign);
+            }
+        }
+
+        public void SetAllCellsFontName(string fontName)
+        {
+            if (string.IsNullOrWhiteSpace(fontName)) fontName = "맑은 고딕";
+            this.FontName = fontName;
+            if (TableCellStyles == null || TableCellStyles.Count == 0) return;
+
+            var keys = new List<string>(TableCellStyles.Keys);
+            foreach (var key in keys)
+            {
+                string fName = fontName;
+                double fSize = this.FontSize > 0 ? this.FontSize : 9.0;
+                bool fBold = this.IsBold;
+                string fAlign = this.Alignment ?? "CENTER";
+                ApplyStyleString(TableCellStyles[key], ref fName, ref fSize, ref fBold, ref fAlign);
+                TableCellStyles[key] = BuildStyleString(fontName, fSize, fBold, fAlign);
+            }
+        }
+
         private static string BuildStyleString(string fontName, double? fontSize, bool? isBold, string alignment)
         {
             string f = fontName ?? "";
@@ -217,6 +290,40 @@ namespace BarcodePrint.Model
                         }
                     }
                 }
+            }
+
+            if (RowHeights != null && RowHeights.Length != Rows)
+            {
+                var newHeights = new double[Rows];
+                double fallback = 1.0 / Rows;
+                for (int r = 0; r < Rows; r++)
+                {
+                    newHeights[r] = (r < RowHeights.Length && RowHeights[r] > 0) ? RowHeights[r] : fallback;
+                }
+                double sum = 0;
+                for (int r = 0; r < Rows; r++) sum += newHeights[r];
+                if (sum > 0)
+                {
+                    for (int r = 0; r < Rows; r++) newHeights[r] /= sum;
+                }
+                RowHeights = newHeights;
+            }
+
+            if (ColumnWidths != null && ColumnWidths.Length != Columns)
+            {
+                var newWidths = new double[Columns];
+                double fallback = 1.0 / Columns;
+                for (int c = 0; c < Columns; c++)
+                {
+                    newWidths[c] = (c < ColumnWidths.Length && ColumnWidths[c] > 0) ? ColumnWidths[c] : fallback;
+                }
+                double sum = 0;
+                for (int c = 0; c < Columns; c++) sum += newWidths[c];
+                if (sum > 0)
+                {
+                    for (int c = 0; c < Columns; c++) newWidths[c] /= sum;
+                }
+                ColumnWidths = newWidths;
             }
         }
 

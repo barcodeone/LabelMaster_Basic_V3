@@ -51,7 +51,7 @@ namespace BarcodePrint.WpfView
             TglBold.IsChecked = _vm.GetBoldByIndex(_colIndex);
             TglItalic.IsChecked = _vm.GetItalicByIndex(_colIndex);
 
-            string align = _vm.GetAlignByIndex(_colIndex)?.ToUpper() ?? "LEFT";
+            string align = _vm.GetAlignByIndex(_colIndex)?.ToUpper() ?? "CENTER";
             if (align == "CENTER") CmbAlign.SelectedIndex = 1;
             else if (align == "RIGHT") CmbAlign.SelectedIndex = 2;
             else CmbAlign.SelectedIndex = 0;

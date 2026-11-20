@@ -205,6 +205,35 @@ namespace BarcodePrint.ViewModel
         {
             string[] values = new string[8];
 
+            if (IsExcelFileLoaded)
+            {
+                PrintRecordModel rec = null;
+                if (CurrentPreviewIndex > 0 && Records != null && CurrentPreviewIndex <= Records.Count)
+                {
+                    rec = Records[CurrentPreviewIndex - 1];
+                }
+                else if (SelectedWorkMode == 1 && SelectedRecord != null)
+                {
+                    rec = SelectedRecord;
+                }
+
+                for (int c = 1; c <= 8; c++)
+                {
+                    var elem = CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == c);
+                    bool hasExplicitMapping = elem != null && !string.IsNullOrEmpty(elem.DataSourceColumn) && elem.DataSourceColumn != "0";
+                    if (hasExplicitMapping && rec != null)
+                    {
+                        values[c - 1] = rec.GetValueByColumn(elem.DataSourceColumn) ?? "";
+                    }
+                    else
+                    {
+                        string input = GetInputByIndex(c);
+                        values[c - 1] = !string.IsNullOrEmpty(input) ? input : (elem?.Content ?? "");
+                    }
+                }
+                return values;
+            }
+
             // 1. 현재 미리보기 인덱스가 1 이상이고 레코드가 존재하는 경우:
             // 작업 모드(탭 0 라벨 서식 편집, 탭 1 엑셀 목록)와 무관하게 현재 탐색 중인 레코드의 데이터 반환
             if (CurrentPreviewIndex > 0 && Records != null && CurrentPreviewIndex <= Records.Count)

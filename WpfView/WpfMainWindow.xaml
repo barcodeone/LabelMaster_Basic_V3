@@ -1336,8 +1336,8 @@
 
                             <!-- 2단: [글꼴 및 스타일] & [위치 및 크기] (정렬 영역 아래칸) -->
                             <DockPanel LastChildFill="False">
-                                <!-- 좌측: 글꼴 및 스타일 (텍스트 요소 선택 시에만 활성화) -->
-                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding IsSelectedElementText}">
+                                <!-- 좌측: 글꼴 및 스타일 (텍스트 및 표 요소 선택 시 활성화) -->
+                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding IsSelectedElementTextOrTable}">
                                     <TextBlock Text="글꼴:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="2,0,5,0"/>
                                     
                                     <!-- 글꼴 드롭다운 -->
@@ -1362,13 +1362,13 @@
                                     </ToggleButton>
 
                                     <!-- 세로쓰기 / 미러 / 음영반전 토글 -->
-                                    <ToggleButton IsChecked="{Binding SelectedElementIsVertical}" Width="28" Height="28" Margin="0,0,2,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="세로쓰기 (한 글자씩 세로 작성)">
+                                    <ToggleButton IsChecked="{Binding SelectedElementIsVertical}" IsEnabled="{Binding IsSelectedElementText}" Width="28" Height="28" Margin="0,0,2,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="세로쓰기 (한 글자씩 세로 작성)">
                                         <TextBlock Text="세" FontWeight="Bold" FontSize="11.5"/>
                                     </ToggleButton>
-                                    <ToggleButton IsChecked="{Binding SelectedElementIsMirrored}" Width="28" Height="28" Margin="0,0,2,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="미러 (좌우 반전)">
+                                    <ToggleButton IsChecked="{Binding SelectedElementIsMirrored}" IsEnabled="{Binding IsSelectedElementText}" Width="28" Height="28" Margin="0,0,2,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="미러 (좌우 반전)">
                                         <TextBlock Text="미" FontWeight="Bold" FontSize="11.5"/>
                                     </ToggleButton>
-                                    <ToggleButton IsChecked="{Binding SelectedElementIsInverse}" Width="28" Height="28" Margin="0,0,8,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="음영 반전 (흑백 반전)">
+                                    <ToggleButton IsChecked="{Binding SelectedElementIsInverse}" IsEnabled="{Binding IsSelectedElementText}" Width="28" Height="28" Margin="0,0,8,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="음영 반전 (흑백 반전)">
                                         <Border Background="Black" CornerRadius="2" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <TextBlock Text="반" FontWeight="Bold" FontSize="10.5" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
@@ -1723,110 +1723,9 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- 2. 서식 및 글꼴 (텍스트 및 일시 요소일 때) -->
+                                <!-- 2. 글자 간격 및 형태 (텍스트 및 일시 요소일 때) -->
                                 <Border Visibility="{Binding IsSelectedElementText, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1.2" CornerRadius="8" Padding="12" Margin="0,0,0,12">
                                     <StackPanel>
-                                        <TextBlock Text="🔤 글꼴 및 스타일" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
-                                        
-                                        <!-- 글꼴 드롭다운 -->
-                                        <DockPanel Margin="0,0,0,8">
-                                            <TextBlock Text="글꼴" Width="42" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                            <ComboBox ItemsSource="{Binding AvailableFonts}" SelectedItem="{Binding SelectedElementFontName}" Height="32" FontSize="12.5" VerticalContentAlignment="Center"/>
-                                        </DockPanel>
-
-                                        <!-- 글꼴 크기 & 스타일 버튼 -->
-                                        <Grid Margin="0,0,0,8">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="8"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-
-                                            <!-- 글꼴 크기 Numeric Up/Down Stepper -->
-                                            <DockPanel Grid.Column="0">
-                                                <TextBlock Text="크기" Width="38" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                                <Button Content="-" Command="{Binding StepFontSizeCommand}" CommandParameter="-1" Style="{StaticResource MiniStepBtnStyle}" Width="26" Height="32" FontSize="13" Margin="0,0,2,0"/>
-                                                <Button Content="+" Command="{Binding StepFontSizeCommand}" CommandParameter="1" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="26" Height="32" FontSize="13" Margin="2,0,0,0"/>
-                                                <TextBlock DockPanel.Dock="Right" Text="pt" Margin="4,0,4,0" VerticalAlignment="Center" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                <TextBox Text="{Binding SelectedElementFontSize, UpdateSourceTrigger=PropertyChanged}" Height="32" FontSize="13.5" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1"/>
-                                            </DockPanel>
-
-                                            <!-- 굵게 / 기울임 / 밑줄 토글 -->
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                                <ToggleButton IsChecked="{Binding SelectedElementIsBold}" Width="34" Height="32" Margin="0,0,4,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="굵게 (Bold)">
-                                                    <TextBlock Text="B" FontWeight="Bold" FontSize="14"/>
-                                                </ToggleButton>
-                                                <ToggleButton IsChecked="{Binding SelectedElementIsItalic}" Width="34" Height="32" Margin="0,0,4,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="기울임 (Italic)">
-                                                    <TextBlock Text="I" FontStyle="Italic" FontWeight="Bold" FontSize="14"/>
-                                                </ToggleButton>
-                                                <ToggleButton IsChecked="{Binding SelectedElementIsUnderline}" Width="34" Height="32" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="밑줄 (Underline)">
-                                                    <TextBlock Text="U" TextDecorations="Underline" FontWeight="Bold" FontSize="14"/>
-                                                </ToggleButton>
-                                            </StackPanel>
-                                        </Grid>
-
-                                        <!-- 텍스트 정렬 -->
-                                        <DockPanel>
-                                            <TextBlock Text="정렬" Width="42" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                            <UniformGrid Columns="3">
-                                                <Button Click="OnSelectedAlignLeftClick" Style="{StaticResource ModernAlignBtnStyle}" Height="32" ToolTip="텍스트 좌측 정렬">
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                        <Viewbox Width="12" Height="12" Margin="0,0,5,0">
-                                                            <Canvas Width="16" Height="16">
-                                                                <Line X1="2" Y1="3.5" X2="14" Y2="3.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                                <Line X1="2" Y1="8" X2="9.5" Y2="8" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                                <Line X1="2" Y1="12.5" X2="13" Y2="12.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                            </Canvas>
-                                                        </Viewbox>
-                                                        <TextBlock Text="좌측" FontSize="11.5" VerticalAlignment="Center"/>
-                                                    </StackPanel>
-                                                </Button>
-                                                <Button Click="OnSelectedAlignCenterClick" Style="{StaticResource ModernAlignBtnStyle}" Height="32" ToolTip="텍스트 가운데 정렬">
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                        <Viewbox Width="12" Height="12" Margin="0,0,5,0">
-                                                            <Canvas Width="16" Height="16">
-                                                                <Line X1="2" Y1="3.5" X2="14" Y2="3.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                                <Line X1="4.5" Y1="8" X2="11.5" Y2="8" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                                <Line X1="2.5" Y1="12.5" X2="13.5" Y2="12.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                            </Canvas>
-                                                        </Viewbox>
-                                                        <TextBlock Text="중앙" FontSize="11.5" VerticalAlignment="Center"/>
-                                                    </StackPanel>
-                                                </Button>
-                                                <Button Click="OnSelectedAlignRightClick" Style="{StaticResource ModernAlignBtnStyle}" Height="32" ToolTip="텍스트 우측 정렬">
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                        <Viewbox Width="12" Height="12" Margin="0,0,5,0">
-                                                            <Canvas Width="16" Height="16">
-                                                                <Line X1="2" Y1="3.5" X2="14" Y2="3.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                                <Line X1="6.5" Y1="8" X2="14" Y2="8" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                                <Line X1="3" Y1="12.5" X2="14" Y2="12.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                                            </Canvas>
-                                                        </Viewbox>
-                                                        <TextBlock Text="우측" FontSize="11.5" VerticalAlignment="Center"/>
-                                                    </StackPanel>
-                                                </Button>
-                                            </UniformGrid>
-                                        </DockPanel>
-
-                                        <!-- 특수 서식: 세로쓰기, 미러(좌우반전), 음영반전(흑백반전) -->
-                                        <DockPanel Margin="0,8,0,0">
-                                            <TextBlock Text="효과" Width="42" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                            <UniformGrid Columns="3">
-                                                <ToggleButton IsChecked="{Binding SelectedElementIsVertical}" Height="32" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="세로쓰기 (한 글자씩 세로 작성)">
-                                                    <TextBlock Text="세로쓰기" FontSize="11.5" FontWeight="SemiBold"/>
-                                                </ToggleButton>
-                                                <ToggleButton IsChecked="{Binding SelectedElementIsMirrored}" Height="32" Margin="4,0,4,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="미러 (좌우 반전)">
-                                                    <TextBlock Text="미러 반전" FontSize="11.5" FontWeight="SemiBold"/>
-                                                </ToggleButton>
-                                                <ToggleButton IsChecked="{Binding SelectedElementIsInverse}" Height="32" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="음영 반전 (검정 배경 + 흰색 글씨)">
-                                                    <TextBlock Text="음영 반전" FontSize="11.5" FontWeight="SemiBold"/>
-                                                </ToggleButton>
-                                            </UniformGrid>
-                                        </DockPanel>
-
-                                        <!-- 구분선 -->
-                                        <Separator Background="#E2E8F0" Margin="0,10,0,8"/>
-
                                         <!-- 자간 / 장평 / 줄간격 (글자간격) 정밀 조절 -->
                                         <StackPanel>
                                             <DockPanel Margin="0,0,0,6">
@@ -2095,29 +1994,115 @@
                                             </DockPanel>
                                         </Grid>
 
-                                        <!-- 선 두께 Stepper & 헤더 강조 -->
-                                        <Grid Margin="0,0,0,8">
+                                        <!-- 외곽선 두께/타입 & 내부선 두께/타입 설정 -->
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="6"/>
+                                                <ColumnDefinition Width="95"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="외곽선" Width="44" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <DockPanel Grid.Column="1">
+                                                <Button Content="-" Command="{Binding StepTableLineWidthCommand}" CommandParameter="-0.5" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26" Margin="0,0,2,0" ToolTip="외곽선 두께 0.5px 감소"/>
+                                                <Button Content="+" Command="{Binding StepTableLineWidthCommand}" CommandParameter="0.5" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26" Margin="2,0,0,0" ToolTip="외곽선 두께 0.5px 증가"/>
+                                                <TextBox Text="{Binding SelectedElementTableLineWidth, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:0.#}'}" Height="26" FontSize="11.5" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1" ToolTip="표 외곽 테두리 두께 (px)"/>
+                                            </DockPanel>
+                                            <ComboBox Grid.Column="3" ItemsSource="{Binding AvailableTableLineStyles}"
+                                                      SelectedValue="{Binding SelectedElementTableOuterLineStyle}"
+                                                      SelectedValuePath="Code"
+                                                      DisplayMemberPath="Name"
+                                                      Height="26" FontSize="11" VerticalContentAlignment="Center"
+                                                      ToolTip="표 외곽 테두리 선 스타일 선택"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="6"/>
+                                                <ColumnDefinition Width="95"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="내부선" Width="44" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <DockPanel Grid.Column="1">
+                                                <Button Content="-" Command="{Binding StepTableInnerLineWidthCommand}" CommandParameter="-0.5" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26" Margin="0,0,2,0" ToolTip="내부선 두께 0.5px 감소"/>
+                                                <Button Content="+" Command="{Binding StepTableInnerLineWidthCommand}" CommandParameter="0.5" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26" Margin="2,0,0,0" ToolTip="내부선 두께 0.5px 증가"/>
+                                                <TextBox Text="{Binding SelectedElementTableInnerLineWidth, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:0.#}'}" Height="26" FontSize="11.5" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1" ToolTip="표 내부 가로/세로선 두께 (px)"/>
+                                            </DockPanel>
+                                            <ComboBox Grid.Column="3" ItemsSource="{Binding AvailableTableLineStyles}"
+                                                      SelectedValue="{Binding SelectedElementTableInnerLineStyle}"
+                                                      SelectedValuePath="Code"
+                                                      DisplayMemberPath="Name"
+                                                      Height="26" FontSize="11" VerticalContentAlignment="Center"
+                                                      ToolTip="표 내부 가로/세로선 스타일 선택"/>
+                                        </Grid>
+
+                                        <!-- 셀 내부 여백 Stepper & 헤더 강조 -->
+                                        <Grid Margin="0,0,0,6">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="8"/>
-                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <!-- 선 두께 Stepper -->
+                                            <!-- 셀 내부 여백(간격) Stepper -->
                                             <DockPanel Grid.Column="0">
-                                                <TextBlock Text="두께" Width="26" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                                <Button Content="-" Command="{Binding StepTableLineWidthCommand}" CommandParameter="-1" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26" Margin="0,0,2,0" ToolTip="선 두께 1px 감소"/>
-                                                <Button Content="+" Command="{Binding StepTableLineWidthCommand}" CommandParameter="1" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26" Margin="2,0,0,0" ToolTip="선 두께 1px 증가"/>
-                                                <TextBox Text="{Binding SelectedElementTableLineWidth, UpdateSourceTrigger=PropertyChanged}" Height="26" FontSize="11.5" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1"/>
+                                                <TextBlock Text="여백(mm)" Width="54" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                                <Button Content="-" Command="{Binding StepTableCellPaddingCommand}" CommandParameter="-0.5" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26" Margin="0,0,2,0" ToolTip="셀 내부 여백 0.5mm 감소"/>
+                                                <Button Content="+" Command="{Binding StepTableCellPaddingCommand}" CommandParameter="0.5" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="18" Height="26" Margin="2,0,0,0" ToolTip="셀 내부 여백 0.5mm 증가"/>
+                                                <TextBox Text="{Binding SelectedElementTableCellPadding, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:0.#}'}" Height="26" FontSize="11.5" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1" ToolTip="셀 테두리와 텍스트 사이의 내부 여백 (mm)"/>
                                             </DockPanel>
                                             <!-- 헤더 행 음영 강조 체크박스 -->
                                             <CheckBox Grid.Column="2" Content="첫 행 음영" IsChecked="{Binding SelectedElementTableIsFilled}" VerticalAlignment="Center" Style="{StaticResource ModernCheckBoxStyle}" FontSize="11.5" ToolTip="표의 첫 번째 행(헤더)에 배경 음영을 채웁니다."/>
                                         </Grid>
 
                                         <!-- 균등 분할 버튼 -->
-                                        <UniformGrid Columns="2" Margin="0,0,0,8">
-                                            <Button Content="↔ 열 너비 균등" Command="{Binding EvenTableColumnsCommand}" Style="{StaticResource ModernAlignBtnStyle}" Height="26" FontSize="11" Margin="0,0,3,0" ToolTip="모든 열의 폭을 균등하게 재조정합니다."/>
-                                            <Button Content="↕ 행 높이 균등" Command="{Binding EvenTableRowsCommand}" Style="{StaticResource ModernAlignBtnStyle}" Height="26" FontSize="11" Margin="3,0,0,0" ToolTip="모든 행의 높이를 균등하게 재조정합니다."/>
+                                        <UniformGrid Columns="2" Margin="0,0,0,6">
+                                            <Button Content="↔ 열 너비 균등" Command="{Binding EvenTableColumnsCommand}" Style="{StaticResource ModernAlignBtnStyle}" Height="26" FontSize="11" Margin="0,0,3,0" ToolTip="모든 열의 폭을 균등하게 재조정합니다. (캔버스에서 표 내부 세로선을 드래그하여 개별 조절 가능)"/>
+                                            <Button Content="↕ 행 높이 균등" Command="{Binding EvenTableRowsCommand}" Style="{StaticResource ModernAlignBtnStyle}" Height="26" FontSize="11" Margin="3,0,0,0" ToolTip="모든 행의 높이를 균등하게 재조정합니다. (캔버스에서 표 내부 가로선을 드래그하여 개별 조절 가능)"/>
                                         </UniformGrid>
+
+                                        <!-- 표 전체 텍스트 정렬 버튼 (좌측 / 중앙 / 우측) -->
+                                        <DockPanel Margin="0,0,0,8">
+                                            <TextBlock Text="텍스트 정렬" Width="64" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <UniformGrid Columns="3">
+                                                <Button Click="OnSelectedAlignLeftClick" Style="{StaticResource ModernAlignBtnStyle}" Height="28" ToolTip="표 내부 텍스트 좌측 정렬">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                        <Viewbox Width="11" Height="11" Margin="0,0,4,0">
+                                                            <Canvas Width="16" Height="16">
+                                                                <Line X1="2" Y1="3.5" X2="14" Y2="3.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                                <Line X1="2" Y1="8" X2="9.5" Y2="8" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                                <Line X1="2" Y1="12.5" X2="13" Y2="12.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                        <TextBlock Text="좌측" FontSize="11" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Click="OnSelectedAlignCenterClick" Style="{StaticResource ModernAlignBtnStyle}" Height="28" ToolTip="표 내부 텍스트 가운데 정렬">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                        <Viewbox Width="11" Height="11" Margin="0,0,4,0">
+                                                            <Canvas Width="16" Height="16">
+                                                                <Line X1="2" Y1="3.5" X2="14" Y2="3.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                                <Line X1="4.5" Y1="8" X2="11.5" Y2="8" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                                <Line X1="2.5" Y1="12.5" X2="13.5" Y2="12.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                        <TextBlock Text="중앙" FontSize="11" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Click="OnSelectedAlignRightClick" Style="{StaticResource ModernAlignBtnStyle}" Height="28" ToolTip="표 내부 텍스트 우측 정렬">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                        <Viewbox Width="11" Height="11" Margin="0,0,4,0">
+                                                            <Canvas Width="16" Height="16">
+                                                                <Line X1="2" Y1="3.5" X2="14" Y2="3.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                                <Line X1="6.5" Y1="8" X2="14" Y2="8" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                                <Line X1="3" Y1="12.5" X2="14" Y2="12.5" Stroke="#475569" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                        <TextBlock Text="우측" FontSize="11" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </UniformGrid>
+                                        </DockPanel>
 
                                         <Separator Background="#E2E8F0" Margin="0,4,0,8"/>
 
@@ -2171,8 +2156,7 @@
                                                     <!-- 특정 행 일괄 적용 -->
                                                     <DockPanel Grid.Column="0">
                                                         <ComboBox ItemsSource="{Binding AvailableTableRows}"
-                                                                  SelectedValue="{Binding SelectedTableRowIndex}"
-                                                                  SelectedValuePath="Code"
+                                                                  SelectedIndex="{Binding SelectedTableRowIndex, Mode=TwoWay}"
                                                                   DisplayMemberPath="Name"
                                                                   Height="24" FontSize="10.5" Width="52" Margin="0,0,4,0"/>
                                                         <Button Content="행 적용" Command="{Binding ApplyTableRowFontCommand}"
@@ -2183,8 +2167,7 @@
                                                     <!-- 특정 열 일괄 적용 -->
                                                     <DockPanel Grid.Column="2">
                                                         <ComboBox ItemsSource="{Binding AvailableTableColumns}"
-                                                                  SelectedValue="{Binding SelectedTableColumnIndex}"
-                                                                  SelectedValuePath="Code"
+                                                                  SelectedIndex="{Binding SelectedTableColumnIndex, Mode=TwoWay}"
                                                                   DisplayMemberPath="Name"
                                                                   Height="24" FontSize="10.5" Width="52" Margin="0,0,4,0"/>
                                                         <Button Content="열 적용" Command="{Binding ApplyTableColumnFontCommand}"
@@ -2226,10 +2209,13 @@
 
                                                                         <!-- 셀 개별 서식 빠른 조절 버튼들 -->
                                                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                                                            <Button Content="-" Command="{Binding DecreaseFontSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="15" Height="17" Margin="0,0,1,0" FontSize="8.5" ToolTip="이 셀 글자크기 1pt 감소"/>
+                                                                            <Button Content="-" Command="{Binding DecreaseFontSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="14" Height="17" Margin="0,0,1,0" FontSize="8.5" ToolTip="이 셀 글자크기 1pt 감소"/>
                                                                             <TextBlock Text="{Binding CellFontSize, StringFormat='{}{0:0}'}" FontSize="9" FontWeight="SemiBold" Foreground="#475569" VerticalAlignment="Center" Margin="1,0"/>
-                                                                            <Button Content="+" Command="{Binding IncreaseFontSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="15" Height="17" Margin="1,0,2,0" FontSize="8.5" ToolTip="이 셀 글자크기 1pt 증가"/>
-                                                                            <ToggleButton Content="B" IsChecked="{Binding CellIsBold}" Width="16" Height="17" FontSize="8.5" FontWeight="Bold" Margin="0,0,1,0" ToolTip="이 셀 굵게 토글"/>
+                                                                            <Button Content="+" Command="{Binding IncreaseFontSizeCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="14" Height="17" Margin="1,0,2,0" FontSize="8.5" ToolTip="이 셀 글자크기 1pt 증가"/>
+                                                                            <ToggleButton Content="B" IsChecked="{Binding CellIsBold}" Style="{StaticResource ModernToggleBtnStyle}" Width="16" Height="17" FontSize="8.5" FontWeight="Bold" Margin="0,0,2,0" ToolTip="이 셀 굵게 토글"/>
+                                                                            <ToggleButton Content="좌" IsChecked="{Binding IsAlignLeft, Mode=OneWay}" Command="{Binding SetCellAlignCommand}" CommandParameter="LEFT" Style="{StaticResource ModernToggleBtnStyle}" Width="16" Height="17" FontSize="8" Margin="0,0,1,0" ToolTip="이 셀 텍스트 좌측 정렬"/>
+                                                                            <ToggleButton Content="중" IsChecked="{Binding IsAlignCenter, Mode=OneWay}" Command="{Binding SetCellAlignCommand}" CommandParameter="CENTER" Style="{StaticResource ModernToggleBtnStyle}" Width="16" Height="17" FontSize="8" Margin="0,0,1,0" ToolTip="이 셀 텍스트 가운데 정렬"/>
+                                                                            <ToggleButton Content="우" IsChecked="{Binding IsAlignRight, Mode=OneWay}" Command="{Binding SetCellAlignCommand}" CommandParameter="RIGHT" Style="{StaticResource ModernToggleBtnStyle}" Width="16" Height="17" FontSize="8" Margin="0,0,1,0" ToolTip="이 셀 텍스트 우측 정렬"/>
                                                                         </StackPanel>
                                                                     </DockPanel>
 
@@ -2272,86 +2258,7 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- 5. 위치 및 크기 정밀 조정 (X, Y, W, H mm) + Numeric Up/Down Stepper -->
-                                <Border Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1.2" CornerRadius="8" Padding="12" Margin="0,0,0,12">
-                                    <StackPanel>
-                                        <TextBlock Text="📏 위치 및 크기 (mm)" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,8,8"/>
-                                        <Grid Margin="0,0,0,8">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="8"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <!-- X Stepper -->
-                                            <DockPanel Grid.Column="0">
-                                                <TextBlock Text="X" Width="16" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                                <Button Content="-" Command="{Binding StepXCommand}" CommandParameter="-0.5" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="30" FontSize="13" Margin="0,0,2,0"/>
-                                                <Button Content="+" Command="{Binding StepXCommand}" CommandParameter="0.5" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="30" FontSize="13" Margin="2,0,0,0"/>
-                                                <TextBox Text="{Binding SelectedElementX, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:0.#}'}" Height="30" FontSize="13" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1"/>
-                                            </DockPanel>
-                                            <!-- Y Stepper -->
-                                            <DockPanel Grid.Column="2">
-                                                <TextBlock Text="Y" Width="16" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                                <Button Content="-" Command="{Binding StepYCommand}" CommandParameter="-0.5" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="30" FontSize="13" Margin="0,0,2,0"/>
-                                                <Button Content="+" Command="{Binding StepYCommand}" CommandParameter="0.5" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="30" FontSize="13" Margin="2,0,0,0"/>
-                                                <TextBox Text="{Binding SelectedElementY, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:0.#}'}" Height="30" FontSize="13" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1"/>
-                                            </DockPanel>
-                                        </Grid>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="8"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <!-- Width Stepper -->
-                                            <DockPanel Grid.Column="0">
-                                                <TextBlock Text="폭" Width="20" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                                <Button Content="-" Command="{Binding StepWidthCommand}" CommandParameter="-0.5" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="30" FontSize="13" Margin="0,0,2,0"/>
-                                                <Button Content="+" Command="{Binding StepWidthCommand}" CommandParameter="0.5" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="30" FontSize="13" Margin="2,0,0,0"/>
-                                                <TextBox Text="{Binding SelectedElementWidth, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:0.#}'}" Height="30" FontSize="13" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1"/>
-                                            </DockPanel>
-                                            <!-- Height Stepper -->
-                                            <DockPanel Grid.Column="2">
-                                                <TextBlock Text="높이" Width="28" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                                <Button Content="-" Command="{Binding StepHeightCommand}" CommandParameter="-0.5" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="30" FontSize="13" Margin="0,0,2,0"/>
-                                                <Button Content="+" Command="{Binding StepHeightCommand}" CommandParameter="0.5" DockPanel.Dock="Right" Style="{StaticResource MiniStepBtnStyle}" Width="24" Height="30" FontSize="13" Margin="2,0,0,0"/>
-                                                <TextBox Text="{Binding SelectedElementHeight, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:0.#}'}" Height="30" FontSize="13" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1"/>
-                                            </DockPanel>
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- 6. 앞/뒤 순서 변경 카드 -->
-                                <Border Background="White" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,10">
-                                    <StackPanel>
-                                        <TextBlock Text="앞/뒤 순서 (Z-Index)" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="4"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="4"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="4"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Command="{Binding BringToFrontCommand}" Style="{StaticResource ModernButtonStyle}" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" Height="32" Padding="2" ToolTip="맨 앞으로 가져오기 (Ctrl+Shift+])">
-                                                <TextBlock Text="⮵ 맨앞" FontSize="11" FontWeight="Bold" Foreground="#2563EB"/>
-                                            </Button>
-                                            <Button Grid.Column="2" Command="{Binding BringForwardCommand}" Style="{StaticResource ModernButtonStyle}" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" Height="32" Padding="2" ToolTip="한 단계 앞으로 (Ctrl+])">
-                                                <TextBlock Text="⬆ 앞" FontSize="11" FontWeight="Bold" Foreground="#3B82F6"/>
-                                            </Button>
-                                            <Button Grid.Column="4" Command="{Binding SendBackwardCommand}" Style="{StaticResource ModernButtonStyle}" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" Height="32" Padding="2" ToolTip="한 단계 뒤로 (Ctrl+[)">
-                                                <TextBlock Text="⬇ 뒤" FontSize="11" FontWeight="Bold" Foreground="#3B82F6"/>
-                                            </Button>
-                                            <Button Grid.Column="6" Command="{Binding SendToBackCommand}" Style="{StaticResource ModernButtonStyle}" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" Height="32" Padding="2" ToolTip="맨 뒤로 보내기 (Ctrl+Shift+[)">
-                                                <TextBlock Text="⮶ 맨뒤" FontSize="11" FontWeight="Bold" Foreground="#2563EB"/>
-                                            </Button>
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- 7. 빠른 액션 (복제 / 삭제) -->
+                                <!-- 5. 빠른 액션 (복제 / 삭제) -->
                                 <Grid Margin="0,0,0,10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>

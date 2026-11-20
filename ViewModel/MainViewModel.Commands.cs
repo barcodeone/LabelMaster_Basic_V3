@@ -97,6 +97,9 @@ namespace BarcodePrint.ViewModel
         public ICommand StepTableRowsCommand { get; private set; }
         public ICommand StepTableColumnsCommand { get; private set; }
         public ICommand StepTableLineWidthCommand { get; private set; }
+        public ICommand StepTableInnerLineWidthCommand { get; private set; }
+        public ICommand StepTableCellPaddingCommand { get; private set; }
+        public ICommand SetElementTextAlignCommand { get; private set; }
         public ICommand EvenTableColumnsCommand { get; private set; }
         public ICommand EvenTableRowsCommand { get; private set; }
         public ICommand UnlinkExcelCommand { get; private set; }
@@ -323,6 +326,9 @@ namespace BarcodePrint.ViewModel
             StepTableRowsCommand = new RelayCommand(p => StepTableRows((int)ParseStepDelta(p)));
             StepTableColumnsCommand = new RelayCommand(p => StepTableColumns((int)ParseStepDelta(p)));
             StepTableLineWidthCommand = new RelayCommand(p => StepTableLineWidth((float)ParseStepDelta(p)));
+            StepTableInnerLineWidthCommand = new RelayCommand(p => StepTableInnerLineWidth((float)ParseStepDelta(p)));
+            StepTableCellPaddingCommand = new RelayCommand(p => StepTableCellPadding(ParseStepDelta(p)));
+            SetElementTextAlignCommand = new RelayCommand(p => { if (p != null) SetSelectedElementTextAlignment(p.ToString()); });
             EvenTableColumnsCommand = new RelayCommand(_ => EvenTableColumns());
             EvenTableRowsCommand = new RelayCommand(_ => EvenTableRows());
             UnlinkExcelCommand = new RelayCommand(_ => ExecuteUnlinkExcel());

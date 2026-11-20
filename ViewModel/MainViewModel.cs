@@ -110,7 +110,7 @@ namespace BarcodePrint.ViewModel
                     }
                 }
                 catch { }
-                return "v1.0.18";
+                return "v1.1.0";
             }
         }
 
@@ -908,7 +908,7 @@ namespace BarcodePrint.ViewModel
 
         public string SerialAlign
         {
-            get => _settings.SerialAlign ?? "LEFT";
+            get => _settings.SerialAlign ?? "CENTER";
             set
             {
                 if (_settings.SerialAlign != value)
@@ -1650,28 +1650,43 @@ namespace BarcodePrint.ViewModel
         #region Properties - Inputs & State
 
         private string _inputCol1 = "";
-        public string InputCol1 { get => _inputCol1; set { if (SetProperty(ref _inputCol1, value)) { OnPropertyChanged(nameof(Col1EffectiveText)); UpdatePreview(); } } }
+        public string InputCol1 { get => _inputCol1; set { if (SetProperty(ref _inputCol1, value)) { SyncInputColToTemplateElement(1, value); OnPropertyChanged(nameof(Col1EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol2 = "";
-        public string InputCol2 { get => _inputCol2; set { if (SetProperty(ref _inputCol2, value)) { OnPropertyChanged(nameof(Col2EffectiveText)); UpdatePreview(); } } }
+        public string InputCol2 { get => _inputCol2; set { if (SetProperty(ref _inputCol2, value)) { SyncInputColToTemplateElement(2, value); OnPropertyChanged(nameof(Col2EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol3 = "";
-        public string InputCol3 { get => _inputCol3; set { if (SetProperty(ref _inputCol3, value)) { OnPropertyChanged(nameof(Col3EffectiveText)); UpdatePreview(); } } }
+        public string InputCol3 { get => _inputCol3; set { if (SetProperty(ref _inputCol3, value)) { SyncInputColToTemplateElement(3, value); OnPropertyChanged(nameof(Col3EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol4 = "";
-        public string InputCol4 { get => _inputCol4; set { if (SetProperty(ref _inputCol4, value)) { OnPropertyChanged(nameof(Col4EffectiveText)); UpdatePreview(); } } }
+        public string InputCol4 { get => _inputCol4; set { if (SetProperty(ref _inputCol4, value)) { SyncInputColToTemplateElement(4, value); OnPropertyChanged(nameof(Col4EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol5 = "";
-        public string InputCol5 { get => _inputCol5; set { if (SetProperty(ref _inputCol5, value)) { OnPropertyChanged(nameof(Col5EffectiveText)); UpdatePreview(); } } }
+        public string InputCol5 { get => _inputCol5; set { if (SetProperty(ref _inputCol5, value)) { SyncInputColToTemplateElement(5, value); OnPropertyChanged(nameof(Col5EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol6 = "";
-        public string InputCol6 { get => _inputCol6; set { if (SetProperty(ref _inputCol6, value)) { OnPropertyChanged(nameof(Col6EffectiveText)); UpdatePreview(); } } }
+        public string InputCol6 { get => _inputCol6; set { if (SetProperty(ref _inputCol6, value)) { SyncInputColToTemplateElement(6, value); OnPropertyChanged(nameof(Col6EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol7 = "";
-        public string InputCol7 { get => _inputCol7; set { if (SetProperty(ref _inputCol7, value)) { OnPropertyChanged(nameof(Col7EffectiveText)); UpdatePreview(); } } }
+        public string InputCol7 { get => _inputCol7; set { if (SetProperty(ref _inputCol7, value)) { SyncInputColToTemplateElement(7, value); OnPropertyChanged(nameof(Col7EffectiveText)); UpdatePreview(); } } }
 
         private string _inputCol8 = "";
-        public string InputCol8 { get => _inputCol8; set { if (SetProperty(ref _inputCol8, value)) { OnPropertyChanged(nameof(Col8EffectiveText)); UpdatePreview(); } } }
+        public string InputCol8 { get => _inputCol8; set { if (SetProperty(ref _inputCol8, value)) { SyncInputColToTemplateElement(8, value); OnPropertyChanged(nameof(Col8EffectiveText)); UpdatePreview(); } } }
+
+        private void SyncInputColToTemplateElement(int colIndex, string value)
+        {
+            if (_currentTemplate?.Elements == null) return;
+            var elem = _currentTemplate.Elements.FirstOrDefault(e => e.IsVariable && e.InputOrder == colIndex);
+            if (elem != null && elem.Content != (value ?? ""))
+            {
+                elem.Content = value ?? "";
+                if (_selectedElement == elem)
+                {
+                    OnPropertyChanged(nameof(SelectedElementContent));
+                    OnPropertyChanged(nameof(SelectedElementEffectivePreviewText));
+                }
+            }
+        }
 
         public bool IsCol1Keep { get => _settings.IsCol1Keep; set { _settings.IsCol1Keep = value; OnPropertyChanged(); } }
         public bool IsCol2Keep { get => _settings.IsCol2Keep; set { _settings.IsCol2Keep = value; OnPropertyChanged(); } }
@@ -2219,32 +2234,140 @@ namespace BarcodePrint.ViewModel
             }
         }
 
+        private string _currentTemplateFilePath = "";
+        private string _currentRecentTitle = "";
+        private string _loadedExcelFilePath = "";
+
+        public void SyncViewModelToCurrentTemplate()
+        {
+            if (_currentTemplate == null)
+            {
+                InitializeDefaultTemplateFromCurrentSettings();
+            }
+
+            if (_currentTemplate == null) return;
+
+            _currentTemplate.WidthMm = PaperWidth;
+            _currentTemplate.HeightMm = PaperHeight;
+            _currentTemplate.Rotation = LabelRotationAngle;
+            _currentTemplate.PaperType = PaperType;
+            _currentTemplate.GapHeightMm = GapHeight;
+            _currentTemplate.BlineOffsetMm = BlineOffset;
+
+            if (!string.IsNullOrEmpty(_loadedExcelFilePath))
+            {
+                _currentTemplate.ExcelFilePath = _loadedExcelFilePath;
+                _currentTemplate.ExcelFileName = LoadedExcelFileName;
+            }
+
+            if (_currentTemplate.Elements != null)
+            {
+                int syncCount = Math.Min(8, ActiveColumnCount);
+                for (int i = 1; i <= syncCount; i++)
+                {
+                    var match = _currentTemplate.Elements.FirstOrDefault(e => e.IsVariable && e.InputOrder == i);
+                    if (match != null)
+                    {
+                        string hdr = GetHeaderByIndex(i);
+                        if (!string.IsNullOrEmpty(hdr)) match.HeaderName = hdr;
+
+                        string inputVal = GetInputByIndex(i);
+                        if (!string.IsNullOrEmpty(inputVal))
+                        {
+                            match.Content = inputVal;
+                        }
+
+                        match.IncludeHeaderOnLabel = GetIncludeHeaderByIndex(i);
+                        match.IsPriceFormat = GetPriceByIndex(i);
+                        match.IsKeep = GetKeepByIndex(i);
+                    }
+                }
+            }
+        }
+
+        private static string MakeSafeRecentFileName(string rawName)
+        {
+            if (string.IsNullOrWhiteSpace(rawName)) return "recent_label";
+            char[] invalid = Path.GetInvalidFileNameChars();
+            var sb = new StringBuilder(rawName.Length);
+            foreach (char c in rawName)
+            {
+                sb.Append(invalid.Contains(c) || c == ' ' ? '_' : c);
+            }
+            return sb.ToString();
+        }
+
+        public string SaveCurrentTemplateSnapshot()
+        {
+            try
+            {
+                SyncViewModelToCurrentTemplate();
+                if (_currentTemplate == null) return "";
+
+                string infoDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
+                if (!Directory.Exists(infoDir)) Directory.CreateDirectory(infoDir);
+
+                // 1. 기본 자동 백업 파일 저장
+                string autoSavePath = Path.Combine(infoDir, "autosave_template.lbm");
+                _templateService.ExportTemplateModel(_currentTemplate, autoSavePath, out _);
+
+                // 2. 최근 작업 내역 전용 개별 스냅샷 파일 저장
+                string recentDir = Path.Combine(infoDir, "RecentWorks");
+                if (!Directory.Exists(recentDir)) Directory.CreateDirectory(recentDir);
+
+                int w = (int)PaperWidth;
+                int h = (int)PaperHeight;
+                string paperType = !string.IsNullOrEmpty(_currentTemplate.PaperType) ? _currentTemplate.PaperType : (PaperType ?? "GAP");
+                int rot = _currentTemplate.Rotation;
+
+                string targetPath = _currentTemplateFilePath;
+                if (!string.IsNullOrEmpty(targetPath))
+                {
+                    if (!_templateService.ExportTemplateModel(_currentTemplate, targetPath, out _))
+                    {
+                        string safeTitle = MakeSafeRecentFileName(!string.IsNullOrEmpty(_currentRecentTitle) ? _currentRecentTitle : $"라벨_{w}x{h}");
+                        targetPath = Path.Combine(recentDir, $"{safeTitle}_{w}x{h}_{paperType}_{rot}.lbm");
+                        _templateService.ExportTemplateModel(_currentTemplate, targetPath, out _);
+                        _currentTemplateFilePath = targetPath;
+                    }
+                }
+                else
+                {
+                    string safeTitle = MakeSafeRecentFileName(!string.IsNullOrEmpty(_currentRecentTitle) ? _currentRecentTitle : $"라벨_{w}x{h}");
+                    targetPath = Path.Combine(recentDir, $"{safeTitle}_{w}x{h}_{paperType}_{rot}.lbm");
+                    _templateService.ExportTemplateModel(_currentTemplate, targetPath, out _);
+                    _currentTemplateFilePath = targetPath;
+                }
+
+                return targetPath;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"SaveCurrentTemplateSnapshot Error: {ex.Message}");
+                return "";
+            }
+        }
+
         public void SaveSettingsSilently()
         {
             try
             {
+                string savedTemplatePath = SaveCurrentTemplateSnapshot();
+
                 int w = (int)PaperWidth;
                 int h = (int)PaperHeight;
                 if (w > 0 && h > 0)
                 {
-                    string paperType = _currentTemplate?.PaperType ?? "GAP";
+                    string paperType = _currentTemplate?.PaperType ?? PaperType ?? "GAP";
                     int rot = _currentTemplate?.Rotation ?? LabelRotationAngle;
-                    _settings.AddRecentWork($"라벨 {w}×{h} mm", w, h, paperType, rot);
+                    string title = !string.IsNullOrEmpty(_currentRecentTitle) ? _currentRecentTitle : $"라벨 {w}×{h} mm";
+                    _settings.AddRecentWork(title, w, h, paperType, rot, savedTemplatePath);
                 }
                 else
                 {
                     _settings.HasRecentWork = true;
                     _settings.LastWorkedDate = DateTime.Now.ToString("yyyy.MM.dd");
                     _settings.Save();
-                }
-
-                // 현재 편집 중인 템플릿 상태를 자동 백업 파일로 보존
-                if (_currentTemplate != null)
-                {
-                    string autoSaveDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
-                    if (!Directory.Exists(autoSaveDir)) Directory.CreateDirectory(autoSaveDir);
-                    string autoSavePath = Path.Combine(autoSaveDir, "autosave_template.lbm");
-                    _templateService.ExportTemplateModel(_currentTemplate, autoSavePath, out _);
                 }
 
                 SaveHistoryRecords();
@@ -2259,13 +2382,16 @@ namespace BarcodePrint.ViewModel
         {
             try
             {
+                string savedTemplatePath = SaveCurrentTemplateSnapshot();
+
                 int w = (int)PaperWidth;
                 int h = (int)PaperHeight;
                 if (w > 0 && h > 0)
                 {
-                    string paperType = _currentTemplate?.PaperType ?? "GAP";
+                    string paperType = _currentTemplate?.PaperType ?? PaperType ?? "GAP";
                     int rot = _currentTemplate?.Rotation ?? LabelRotationAngle;
-                    _settings.AddRecentWork($"라벨 {w}×{h} mm", w, h, paperType, rot);
+                    string title = !string.IsNullOrEmpty(_currentRecentTitle) ? _currentRecentTitle : $"라벨 {w}×{h} mm";
+                    _settings.AddRecentWork(title, w, h, paperType, rot, savedTemplatePath);
                 }
                 else
                 {
@@ -2284,40 +2410,7 @@ namespace BarcodePrint.ViewModel
 
         public void ExecuteExportTemplate()
         {
-            if (CurrentTemplate == null)
-            {
-                InitializeDefaultTemplateFromCurrentSettings();
-            }
-
-            // 1. 현재 ViewModel의 1~8열 및 용지 상태를 CurrentTemplate에 최신 동기화
-            CurrentTemplate.WidthMm = EffectivePaperWidth;
-            CurrentTemplate.HeightMm = EffectivePaperHeight;
-            CurrentTemplate.Rotation = LabelRotationAngle;
-            CurrentTemplate.PaperType = PaperType;
-
-            for (int i = 1; i <= ActiveColumnCount; i++)
-            {
-                var match = CurrentTemplate.Elements.FirstOrDefault(e => e.IsVariable && e.InputOrder == i);
-                if (match != null)
-                {
-                    match.HeaderName = GetHeaderByIndex(i);
-                    match.Content = GetInputByIndex(i) ?? "";
-                    match.FontSize = GetSizeByIndex(i);
-                    match.FontName = GetFontByIndex(i) ?? "맑은 고딕";
-                    match.IsBold = GetBoldByIndex(i);
-                    match.IsItalic = GetItalicByIndex(i);
-                    match.Alignment = GetAlignByIndex(i) ?? "LEFT";
-                    match.IncludeHeaderOnLabel = GetIncludeHeaderByIndex(i);
-                    match.IsPriceFormat = GetPriceByIndex(i);
-                    match.IsKeep = GetKeepByIndex(i);
-                    bool isBc = GetBarcodeByIndex(i);
-                    match.Type = isBc ? (GetBarcodeTypeByIndex(i) == "QR_CODE" ? ElementType.QR_CODE : ElementType.BARCODE) : ElementType.TEXT;
-                    match.BarcodeType = GetBarcodeTypeByIndex(i) ?? "CODE128";
-                    match.X = GetOffsetXByIndex(i);
-                    match.Y = GetOffsetYByIndex(i);
-                    match.Width = GetWidthByIndex(i) > 0 ? GetWidthByIndex(i) : match.Width;
-                }
-            }
+            SyncViewModelToCurrentTemplate();
 
             string defaultName = $"라벨_템플릿_{PaperWidth}x{PaperHeight}_{DateTime.Now:yyyyMMdd}.lbm";
             if (_dialogService.ShowSaveFileDialog("LabelMaster 템플릿 (*.lbm)|*.lbm|JSON 서식 (*.json)|*.json|모든 파일 (*.*)|*.*", ".lbm", defaultName, out string filePath))
@@ -2325,6 +2418,8 @@ namespace BarcodePrint.ViewModel
                 if (_templateService.ExportTemplateModel(CurrentTemplate, filePath, out string err))
                 {
                     string title = Path.GetFileNameWithoutExtension(filePath);
+                    _currentTemplateFilePath = filePath;
+                    _currentRecentTitle = title;
                     _settings.AddRecentWork(title, (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, filePath);
 
                     StatusMessage = $"템플릿 저장 완료: {Path.GetFileName(filePath)}";
@@ -2342,6 +2437,10 @@ namespace BarcodePrint.ViewModel
         {
             if (_dialogService.ShowOpenFileDialog("LabelMaster 템플릿 (*.lbm;*.json)|*.lbm;*.json|모든 파일 (*.*)|*.*", ".lbm", out string filePath))
             {
+                if (_currentTemplate != null)
+                {
+                    SaveSettingsSilently();
+                }
                 var loaded = _templateService.ImportTemplateModel(filePath, out string err);
                 if (loaded != null)
                 {
@@ -2591,7 +2690,7 @@ namespace BarcodePrint.ViewModel
         {
             int paperH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 40;
             int safeY = Math.Max(2, Math.Min(paperH - 6, (idx - 1) * 4 + 2));
-            SetColumnDataByIndex(idx, $"항목{idx}", false, false, false, "CODE128", true, 12, 2, safeY, "", "맑은 고딕", true, false, "LEFT", 0, 0, "CENTER");
+            SetColumnDataByIndex(idx, $"항목{idx}", false, false, false, "CODE128", true, 12, 2, safeY, "", "맑은 고딕", true, false, "CENTER", 0, 0, "CENTER");
         }
 
         private void ShiftRecordColumns(PrintRecordModel rec, int fromColIndex)
@@ -2679,7 +2778,7 @@ namespace BarcodePrint.ViewModel
             string font = "맑은 고딕",
             bool isBold = true,
             bool isItalic = false,
-            string align = "LEFT",
+            string align = "CENTER",
             int width = 0,
             int rowHeight = 0,
             string headerAlign = "CENTER")
@@ -2997,18 +3096,18 @@ namespace BarcodePrint.ViewModel
         {
             switch (idx)
             {
-                case 1: return _settings.Col1Align ?? "LEFT";
-                case 2: return _settings.Col2Align ?? "LEFT";
-                case 3: return _settings.Col3Align ?? "LEFT";
-                case 4: return _settings.Col4Align ?? "LEFT";
-                case 5: return _settings.Col5Align ?? "LEFT";
-                case 6: return _settings.Col6Align ?? "LEFT";
-                case 7: return _settings.Col7Align ?? "LEFT";
-                case 8: return _settings.Col8Align ?? "LEFT";
-                case 99: return "LEFT";
+                case 1: return _settings.Col1Align ?? "CENTER";
+                case 2: return _settings.Col2Align ?? "CENTER";
+                case 3: return _settings.Col3Align ?? "CENTER";
+                case 4: return _settings.Col4Align ?? "CENTER";
+                case 5: return _settings.Col5Align ?? "CENTER";
+                case 6: return _settings.Col6Align ?? "CENTER";
+                case 7: return _settings.Col7Align ?? "CENTER";
+                case 8: return _settings.Col8Align ?? "CENTER";
+                case 99: return "CENTER";
                 case 100: return TableTitleAlign;
                 case 101: return SerialAlign;
-                default: return "LEFT";
+                default: return "CENTER";
             }
         }
         public void SetAlignByIndex(int idx, string align)

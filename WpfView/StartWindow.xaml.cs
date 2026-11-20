@@ -28,7 +28,7 @@ namespace BarcodePrint.WpfView
             {
                 var asm = typeof(StartWindow).Assembly;
                 var ver = asm.GetName().Version;
-                string verStr = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "v1.0.7";
+                string verStr = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "v1.1.0";
 
                 try
                 {
@@ -616,10 +616,6 @@ namespace BarcodePrint.WpfView
             wizard.Owner = this;
             if (wizard.ShowDialog() == true)
             {
-                int w = (int)wizard.SelectedWidth;
-                int h = (int)wizard.SelectedHeight;
-                settings.AddRecentWork($"라벨 {w}×{h} mm", w, h, wizard.SelectedPaperType, wizard.SelectedRotation);
-
                 var mainWindow = new WpfMainWindow(wizard.SelectedWidth, wizard.SelectedHeight, wizard.SelectedPaperType, wizard.SelectedRotation);
                 NavigateToEditor(mainWindow);
             }
@@ -651,14 +647,71 @@ namespace BarcodePrint.WpfView
             if (item == null) return;
 
             var settings = AppSettings.Default;
-            settings.AddRecentWork(item.Title, item.Width, item.Height, item.PaperType, item.Rotation, item.TemplateFilePath);
+            bool isSameAsCurrentSettingsPaper = (settings.PaperWidth == item.Width && settings.PaperHeight == item.Height);
+            string templatePath = item.TemplateFilePath;
 
-            if (!string.IsNullOrEmpty(item.TemplateFilePath) && System.IO.File.Exists(item.TemplateFilePath))
+            // TemplateFilePath가 비어있거나 파일이 없는 경우(구버전 이력 호환), 스냅샷 및 자동백업 파일에서 탐색
+            if (string.IsNullOrEmpty(templatePath) || !System.IO.File.Exists(templatePath))
+            {
+                string infoDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
+                string recentDir = Path.Combine(infoDir, "RecentWorks");
+                if (Directory.Exists(recentDir))
+                {
+                    string pType = item.PaperType ?? "GAP";
+                    string patternExact = $"*_{item.Width}x{item.Height}_{pType}_{item.Rotation}.lbm";
+                    string patternSize = $"*_{item.Width}x{item.Height}_*.lbm";
+
+                    var matchFiles = Directory.GetFiles(recentDir, patternExact);
+                    if (matchFiles.Length == 0)
+                    {
+                        matchFiles = Directory.GetFiles(recentDir, patternSize);
+                    }
+                    if (matchFiles.Length > 0)
+                    {
+                        templatePath = matchFiles
+                            .OrderByDescending(f => File.GetLastWriteTime(f))
+                            .First();
+                    }
+                }
+
+                // RecentWorks 폴더에 없으면 autosave_template.lbm의 규격 일치 여부 확인
+                if (string.IsNullOrEmpty(templatePath) || !System.IO.File.Exists(templatePath))
+                {
+                    string autoSavePath = Path.Combine(infoDir, "autosave_template.lbm");
+                    if (File.Exists(autoSavePath))
+                    {
+                        var autoLoaded = LabelTemplateModel.LoadFromFile(autoSavePath);
+                        if (autoLoaded != null)
+                        {
+                            int aw = (int)Math.Round(autoLoaded.WidthMm);
+                            int ah = (int)Math.Round(autoLoaded.HeightMm);
+                            if ((aw == item.Width && ah == item.Height) || (aw == item.Height && ah == item.Width))
+                            {
+                                templatePath = autoSavePath;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(templatePath) && System.IO.File.Exists(templatePath))
             {
                 var mainWindow = new WpfMainWindow();
                 if (mainWindow.DataContext is MainViewModel vm)
                 {
-                    vm.LoadTemplateFromFile(item.TemplateFilePath);
+                    vm.LoadTemplateFromFile(templatePath, item.Title);
+                }
+                NavigateToEditor(mainWindow);
+            }
+            else if (isSameAsCurrentSettingsPaper)
+            {
+                // 마지막으로 작업하던 규격이 AppSettings(1~8열 설정)에 남아있는 경우 초기화하지 않고 그대로 복원 후 스냅샷 생성
+                var mainWindow = new WpfMainWindow();
+                if (mainWindow.DataContext is MainViewModel vm)
+                {
+                    vm.InitializeDefaultTemplateFromCurrentSettings();
+                    vm.SaveSettingsSilently();
+                    vm.UpdatePreview();
                 }
                 NavigateToEditor(mainWindow);
             }

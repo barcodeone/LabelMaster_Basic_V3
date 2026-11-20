@@ -51,7 +51,7 @@ namespace BarcodePrint.Model
                     FontName = getFontName(i) ?? "맑은 고딕",
                     IsBold = getBold(i),
                     IsItalic = getItalic(i),
-                    Alignment = getAlign(i) ?? "LEFT",
+                    Alignment = getAlign(i) ?? "CENTER",
                     Type = isBc ? (getBarcodeType(i) == "QR_CODE" ? ElementType.QR_CODE : ElementType.BARCODE) : ElementType.TEXT,
                     BarcodeType = getBarcodeType(i) ?? "CODE128",
                     X = getOffsetX(i),
@@ -123,6 +123,8 @@ namespace BarcodePrint.Model
                     elem.Columns = 2;
                     elem.Width = 50.0;
                     elem.Height = 18.0;
+                    elem.Alignment = "CENTER";
+                    elem.HeaderName = "표";
                     elem.TableData = new string[][] { new[] { "항목", "내용" }, new[] { "품명", "" } };
                     elem.IsVariable = false;
                     break;

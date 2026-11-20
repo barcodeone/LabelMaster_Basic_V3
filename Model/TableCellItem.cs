@@ -111,14 +111,22 @@ namespace BarcodePrint.Model
             get => _cellAlignment;
             set
             {
-                if (_cellAlignment != value)
+                string norm = string.IsNullOrWhiteSpace(value) ? "CENTER" : value.ToUpperInvariant();
+                if (_cellAlignment != norm)
                 {
-                    _cellAlignment = value;
+                    _cellAlignment = norm;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsAlignLeft));
+                    OnPropertyChanged(nameof(IsAlignCenter));
+                    OnPropertyChanged(nameof(IsAlignRight));
                     _onStyleChanged?.Invoke(Row, Column, _cellFontSize, _cellIsBold, _cellAlignment);
                 }
             }
         }
+
+        public bool IsAlignLeft => string.Equals(_cellAlignment, "LEFT", StringComparison.OrdinalIgnoreCase);
+        public bool IsAlignCenter => string.IsNullOrEmpty(_cellAlignment) || string.Equals(_cellAlignment, "CENTER", StringComparison.OrdinalIgnoreCase);
+        public bool IsAlignRight => string.Equals(_cellAlignment, "RIGHT", StringComparison.OrdinalIgnoreCase);
 
         public void StepFontSize(double delta)
         {
@@ -133,6 +141,7 @@ namespace BarcodePrint.Model
         public System.Windows.Input.ICommand IncreaseFontSizeCommand { get; }
         public System.Windows.Input.ICommand DecreaseFontSizeCommand { get; }
         public System.Windows.Input.ICommand ToggleBoldCommand { get; }
+        public System.Windows.Input.ICommand SetCellAlignCommand { get; }
 
         public TableCellItem(
             int row, 
@@ -164,6 +173,7 @@ namespace BarcodePrint.Model
             IncreaseFontSizeCommand = new RelayCommand(_ => StepFontSize(1.0));
             DecreaseFontSizeCommand = new RelayCommand(_ => StepFontSize(-1.0));
             ToggleBoldCommand = new RelayCommand(_ => ToggleBold());
+            SetCellAlignCommand = new RelayCommand(p => { if (p != null) CellAlignment = p.ToString(); });
         }
 
         public void UpdateStyleSilently(double fontSize, bool isBold, string alignment)
@@ -174,6 +184,9 @@ namespace BarcodePrint.Model
             OnPropertyChanged(nameof(CellFontSize));
             OnPropertyChanged(nameof(CellIsBold));
             OnPropertyChanged(nameof(CellAlignment));
+            OnPropertyChanged(nameof(IsAlignLeft));
+            OnPropertyChanged(nameof(IsAlignCenter));
+            OnPropertyChanged(nameof(IsAlignRight));
         }
 
         public void RefreshOptions(string effectivePreview = null)

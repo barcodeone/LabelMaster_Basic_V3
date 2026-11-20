@@ -553,7 +553,7 @@ namespace BarcodePrint.ViewModel
             }
         }
 
-        private void DrawTextOnDc(DrawingContext dc, string text, double fontSizeMm, double offsetXMm, double offsetYMm, double dotsPerMm, System.Windows.Media.Brush brush, string fontName = "맑은 고딕", bool isBold = true, bool isItalic = false, double cellWidthMm = 0, string align = "LEFT", double cellHeightMm = 0, double cellPaddingMm = 0, bool isUnderline = false, double fontScaleX = 1.0, double lineSpacing = 1.0, double letterSpacing = 0.0, bool isVertical = false, bool isMirrored = false, bool isInverse = false)
+        private void DrawTextOnDc(DrawingContext dc, string text, double fontSizeMm, double offsetXMm, double offsetYMm, double dotsPerMm, System.Windows.Media.Brush brush, string fontName = "맑은 고딕", bool isBold = true, bool isItalic = false, double cellWidthMm = 0, string align = "CENTER", double cellHeightMm = 0, double cellPaddingMm = 0, bool isUnderline = false, double fontScaleX = 1.0, double lineSpacing = 1.0, double letterSpacing = 0.0, bool isVertical = false, bool isMirrored = false, bool isInverse = false)
         {
             if (string.IsNullOrEmpty(text)) return;
 
@@ -1285,7 +1285,7 @@ namespace BarcodePrint.ViewModel
                 if (IsDateTimeEnabled && !hasDateTimeInTemplate)
                 {
                     string currentDtStr = GetFormattedDateTimeString();
-                    DrawTextOnDc(dc, currentDtStr, DateTimeSize, DateTimeOffsetX, DateTimeOffsetY, dotsPerMm, System.Windows.Media.Brushes.Black, DateTimeFont, DateTimeBold, DateTimeItalic, DateTimeWidth, "LEFT", 0, 0);
+                    DrawTextOnDc(dc, currentDtStr, DateTimeSize, DateTimeOffsetX, DateTimeOffsetY, dotsPerMm, System.Windows.Media.Brushes.Black, DateTimeFont, DateTimeBold, DateTimeItalic, DateTimeWidth, "CENTER", 0, 0);
                 }
 
                 bool hasSerialInTemplate = CurrentTemplate?.Elements?.Any(el => el.Id == "SERIAL_ELEMENT") ?? false;
@@ -1460,7 +1460,7 @@ namespace BarcodePrint.ViewModel
                     case ElementType.BARCODE:
                     case ElementType.QR_CODE:
                         string barcodeContent = GetElementEffectiveContent(elem);
-                        if (elem.IsVariable && elem.InputOrder >= 1 && elem.InputOrder <= 8 && colValues != null && elem.InputOrder - 1 < colValues.Length)
+                        if (!IsExcelFileLoaded && elem.IsVariable && elem.InputOrder >= 1 && elem.InputOrder <= 8 && colValues != null && elem.InputOrder - 1 < colValues.Length)
                         {
                             string val = colValues[elem.InputOrder - 1];
                             if (!string.IsNullOrEmpty(val)) barcodeContent = val;
@@ -1474,22 +1474,27 @@ namespace BarcodePrint.ViewModel
                     case ElementType.TEXT:
                     case ElementType.DATE_TIME:
                         string textContent = GetElementEffectiveContent(elem);
-                        if (elem.IsVariable && elem.InputOrder >= 1 && elem.InputOrder <= 8 && colValues != null && elem.InputOrder - 1 < colValues.Length)
+                        if (!IsExcelFileLoaded && elem.IsVariable && elem.InputOrder >= 1 && elem.InputOrder <= 8 && colValues != null && elem.InputOrder - 1 < colValues.Length)
                         {
                             string val = colValues[elem.InputOrder - 1];
-                            if (elem.IsPriceFormat && !string.IsNullOrWhiteSpace(val))
+                            if (!string.IsNullOrEmpty(val)) textContent = val;
+                        }
+                        else if (elem.Type == ElementType.DATE_TIME && IsDateTimeEnabled &&
+                                 (!IsExcelFileLoaded || string.IsNullOrEmpty(elem.DataSourceColumn) || elem.DataSourceColumn == "0"))
+                        {
+                            textContent = GetFormattedDateTimeString();
+                        }
+
+                        if (elem.Type == ElementType.TEXT)
+                        {
+                            if (elem.IsPriceFormat && !string.IsNullOrWhiteSpace(textContent))
                             {
-                                val = PriceFormatHelper.FormatPrice(val, true);
+                                textContent = PriceFormatHelper.FormatPrice(textContent, true);
                             }
                             if (elem.IncludeHeaderOnLabel && !string.IsNullOrWhiteSpace(elem.HeaderName))
                             {
-                                val = $"{elem.HeaderName}: {val}";
+                                textContent = $"{elem.HeaderName}: {textContent}";
                             }
-                            if (!string.IsNullOrEmpty(val)) textContent = val;
-                        }
-                        else if (elem.Type == ElementType.DATE_TIME && IsDateTimeEnabled)
-                        {
-                            textContent = GetFormattedDateTimeString();
                         }
 
                         if (!string.IsNullOrWhiteSpace(textContent))
@@ -1605,22 +1610,44 @@ namespace BarcodePrint.ViewModel
             }
 
             // 4. 표 외곽선 및 격자선 그리기
-            double strokePx = Math.Max(1.0, elem.LineWidth * (dotsPerMm / (96.0 / 25.4)));
-            var gridPen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, strokePx);
+            double pxScale = dotsPerMm / (96.0 / 25.4);
+            double outerStrokePx = Math.Max(0.5, elem.LineWidth * pxScale);
+            string outerStyle = string.IsNullOrWhiteSpace(elem.LineStyle) ? "SOLID" : elem.LineStyle.ToUpperInvariant();
+
+            double innerStrokePx = Math.Max(0.5, (elem.TableInnerLineWidth ?? elem.LineWidth) * pxScale);
+            string innerStyle = string.IsNullOrWhiteSpace(elem.TableInnerLineStyle) ? "SOLID" : elem.TableInnerLineStyle.ToUpperInvariant();
 
             // 외곽 테두리
-            dc.DrawRectangle(null, gridPen, new Rect(x, y, w, h));
-
-            // 내부 세로 격자선
-            for (int c = 1; c < cols; c++)
+            if (outerStyle != "NONE" && outerStrokePx > 0)
             {
-                dc.DrawLine(gridPen, new System.Windows.Point(colX[c], y), new System.Windows.Point(colX[c], y + h));
+                var outerPen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, outerStrokePx);
+                var outerDash = ShapeGeometryHelper.GetStrokeDashArray(outerStyle);
+                if (outerDash != null)
+                {
+                    outerPen.DashStyle = new DashStyle(outerDash, 0);
+                }
+                dc.DrawRectangle(null, outerPen, new Rect(x, y, w, h));
             }
 
-            // 내부 가로 격자선
-            for (int r = 1; r < rows; r++)
+            // 내부 세로/가로 격자선
+            if (innerStyle != "NONE" && innerStrokePx > 0)
             {
-                dc.DrawLine(gridPen, new System.Windows.Point(x, rowY[r]), new System.Windows.Point(x + w, rowY[r]));
+                var innerPen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, innerStrokePx);
+                var innerDash = ShapeGeometryHelper.GetStrokeDashArray(innerStyle);
+                if (innerDash != null)
+                {
+                    innerPen.DashStyle = new DashStyle(innerDash, 0);
+                }
+
+                for (int c = 1; c < cols; c++)
+                {
+                    dc.DrawLine(innerPen, new System.Windows.Point(colX[c], y), new System.Windows.Point(colX[c], y + h));
+                }
+
+                for (int r = 1; r < rows; r++)
+                {
+                    dc.DrawLine(innerPen, new System.Windows.Point(x, rowY[r]), new System.Windows.Point(x + w, rowY[r]));
+                }
             }
 
             // 5. 셀 텍스트 렌더링
@@ -1806,17 +1833,24 @@ namespace BarcodePrint.ViewModel
             int successCount = 0;
             int totalCopiesPrinted = 0;
 
-            foreach (var rec in targets)
+            try
             {
-
-                bool success = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
-                rec.Status = success ? "인쇄 완료" : "인쇄 실패";
-                if (success)
+                foreach (var rec in targets)
                 {
-                    successCount++;
-                    totalCopiesPrinted += ExcelPrintCopies;
+                    _currentPrintingRecord = rec;
+                    bool success = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
+                    rec.Status = success ? "인쇄 완료" : "인쇄 실패";
+                    if (success)
+                    {
+                        successCount++;
+                        totalCopiesPrinted += ExcelPrintCopies;
+                    }
+                    else allSuccess = false;
                 }
-                else allSuccess = false;
+            }
+            finally
+            {
+                _currentPrintingRecord = null;
             }
 
             SaveHistoryRecords();
@@ -1970,6 +2004,20 @@ namespace BarcodePrint.ViewModel
 
             ClearInputs();
             FocusFirstInputRequested?.Invoke();
+        }
+
+        public bool PrintSingleExcelRecord(PrintRecordModel rec, int copies)
+        {
+            if (rec == null) return false;
+            try
+            {
+                _currentPrintingRecord = rec;
+                return SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, copies);
+            }
+            finally
+            {
+                _currentPrintingRecord = null;
+            }
         }
 
         public void ExecutePrintAllRecords()

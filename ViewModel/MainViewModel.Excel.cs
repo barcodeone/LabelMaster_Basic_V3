@@ -70,8 +70,15 @@ namespace BarcodePrint.ViewModel
                 }
                 _recordCounter = idx;
 
+                _loadedExcelFilePath = filePath;
+                if (_currentTemplate != null)
+                {
+                    _currentTemplate.ExcelFilePath = filePath;
+                    _currentTemplate.ExcelFileName = Path.GetFileName(filePath);
+                }
                 LoadedExcelHeaders = headers != null ? new List<string>(headers) : new List<string>();
                 LoadedExcelFileName = Path.GetFileName(filePath);
+                RebuildAvailableExcelColumnOptions();
                 CurrentPreviewIndex = Records.Count > 0 ? 1 : 0;
                 if (Records.Count > 0)
                 {
@@ -107,6 +114,45 @@ namespace BarcodePrint.ViewModel
         {
             // 요소가 선택되어 있든 아니든 동일하게 팝업 없이 엑셀 전체 데이터 로드
             ExecuteImportExcelForSelectedElement(specifiedFilePath);
+        }
+
+        public void TryRestoreExcelFromTemplate(string excelFilePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(excelFilePath) || !File.Exists(excelFilePath)) return;
+
+                var sheets = _excelService.GetSheetNames(excelFilePath);
+                string sheetName = (sheets != null && sheets.Count > 0) ? sheets[0] : "";
+
+                if (_excelService.ImportFromExcelWithMapping(excelFilePath, sheetName, null, out List<string> headers, out List<PrintRecordModel> importedRecords, out _))
+                {
+                    Records.Clear();
+                    int idx = 0;
+                    foreach (var rec in importedRecords)
+                    {
+                        idx++;
+                        rec.Index = idx;
+                        Records.Add(rec);
+                    }
+                    _recordCounter = idx;
+
+                    _loadedExcelFilePath = excelFilePath;
+                    LoadedExcelHeaders = headers != null ? new List<string>(headers) : new List<string>();
+                    LoadedExcelFileName = Path.GetFileName(excelFilePath);
+                    RebuildAvailableExcelColumnOptions();
+                    CurrentPreviewIndex = Records.Count > 0 ? 1 : 0;
+                    if (Records.Count > 0)
+                    {
+                        SelectedRecord = Records[0];
+                    }
+                    RefreshTableCells();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"TryRestoreExcelFromTemplate Error: {ex.Message}");
+            }
         }
 
         public void ExecuteImportBackup()

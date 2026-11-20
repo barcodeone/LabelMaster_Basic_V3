@@ -1,13 +1,14 @@
 import os
 import re
+import sys
 
-def update_version():
+def update_version(target_ver=None):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     version_file = os.path.join(base_dir, "version.txt")
     assembly_info_path = os.path.join(base_dir, "Properties", "AssemblyInfo.cs")
     
     # 1. version.txt에서 현재 버전 읽기
-    old_ver = "1.0.1"
+    old_ver = "1.1.0"
     if os.path.exists(version_file):
         try:
             with open(version_file, "r", encoding="utf-8") as f:
@@ -17,15 +18,23 @@ def update_version():
         except Exception as ex:
             print(f"[!] version.txt 읽기 실패: {ex}", flush=True)
 
-    # 2. 버전 번호 자동 증가 (예: 1.0.1 -> 1.0.2)
-    parts = old_ver.split('.')
-    if len(parts) >= 3 and parts[-1].isdigit():
-        parts[-1] = str(int(parts[-1]) + 1)
-        new_ver = '.'.join(parts[:3])
-    elif len(parts) == 2 and parts[-1].isdigit():
-        new_ver = f"{old_ver}.1"
+    # 2. 버전 번호 자동 증가 (끝자리가 10에 도달하면 중간 버전을 올리고 끝자리를 0으로 초기화, 예: 1.1.9 -> 1.2.0)
+    if target_ver:
+        new_ver = target_ver.strip().lstrip('vV')
     else:
-        new_ver = f"{old_ver}.1"
+        parts = old_ver.split('.')
+        if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
+            major = int(parts[0])
+            minor = int(parts[1])
+            patch = int(parts[2]) + 1
+            if patch >= 10:
+                minor += patch // 10
+                patch = patch % 10
+            new_ver = f"{major}.{minor}.{patch}"
+        elif len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            new_ver = f"{old_ver}.1"
+        else:
+            new_ver = f"{old_ver}.1"
 
     # version.txt에 증가된 최신 버전 저장
     try:
@@ -104,4 +113,9 @@ def update_version():
         return False
 
 if __name__ == '__main__':
-    update_version()
+    custom_ver = None
+    if len(sys.argv) >= 3 and sys.argv[1] in ('--set', '-s'):
+        custom_ver = sys.argv[2]
+    elif len(sys.argv) == 2 and not sys.argv[1].startswith('-'):
+        custom_ver = sys.argv[1]
+    update_version(custom_ver)

@@ -143,12 +143,26 @@ namespace BarcodePrint.Model
             if (width <= 0 || height <= 0) return;
             if (RecentWorks == null) RecentWorks = new List<RecentWorkItem>();
 
-            // 동일 템플릿 파일 또는 동일 규격이 이미 있으면 제거 후 최신순으로 맨 앞에 재삽입
-            RecentWorks.RemoveAll(x =>
-                (!string.IsNullOrEmpty(templatePath) && x.TemplateFilePath == templatePath) ||
-                (string.IsNullOrEmpty(templatePath) && x.Width == width && x.Height == height && (string.IsNullOrEmpty(title) || x.Title == title)));
+            string displayTitle = !string.IsNullOrEmpty(title) ? title : $"라벨 {width}×{height} mm";
 
-            string displayTitle = !string.IsNullOrEmpty(title) ? title : $"{width}×{height} mm 라벨";
+            // 새로 전달된 templatePath가 비어있더라도 기존 동일 항목에 유효한 TemplateFilePath가 있다면 유지
+            if (string.IsNullOrEmpty(templatePath))
+            {
+                var existingWithFile = RecentWorks.FirstOrDefault(x =>
+                    x.Width == width && x.Height == height &&
+                    (string.IsNullOrEmpty(title) || string.Equals(x.Title, displayTitle, StringComparison.OrdinalIgnoreCase)) &&
+                    !string.IsNullOrEmpty(x.TemplateFilePath));
+                if (existingWithFile != null)
+                {
+                    templatePath = existingWithFile.TemplateFilePath;
+                }
+            }
+
+            // 동일 템플릿 파일 또는 동일 규격/제목이 이미 있으면 제거 후 최신순으로 맨 앞에 재삽입
+            RecentWorks.RemoveAll(x =>
+                (!string.IsNullOrEmpty(templatePath) && string.Equals(x.TemplateFilePath, templatePath, StringComparison.OrdinalIgnoreCase)) ||
+                (x.Width == width && x.Height == height && string.Equals(x.Title, displayTitle, StringComparison.OrdinalIgnoreCase)));
+
             string dateStr = DateTime.Now.ToString("yyyy.MM.dd HH:mm");
 
             RecentWorks.Insert(0, new RecentWorkItem
@@ -345,14 +359,14 @@ namespace BarcodePrint.Model
         public bool Col8ShowBarcodeText { get; set; } = true;
 
         // 컬럼 내용 텍스트 정렬 ("LEFT", "CENTER", "RIGHT")
-        public string Col1Align { get; set; } = "LEFT";
-        public string Col2Align { get; set; } = "LEFT";
-        public string Col3Align { get; set; } = "LEFT";
-        public string Col4Align { get; set; } = "LEFT";
-        public string Col5Align { get; set; } = "LEFT";
-        public string Col6Align { get; set; } = "LEFT";
-        public string Col7Align { get; set; } = "LEFT";
-        public string Col8Align { get; set; } = "LEFT";
+        public string Col1Align { get; set; } = "CENTER";
+        public string Col2Align { get; set; } = "CENTER";
+        public string Col3Align { get; set; } = "CENTER";
+        public string Col4Align { get; set; } = "CENTER";
+        public string Col5Align { get; set; } = "CENTER";
+        public string Col6Align { get; set; } = "CENTER";
+        public string Col7Align { get; set; } = "CENTER";
+        public string Col8Align { get; set; } = "CENTER";
 
         // 컬럼 제목(Header) 텍스트 정렬 ("LEFT", "CENTER", "RIGHT")
         public string Col1HeaderAlign { get; set; } = "CENTER";
@@ -498,7 +512,7 @@ namespace BarcodePrint.Model
         public int SerialOffsetX { get; set; } = 2; // mm
         public int SerialOffsetY { get; set; } = 2; // mm
         public int SerialWidth { get; set; } = 0; // mm, 0: 자동 폭
-        public string SerialAlign { get; set; } = "LEFT"; // LEFT, CENTER, RIGHT
+        public string SerialAlign { get; set; } = "CENTER"; // LEFT, CENTER, RIGHT
         public int DateTimeFormatIndex { get; set; } = 0; // 0: YYYY-MM-DD, 1: YYYY.MM.DD HH:mm, 2: YYYY-MM-DD HH:mm:ss, 3: HH:mm:ss, 4: YYYY년 MM월 DD일, 5: YY/MM/DD
 
         private static readonly object _saveLock = new object();
@@ -788,14 +802,14 @@ namespace BarcodePrint.Model
                             this.Col7RowHeight = loadedSettings.Col7RowHeight;
                             this.Col8RowHeight = loadedSettings.Col8RowHeight;
 
-                            this.Col1Align = loadedSettings.Col1Align ?? "LEFT";
-                            this.Col2Align = loadedSettings.Col2Align ?? "LEFT";
-                            this.Col3Align = loadedSettings.Col3Align ?? "LEFT";
-                            this.Col4Align = loadedSettings.Col4Align ?? "LEFT";
-                            this.Col5Align = loadedSettings.Col5Align ?? "LEFT";
-                            this.Col6Align = loadedSettings.Col6Align ?? "LEFT";
-                            this.Col7Align = loadedSettings.Col7Align ?? "LEFT";
-                            this.Col8Align = loadedSettings.Col8Align ?? "LEFT";
+                            this.Col1Align = loadedSettings.Col1Align ?? "CENTER";
+                            this.Col2Align = loadedSettings.Col2Align ?? "CENTER";
+                            this.Col3Align = loadedSettings.Col3Align ?? "CENTER";
+                            this.Col4Align = loadedSettings.Col4Align ?? "CENTER";
+                            this.Col5Align = loadedSettings.Col5Align ?? "CENTER";
+                            this.Col6Align = loadedSettings.Col6Align ?? "CENTER";
+                            this.Col7Align = loadedSettings.Col7Align ?? "CENTER";
+                            this.Col8Align = loadedSettings.Col8Align ?? "CENTER";
 
                             this.Col1HeaderAlign = loadedSettings.Col1HeaderAlign ?? "CENTER";
                             this.Col2HeaderAlign = loadedSettings.Col2HeaderAlign ?? "CENTER";
@@ -862,7 +876,7 @@ namespace BarcodePrint.Model
                             this.SerialOffsetX = loadedSettings.SerialOffsetX;
                             this.SerialOffsetY = loadedSettings.SerialOffsetY;
                             this.SerialWidth = loadedSettings.SerialWidth;
-                            this.SerialAlign = loadedSettings.SerialAlign ?? "LEFT";
+                            this.SerialAlign = loadedSettings.SerialAlign ?? "CENTER";
 
                             // 표(Table) 및 제목 설정
                             this.IsTableBorderEnabled = loadedSettings.IsTableBorderEnabled;
