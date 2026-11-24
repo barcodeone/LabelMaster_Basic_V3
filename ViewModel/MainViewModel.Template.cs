@@ -127,7 +127,6 @@ namespace BarcodePrint.ViewModel
             OnPropertyChanged(nameof(IsSelectedElementDateTime));
             OnPropertyChanged(nameof(SelectedElementDateTimeFormat));
             OnPropertyChanged(nameof(SelectedElementAutoUpdateDate));
-            OnPropertyChanged(nameof(DateTimeFormatOptions));
             OnPropertyChanged(nameof(SelectedElementIsKeep));
             OnPropertyChanged(nameof(SelectedElementIsResetAfterPrint));
         }
@@ -1255,26 +1254,31 @@ namespace BarcodePrint.ViewModel
             }
         }
 
+        private List<DateTimeFormatOptionItem> _dateTimeFormatOptions;
         public List<DateTimeFormatOptionItem> DateTimeFormatOptions
         {
             get
             {
-                var now = DateTime.Now;
-                return new List<DateTimeFormatOptionItem>
+                if (_dateTimeFormatOptions == null)
                 {
-                    new DateTimeFormatOptionItem("yyyy-MM-dd HH:mm", $"{now:yyyy-MM-dd HH:mm} (yyyy-MM-dd HH:mm)"),
-                    new DateTimeFormatOptionItem("yyyy-MM-dd HH:mm:ss", $"{now:yyyy-MM-dd HH:mm:ss} (yyyy-MM-dd HH:mm:ss)"),
-                    new DateTimeFormatOptionItem("yyyy-MM-dd", $"{now:yyyy-MM-dd} (yyyy-MM-dd)"),
-                    new DateTimeFormatOptionItem("yyyy.MM.dd", $"{now:yyyy.MM.dd} (yyyy.MM.dd)"),
-                    new DateTimeFormatOptionItem("yyyy/MM/dd", $"{now.ToString("yyyy/MM/dd", System.Globalization.CultureInfo.InvariantCulture)} (yyyy/MM/dd)"),
-                    new DateTimeFormatOptionItem("yyyy년 MM월 dd일", $"{now:yyyy년 MM월 dd일} (yyyy년 MM월 dd일)"),
-                    new DateTimeFormatOptionItem("yyyy.MM.dd (ddd)", $"{now.ToString("yyyy.MM.dd (ddd)", System.Globalization.CultureInfo.CurrentCulture)} (yyyy.MM.dd (ddd))"),
-                    new DateTimeFormatOptionItem("yyyy-MM-dd tt hh:mm", $"{now:yyyy-MM-dd tt hh:mm} (yyyy-MM-dd tt hh:mm)"),
-                    new DateTimeFormatOptionItem("HH:mm:ss", $"{now:HH:mm:ss} (HH:mm:ss)"),
-                    new DateTimeFormatOptionItem("HH:mm", $"{now:HH:mm} (HH:mm)"),
-                    new DateTimeFormatOptionItem("yyMMdd", $"{now:yyMMdd} (yyMMdd)"),
-                    new DateTimeFormatOptionItem("yyyyMMdd", $"{now:yyyyMMdd} (yyyyMMdd)")
-                };
+                    var now = DateTime.Now;
+                    _dateTimeFormatOptions = new List<DateTimeFormatOptionItem>
+                    {
+                        new DateTimeFormatOptionItem("yyyy-MM-dd HH:mm", $"{now:yyyy-MM-dd HH:mm} (yyyy-MM-dd HH:mm)"),
+                        new DateTimeFormatOptionItem("yyyy-MM-dd HH:mm:ss", $"{now:yyyy-MM-dd HH:mm:ss} (yyyy-MM-dd HH:mm:ss)"),
+                        new DateTimeFormatOptionItem("yyyy-MM-dd", $"{now:yyyy-MM-dd} (yyyy-MM-dd)"),
+                        new DateTimeFormatOptionItem("yyyy.MM.dd", $"{now:yyyy.MM.dd} (yyyy.MM.dd)"),
+                        new DateTimeFormatOptionItem("yyyy/MM/dd", $"{now.ToString("yyyy/MM/dd", System.Globalization.CultureInfo.InvariantCulture)} (yyyy/MM/dd)"),
+                        new DateTimeFormatOptionItem("yyyy년 MM월 dd일", $"{now:yyyy년 MM월 dd일} (yyyy년 MM월 dd일)"),
+                        new DateTimeFormatOptionItem("yyyy.MM.dd (ddd)", $"{now.ToString("yyyy.MM.dd (ddd)", System.Globalization.CultureInfo.CurrentCulture)} (yyyy.MM.dd (ddd))"),
+                        new DateTimeFormatOptionItem("yyyy-MM-dd tt hh:mm", $"{now:yyyy-MM-dd tt hh:mm} (yyyy-MM-dd tt hh:mm)"),
+                        new DateTimeFormatOptionItem("HH:mm:ss", $"{now:HH:mm:ss} (HH:mm:ss)"),
+                        new DateTimeFormatOptionItem("HH:mm", $"{now:HH:mm} (HH:mm)"),
+                        new DateTimeFormatOptionItem("yyMMdd", $"{now:yyMMdd} (yyMMdd)"),
+                        new DateTimeFormatOptionItem("yyyyMMdd", $"{now:yyyyMMdd} (yyyyMMdd)")
+                    };
+                }
+                return _dateTimeFormatOptions;
             }
         }
 
@@ -1294,11 +1298,14 @@ namespace BarcodePrint.ViewModel
             {
                 if (SelectedElement != null && SelectedElement.Type == ElementType.DATE_TIME)
                 {
-                    string finalVal = string.IsNullOrWhiteSpace(value) ? "yyyy-MM-dd HH:mm" : value;
-                    SelectedElement.DateTimeFormat = finalVal;
+                    // ComboBox ItemsSource 갱신/바인딩 해제 시 null이 전달되어 기존 양식을 덮어쓰는 현상 방지
+                    if (string.IsNullOrWhiteSpace(value)) return;
+                    if (string.Equals(SelectedElement.DateTimeFormat, value, StringComparison.Ordinal)) return;
+
+                    SelectedElement.DateTimeFormat = value;
                     try
                     {
-                        SelectedElement.Content = DateTime.Now.ToString(finalVal, System.Globalization.CultureInfo.CurrentCulture);
+                        SelectedElement.Content = DateTime.Now.ToString(value, System.Globalization.CultureInfo.CurrentCulture);
                     }
                     catch
                     {
@@ -1618,8 +1625,14 @@ namespace BarcodePrint.ViewModel
 
         #region 자유 편집 요소 추가 / 삭제 명령
 
-        public void ApplyWizardSetup(double width, double height, string paperType, int rotation)
+        public void ApplyWizardSetup(double width, double height, string paperType, int rotation,
+            int labelColumns = 1, int labelRows = 1, double marginLeft = 0.0, double marginRight = 0.0, double columnGap = 2.0, double rowGap = 2.0)
         {
+            if (OpenTabs.Count > 0 && _activeTab != null)
+            {
+                SaveActiveTabState();
+            }
+
             // 새 문서 생성 시 기존 엑셀 파일 및 컬럼 연동 정보 완전 초기화
             ExecuteUnlinkExcel();
 
@@ -1630,6 +1643,14 @@ namespace BarcodePrint.ViewModel
             PaperWidthStr = width.ToString("0.#");
             PaperHeightStr = height.ToString("0.#");
             LabelRotationAngle = rotation;
+            LabelColumns = Math.Max(1, labelColumns);
+            LabelRows = Math.Max(1, labelRows);
+            PageMarginLeftMm = Math.Max(0.0, marginLeft);
+            PageMarginTopMm = 0.0;
+            PageMarginRightMm = Math.Max(0.0, marginRight);
+            PageMarginBottomMm = 0.0;
+            ColumnGapMm = Math.Max(0.0, columnGap);
+            RowGapMm = Math.Max(0.0, rowGap);
             if (!string.IsNullOrEmpty(paperType))
             {
                 PaperType = paperType;
@@ -1704,10 +1725,16 @@ namespace BarcodePrint.ViewModel
             string snapshotPath = SaveCurrentTemplateSnapshot();
             _settings.AddRecentWork(_currentRecentTitle, wInt, hInt, paperType ?? "GAP", rotation, snapshotPath);
 
+            _undoStack.Clear();
+            _redoStack.Clear();
+            LoadPagesFromTemplate(_currentTemplate);
+            OpenOrCreateTabForCurrentState(_currentRecentTitle, snapshotPath, createNewTab: true);
+
             OnPropertyChanged(nameof(CurrentTemplate));
             OnPropertyChanged(nameof(TemplateElements));
             StatusMessage = $"새 라벨 규격 ({width}x{height} mm) 템플릿이 생성되었습니다.";
             UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
         }
 
         public void LoadTemplateFromFile(string filePath, string customTitle = null)
@@ -1729,9 +1756,39 @@ namespace BarcodePrint.ViewModel
         {
             if (loaded == null) return;
 
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                var existingTab = OpenTabs.FirstOrDefault(t => !string.IsNullOrEmpty(t.FilePath) && string.Equals(t.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+                if (existingTab != null)
+                {
+                    SwitchToTab(existingTab);
+                    return;
+                }
+            }
+
+            if (OpenTabs.Count > 0 && _activeTab != null)
+            {
+                SaveActiveTabState();
+            }
+
             using (SuppressPreviewUpdate())
             {
                 _currentTemplate = loaded;
+                if (loaded.Pages != null)
+                {
+                    foreach (var page in loaded.Pages)
+                    {
+                        if (page == null) continue;
+                        foreach (var el in page)
+                        {
+                            if (el.Type == ElementType.TABLE)
+                            {
+                                el.EnsureTableData();
+                            }
+                        }
+                    }
+                }
+                LoadPagesFromTemplate(_currentTemplate);
                 PaperWidth = (int)Math.Round(loaded.WidthMm);
                 PaperHeight = (int)Math.Round(loaded.HeightMm);
                 PaperWidthStr = loaded.WidthMm.ToString("0.#");
@@ -1745,6 +1802,14 @@ namespace BarcodePrint.ViewModel
                 {
                     GapHeight = (int)Math.Round(loaded.GapHeightMm);
                 }
+                LabelColumns = loaded.LabelColumns > 0 ? loaded.LabelColumns : 1;
+                LabelRows = loaded.LabelRows > 0 ? loaded.LabelRows : 1;
+                PageMarginLeftMm = loaded.PageMarginLeftMm;
+                PageMarginTopMm = loaded.PageMarginTopMm;
+                PageMarginRightMm = loaded.PageMarginRightMm;
+                PageMarginBottomMm = loaded.PageMarginBottomMm;
+                ColumnGapMm = loaded.ColumnGapMm >= 0 ? loaded.ColumnGapMm : 2.0;
+                RowGapMm = loaded.RowGapMm >= 0 ? loaded.RowGapMm : 2.0;
 
                 // 기존 1~8열 입력값 초기화 후 템플릿의 변수 요소들로 동기화
                 for (int c = 1; c <= 8; c++)
@@ -1816,9 +1881,10 @@ namespace BarcodePrint.ViewModel
                     title = loaded.TemplateName;
                 }
             }
-            if (string.IsNullOrWhiteSpace(title))
+            if (string.IsNullOrWhiteSpace(title) ||
+                System.Text.RegularExpressions.Regex.IsMatch(title, @"^라벨\s+\d+×\d+\s*mm$"))
             {
-                title = $"라벨 {PaperWidth}×{PaperHeight} mm";
+                title = $"라벨 {EffectivePaperWidth}×{EffectivePaperHeight} mm";
             }
 
             _currentRecentTitle = title;
@@ -1831,6 +1897,10 @@ namespace BarcodePrint.ViewModel
             _currentTemplateFilePath = finalPath;
 
             _settings.AddRecentWork(title, (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, finalPath);
+
+            _undoStack.Clear();
+            _redoStack.Clear();
+            OpenOrCreateTabForCurrentState(title, finalPath, createNewTab: true);
 
             OnPropertyChanged("");
             NotifyAllColumnsEffectiveTextChanged();
@@ -1890,6 +1960,20 @@ namespace BarcodePrint.ViewModel
             catch (Exception ex)
             {
                 StatusMessage = $"이미지 불러오기 실패: {ex.Message}";
+            }
+        }
+
+        public void ExecuteImportPdfToCanvas()
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "캔버스에 삽입할 PDF 파일 선택",
+                Filter = "PDF 문서 (*.pdf)|*.pdf|모든 파일 (*.*)|*.*"
+            };
+
+            if (dlg.ShowDialog() == true)
+            {
+                ImportPdfOrImageFile(dlg.FileName);
             }
         }
 
@@ -2009,6 +2093,566 @@ namespace BarcodePrint.ViewModel
         private readonly Stack<List<TemplateElement>> _undoStack = new Stack<List<TemplateElement>>();
         private readonly Stack<List<TemplateElement>> _redoStack = new Stack<List<TemplateElement>>();
         private TemplateElement _clipboardElement = null;
+        private bool _showCanvasGrid = false;
+        private bool _snapToGrid = false;
+
+        public bool ShowCanvasGrid
+        {
+            get => _showCanvasGrid;
+            set
+            {
+                if (_showCanvasGrid != value)
+                {
+                    _showCanvasGrid = value;
+                    OnPropertyChanged();
+                    RequestPreviewRedraw?.Invoke();
+                }
+            }
+        }
+
+        public bool SnapToGrid
+        {
+            get => _snapToGrid;
+            set
+            {
+                if (_snapToGrid != value)
+                {
+                    _snapToGrid = value;
+                    OnPropertyChanged();
+                    StatusMessage = value ? "격자 스냅(1mm)이 활성화되었습니다." : "격자 스냅이 해제되었습니다 (0.1mm 자유 이동).";
+                }
+            }
+        }
+
+        public bool CanUndo => _undoStack != null && _undoStack.Count > 0;
+        public bool CanRedo => _redoStack != null && _redoStack.Count > 0;
+
+        #region Multi-Page Management (다중 페이지 추가 및 출력 지원)
+
+        public class TemplatePageItem : System.ComponentModel.INotifyPropertyChanged
+        {
+            public int PageIndex { get; set; }
+            public int PageNumber => PageIndex + 1;
+            public bool IsActive { get; set; }
+
+            private System.Windows.Media.ImageSource _thumbnail;
+            public System.Windows.Media.ImageSource Thumbnail
+            {
+                get => _thumbnail;
+                set
+                {
+                    if (_thumbnail != value)
+                    {
+                        _thumbnail = value;
+                        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Thumbnail)));
+                    }
+                }
+            }
+
+            public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+        }
+
+        private List<List<TemplateElement>> _pageElementsList = new List<List<TemplateElement>>();
+        private int _currentPageIndex = 0;
+
+        public ObservableCollection<TemplatePageItem> TemplatePages { get; } = new ObservableCollection<TemplatePageItem>();
+        public int CurrentPageNumber => _currentPageIndex + 1;
+        public int TotalPageCount => Math.Max(1, _pageElementsList.Count);
+        public bool HasMultiplePages => TotalPageCount > 1;
+        public string PageStatusText => $"{CurrentPageNumber} / {TotalPageCount} 페이지";
+
+        public List<TemplateElement> GetPageElements(int pageIndex)
+        {
+            if (pageIndex >= 0 && pageIndex < _pageElementsList.Count)
+            {
+                return _pageElementsList[pageIndex];
+            }
+            return _currentTemplate?.Elements ?? new List<TemplateElement>();
+        }
+
+        private void EnsurePagesInitialized()
+        {
+            if (_currentTemplate == null) return;
+            if (_pageElementsList.Count == 0)
+            {
+                _pageElementsList.Add(_currentTemplate.Elements ?? new List<TemplateElement>());
+                _currentPageIndex = 0;
+            }
+            else if (_currentPageIndex >= 0 && _currentPageIndex < _pageElementsList.Count)
+            {
+                _pageElementsList[_currentPageIndex] = _currentTemplate.Elements ?? new List<TemplateElement>();
+            }
+            RefreshTemplatePagesUi();
+        }
+
+        public void SyncPagesToTemplate()
+        {
+            if (_currentTemplate == null) return;
+            EnsurePagesInitialized();
+            if (_currentPageIndex >= 0 && _currentPageIndex < _pageElementsList.Count)
+            {
+                _pageElementsList[_currentPageIndex] = _currentTemplate.Elements ?? new List<TemplateElement>();
+            }
+            _currentTemplate.Pages = _pageElementsList.Count > 1
+                ? _pageElementsList.Select(p => p ?? new List<TemplateElement>()).ToList()
+                : null;
+            if (_pageElementsList.Count > 0 && _currentPageIndex != 0)
+            {
+                // 하위 호환을 위해 Elements는 현재 편집 중인 페이지 또는 1페이지를 유지하되 Pages에 전체 보관
+            }
+        }
+
+        private void LoadPagesFromTemplate(LabelTemplateModel tpl)
+        {
+            _pageElementsList.Clear();
+            _currentPageIndex = 0;
+            if (tpl != null)
+            {
+                if (tpl.Pages != null && tpl.Pages.Count > 0)
+                {
+                    foreach (var p in tpl.Pages)
+                    {
+                        _pageElementsList.Add(p ?? new List<TemplateElement>());
+                    }
+                    tpl.Elements = _pageElementsList[0];
+                }
+                else
+                {
+                    _pageElementsList.Add(tpl.Elements ?? new List<TemplateElement>());
+                }
+            }
+            RefreshTemplatePagesUi();
+        }
+
+        private void RefreshTemplatePagesUi()
+        {
+            TemplatePages.Clear();
+            int count = Math.Max(1, _pageElementsList.Count);
+            for (int i = 0; i < count; i++)
+            {
+                TemplatePages.Add(new TemplatePageItem
+                {
+                    PageIndex = i,
+                    IsActive = (i == _currentPageIndex),
+                    Thumbnail = RenderPageThumbnail(GetPageElements(i))
+                });
+            }
+            OnPropertyChanged(nameof(CurrentPageNumber));
+            OnPropertyChanged(nameof(TotalPageCount));
+            OnPropertyChanged(nameof(HasMultiplePages));
+            OnPropertyChanged(nameof(PageStatusText));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
+
+        public void RefreshActivePageThumbnail()
+        {
+            if (_currentPageIndex >= 0 && _currentPageIndex < TemplatePages.Count)
+            {
+                TemplatePages[_currentPageIndex].Thumbnail = RenderPageThumbnail(_currentTemplate?.Elements ?? GetPageElements(_currentPageIndex));
+            }
+        }
+
+        public void SwitchToPage(int targetIndex)
+        {
+            if (_currentTemplate == null) return;
+            EnsurePagesInitialized();
+            if (targetIndex < 0 || targetIndex >= _pageElementsList.Count || targetIndex == _currentPageIndex) return;
+
+            _pageElementsList[_currentPageIndex] = _currentTemplate.Elements ?? new List<TemplateElement>();
+            _currentPageIndex = targetIndex;
+            _currentTemplate.Elements = _pageElementsList[_currentPageIndex];
+
+            SelectedElement = _currentTemplate.Elements.FirstOrDefault();
+            RefreshTemplatePagesUi();
+            OnPropertyChanged(nameof(CurrentTemplate));
+            OnPropertyChanged(nameof(TemplateElements));
+            UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
+            StatusMessage = $"{CurrentPageNumber} / {TotalPageCount} 페이지로 전환했습니다.";
+        }
+
+        public void AddNewPage()
+        {
+            if (_currentTemplate == null) InitializeDefaultTemplateFromCurrentSettings();
+            EnsurePagesInitialized();
+            _pageElementsList[_currentPageIndex] = _currentTemplate.Elements ?? new List<TemplateElement>();
+
+            double effW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
+            double effH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
+            string initContent = "텍스트";
+            int initFontSize = 14;
+            double actualW = CalculateExactTextWidthMm(initContent, "맑은 고딕", initFontSize, true, false);
+            double actualH = initFontSize * 0.352778 * 1.4;
+            double centerX = Math.Round(Math.Max(0.5, (effW - actualW) / 2.0), 1);
+            double centerY = Math.Round(Math.Max(0.5, (effH - actualH) / 2.0), 1);
+
+            var elem = TemplateMigrationHelper.CreateElement(ElementType.TEXT, centerX, centerY);
+            elem.Content = initContent;
+            elem.FontSize = initFontSize;
+            elem.IsBold = true;
+            elem.IsVariable = false;
+
+            var newPageElements = new List<TemplateElement> { elem };
+            _pageElementsList.Add(newPageElements);
+            _currentPageIndex = _pageElementsList.Count - 1;
+            _currentTemplate.Elements = newPageElements;
+            SyncPagesToTemplate();
+
+            SelectedElement = elem;
+            RefreshTemplatePagesUi();
+            OnPropertyChanged(nameof(CurrentTemplate));
+            OnPropertyChanged(nameof(TemplateElements));
+            UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
+            StatusMessage = $"새 페이지({CurrentPageNumber}페이지)가 추가되었습니다.";
+        }
+
+        public void DuplicateCurrentPage()
+        {
+            if (_currentTemplate == null) return;
+            EnsurePagesInitialized();
+            _pageElementsList[_currentPageIndex] = _currentTemplate.Elements ?? new List<TemplateElement>();
+
+            var cloned = new List<TemplateElement>();
+            foreach (var el in _pageElementsList[_currentPageIndex])
+            {
+                var copy = el.Clone();
+                copy.Id = Guid.NewGuid().ToString();
+                cloned.Add(copy);
+            }
+
+            _pageElementsList.Insert(_currentPageIndex + 1, cloned);
+            _currentPageIndex++;
+            _currentTemplate.Elements = cloned;
+            SyncPagesToTemplate();
+
+            SelectedElement = cloned.FirstOrDefault();
+            RefreshTemplatePagesUi();
+            OnPropertyChanged(nameof(CurrentTemplate));
+            OnPropertyChanged(nameof(TemplateElements));
+            UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
+            StatusMessage = $"현재 페이지를 복제해 {CurrentPageNumber}페이지로 추가했습니다.";
+        }
+
+        public void DeleteCurrentPage()
+        {
+            DeletePageAt(_currentPageIndex);
+        }
+
+        public void DeletePageAt(int pageIndex)
+        {
+            if (_currentTemplate == null || _pageElementsList.Count <= 1) return;
+            if (pageIndex < 0 || pageIndex >= _pageElementsList.Count) return;
+
+            if (_currentPageIndex >= 0 && _currentPageIndex < _pageElementsList.Count)
+            {
+                _pageElementsList[_currentPageIndex] = _currentTemplate.Elements ?? new List<TemplateElement>();
+            }
+
+            _pageElementsList.RemoveAt(pageIndex);
+
+            if (_currentPageIndex > pageIndex)
+            {
+                _currentPageIndex--;
+            }
+            else if (_currentPageIndex >= _pageElementsList.Count)
+            {
+                _currentPageIndex = _pageElementsList.Count - 1;
+            }
+
+            _currentTemplate.Elements = _pageElementsList[_currentPageIndex];
+            SyncPagesToTemplate();
+
+            SelectedElement = _currentTemplate.Elements.FirstOrDefault();
+            RefreshTemplatePagesUi();
+            OnPropertyChanged(nameof(CurrentTemplate));
+            OnPropertyChanged(nameof(TemplateElements));
+            UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
+            StatusMessage = $"페이지가 삭제되었습니다. (현재 {CurrentPageNumber}/{TotalPageCount} 페이지)";
+        }
+
+        public void MovePage(int fromIndex, int toIndex)
+        {
+            if (_currentTemplate == null) return;
+            EnsurePagesInitialized();
+            if (fromIndex < 0 || fromIndex >= _pageElementsList.Count ||
+                toIndex < 0 || toIndex >= _pageElementsList.Count ||
+                fromIndex == toIndex)
+            {
+                return;
+            }
+
+            _pageElementsList[_currentPageIndex] = _currentTemplate.Elements ?? new List<TemplateElement>();
+            var activeElements = _pageElementsList[_currentPageIndex];
+
+            var moving = _pageElementsList[fromIndex];
+            _pageElementsList.RemoveAt(fromIndex);
+            _pageElementsList.Insert(toIndex, moving);
+
+            _currentPageIndex = _pageElementsList.IndexOf(activeElements);
+            if (_currentPageIndex < 0) _currentPageIndex = toIndex;
+            _currentTemplate.Elements = _pageElementsList[_currentPageIndex];
+            SyncPagesToTemplate();
+
+            RefreshTemplatePagesUi();
+            OnPropertyChanged(nameof(CurrentTemplate));
+            OnPropertyChanged(nameof(TemplateElements));
+            UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
+            StatusMessage = $"{fromIndex + 1}페이지를 {toIndex + 1}페이지 위치로 이동했습니다.";
+        }
+
+        #endregion
+
+        #region Multi-Document Tabs (다중 문서 탭 관리)
+
+        public ObservableCollection<DocumentTabItem> OpenTabs { get; } = new ObservableCollection<DocumentTabItem>();
+
+        private DocumentTabItem _activeTab;
+        public DocumentTabItem ActiveTab
+        {
+            get => _activeTab;
+            set => SwitchToTab(value);
+        }
+
+        private int _newTabCounter = 1;
+
+        public void EnsureInitialTab()
+        {
+            EnsurePagesInitialized();
+            if (OpenTabs.Count == 0 && _currentTemplate != null)
+            {
+                string title = !string.IsNullOrWhiteSpace(_currentRecentTitle)
+                    ? _currentRecentTitle
+                    : (!string.IsNullOrWhiteSpace(_currentTemplate.TemplateName) ? _currentTemplate.TemplateName : $"문서1 ({EffectivePaperWidth}×{EffectivePaperHeight})");
+                OpenOrCreateTabForCurrentState(title, _currentTemplateFilePath ?? "", createNewTab: true);
+            }
+        }
+
+        public void SyncActiveTabTitle(string title, string filePath)
+        {
+            if (_activeTab == null) return;
+            if (!string.IsNullOrWhiteSpace(title)) _activeTab.Title = title;
+            _activeTab.FilePath = filePath ?? "";
+            _activeTab.SizeBadge = $"{EffectivePaperWidth}×{EffectivePaperHeight}";
+        }
+
+        private void SaveActiveTabState()
+        {
+            if (_activeTab == null) return;
+
+            SyncPagesToTemplate();
+            _activeTab.Template = _currentTemplate;
+            _activeTab.Pages = _pageElementsList.Select(p => p ?? new List<TemplateElement>()).ToList();
+            _activeTab.CurrentPageIndex = _currentPageIndex;
+            _activeTab.FilePath = _currentTemplateFilePath ?? "";
+            if (!string.IsNullOrWhiteSpace(_currentRecentTitle))
+            {
+                _activeTab.Title = _currentRecentTitle;
+            }
+            _activeTab.PaperWidth = PaperWidth;
+            _activeTab.PaperHeight = PaperHeight;
+            _activeTab.LabelRotationAngle = LabelRotationAngle;
+            _activeTab.PaperType = PaperType;
+            _activeTab.GapHeight = GapHeight;
+            _activeTab.SizeBadge = $"{EffectivePaperWidth}×{EffectivePaperHeight}";
+            _activeTab.ActiveColumnCount = ActiveColumnCount;
+            _activeTab.SelectedElementId = SelectedElement?.Id;
+
+            if (_activeTab.ColumnInputs == null || _activeTab.ColumnInputs.Length < 8)
+            {
+                _activeTab.ColumnInputs = new string[8];
+            }
+            for (int c = 1; c <= 8; c++)
+            {
+                _activeTab.ColumnInputs[c - 1] = GetInputByIndex(c) ?? "";
+            }
+
+            _activeTab.UndoStack = new Stack<List<TemplateElement>>(_undoStack.Reverse());
+            _activeTab.RedoStack = new Stack<List<TemplateElement>>(_redoStack.Reverse());
+        }
+
+        private void OpenOrCreateTabForCurrentState(string title, string filePath, bool createNewTab)
+        {
+            if (!createNewTab && _activeTab != null)
+            {
+                SyncActiveTabTitle(title, filePath);
+                SaveActiveTabState();
+                return;
+            }
+
+            if (_activeTab != null)
+            {
+                _activeTab.IsActive = false;
+            }
+
+            var tab = new DocumentTabItem
+            {
+                Title = string.IsNullOrWhiteSpace(title) ? $"문서{_newTabCounter++}" : title,
+                FilePath = filePath ?? "",
+                Template = _currentTemplate,
+                Pages = _pageElementsList.Select(p => p ?? new List<TemplateElement>()).ToList(),
+                CurrentPageIndex = _currentPageIndex,
+                PaperWidth = PaperWidth,
+                PaperHeight = PaperHeight,
+                LabelRotationAngle = LabelRotationAngle,
+                PaperType = PaperType,
+                GapHeight = GapHeight,
+                SizeBadge = $"{EffectivePaperWidth}×{EffectivePaperHeight}",
+                ActiveColumnCount = ActiveColumnCount,
+                SelectedElementId = SelectedElement?.Id,
+                IsActive = true
+            };
+            for (int c = 1; c <= 8; c++)
+            {
+                tab.ColumnInputs[c - 1] = GetInputByIndex(c) ?? "";
+            }
+
+            OpenTabs.Add(tab);
+            _activeTab = tab;
+            OnPropertyChanged(nameof(ActiveTab));
+        }
+
+        public void SwitchToTab(DocumentTabItem targetTab)
+        {
+            if (targetTab == null || targetTab == _activeTab) return;
+
+            SaveActiveTabState();
+
+            if (_activeTab != null)
+            {
+                _activeTab.IsActive = false;
+            }
+
+            _activeTab = targetTab;
+            _activeTab.IsActive = true;
+
+            using (SuppressPreviewUpdate())
+            {
+                _currentTemplate = targetTab.Template;
+                _pageElementsList.Clear();
+                if (targetTab.Pages != null && targetTab.Pages.Count > 0)
+                {
+                    _pageElementsList.AddRange(targetTab.Pages);
+                    _currentPageIndex = Math.Max(0, Math.Min(targetTab.CurrentPageIndex, _pageElementsList.Count - 1));
+                    if (_currentTemplate != null) _currentTemplate.Elements = _pageElementsList[_currentPageIndex];
+                }
+                else
+                {
+                    _currentPageIndex = 0;
+                    if (_currentTemplate != null) _pageElementsList.Add(_currentTemplate.Elements ?? new List<TemplateElement>());
+                }
+                RefreshTemplatePagesUi();
+                _currentTemplateFilePath = targetTab.FilePath ?? "";
+                _currentRecentTitle = targetTab.Title;
+                PaperWidth = targetTab.PaperWidth;
+                PaperHeight = targetTab.PaperHeight;
+                PaperWidthStr = targetTab.PaperWidth.ToString("0.#");
+                PaperHeightStr = targetTab.PaperHeight.ToString("0.#");
+                LabelRotationAngle = targetTab.LabelRotationAngle;
+                if (!string.IsNullOrEmpty(targetTab.PaperType))
+                {
+                    PaperType = targetTab.PaperType;
+                }
+                GapHeight = targetTab.GapHeight;
+
+                for (int c = 1; c <= 8; c++)
+                {
+                    ClearColumnData(c);
+                }
+
+                if (_currentTemplate?.Elements != null)
+                {
+                    var variableElems = _currentTemplate.Elements.Where(e => e.IsVariable).OrderBy(e => e.InputOrder).ToList();
+                    ActiveColumnCount = targetTab.ActiveColumnCount > 0 ? targetTab.ActiveColumnCount : (variableElems.Count > 0 ? variableElems.Max(e => e.InputOrder) : 0);
+                    foreach (var elem in variableElems)
+                    {
+                        SyncElementToLegacyColumn(elem);
+                    }
+                    if (targetTab.ColumnInputs != null)
+                    {
+                        for (int c = 1; c <= Math.Min(8, ActiveColumnCount); c++)
+                        {
+                            if (!string.IsNullOrEmpty(targetTab.ColumnInputs[c - 1]))
+                            {
+                                SetInputByIndex(c, targetTab.ColumnInputs[c - 1]);
+                            }
+                        }
+                    }
+                    SelectedElement = !string.IsNullOrEmpty(targetTab.SelectedElementId)
+                        ? (_currentTemplate.Elements.FirstOrDefault(e => e.Id == targetTab.SelectedElementId) ?? _currentTemplate.Elements.FirstOrDefault())
+                        : _currentTemplate.Elements.FirstOrDefault();
+                }
+                else
+                {
+                    ActiveColumnCount = 0;
+                    SelectedElement = null;
+                }
+
+                _undoStack.Clear();
+                if (targetTab.UndoStack != null)
+                {
+                    foreach (var snap in targetTab.UndoStack.Reverse()) _undoStack.Push(snap);
+                }
+                _redoStack.Clear();
+                if (targetTab.RedoStack != null)
+                {
+                    foreach (var snap in targetTab.RedoStack.Reverse()) _redoStack.Push(snap);
+                }
+            }
+
+            OnPropertyChanged(nameof(ActiveTab));
+            OnPropertyChanged(nameof(CurrentTemplate));
+            OnPropertyChanged(nameof(TemplateElements));
+            OnPropertyChanged(nameof(CanUndo));
+            OnPropertyChanged(nameof(CanRedo));
+            NotifyAllColumnsEffectiveTextChanged();
+            ActiveColumnCountChanged?.Invoke(ActiveColumnCount);
+            UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
+            StatusMessage = $"문서 전환: {targetTab.Title}";
+        }
+
+        public void CreateNewBlankTab()
+        {
+            double curW = PaperWidth > 0 ? PaperWidth : 80;
+            double curH = PaperHeight > 0 ? PaperHeight : 60;
+            int rot = LabelRotationAngle;
+            string pType = PaperType ?? "GAP";
+
+            _newTabCounter++;
+            ApplyWizardSetup(curW, curH, pType, rot);
+            if (_activeTab != null)
+            {
+                _activeTab.Title = $"문서{_newTabCounter}";
+                _currentRecentTitle = _activeTab.Title;
+            }
+        }
+
+        public void CloseTab(DocumentTabItem tab)
+        {
+            if (tab == null || !OpenTabs.Contains(tab)) return;
+            if (OpenTabs.Count <= 1)
+            {
+                StatusMessage = "마지막 문서는 닫을 수 없습니다.";
+                return;
+            }
+
+            int idx = OpenTabs.IndexOf(tab);
+            bool wasActive = (tab == _activeTab);
+            OpenTabs.Remove(tab);
+
+            if (wasActive)
+            {
+                _activeTab = null;
+                int nextIdx = Math.Max(0, Math.Min(idx, OpenTabs.Count - 1));
+                SwitchToTab(OpenTabs[nextIdx]);
+            }
+        }
+
+        #endregion
 
         public void RecordUndoSnapshot()
         {

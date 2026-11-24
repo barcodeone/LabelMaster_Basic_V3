@@ -110,10 +110,23 @@ namespace BarcodePrint.ViewModel
                 if (_isScanningPrinters) return;
                 _isScanningPrinters = true;
 
-                // 1) 초기 진입 시 캐시 컬렉션 준비
+                // 1) 초기 진입 시 캐시 컬렉션 준비 (이전 캐시 또는 마지막 선택 프린터를 즉시 선반영해 오프라인/빈 목록 깜빡임 방지)
                 if (_cachedPrinters == null)
                 {
                     _cachedPrinters = new List<UsbPrinterInfo>();
+                }
+                if (_cachedPrinters.Count == 0 && _sharedLastPrinters.Count > 0)
+                {
+                    _cachedPrinters = new List<UsbPrinterInfo>(_sharedLastPrinters);
+                    ApplyPrinterFilter();
+                }
+                else if (AvailablePrinters.Count == 0 && !string.IsNullOrEmpty(_settings?.LastSelectedPrinterName))
+                {
+                    AvailablePrinters.Add(_settings.LastSelectedPrinterName);
+                    _selectedPrinterName = _settings.LastSelectedPrinterName;
+                    _targetPrinterName = _settings.LastSelectedPrinterName;
+                    OnPropertyChanged(nameof(SelectedPrinterName));
+                    OnPropertyChanged(nameof(TargetPrinterName));
                 }
 
                 // 2) 백그라운드 스레드에서 WMI/레지스트리 전수조사 및 이름/포트 캐시 워밍업 비동기 실행 (UI 스레드 완전 무차단)
@@ -180,6 +193,7 @@ namespace BarcodePrint.ViewModel
                                 {
                                     string prevSelected = SelectedPrinterName;
                                     _cachedPrinters = freshList;
+                                    _sharedLastPrinters = new List<UsbPrinterInfo>(freshList);
                                     ApplyPrinterFilter();
 
                                     if (!string.IsNullOrEmpty(prevSelected) && AvailablePrinters.Contains(prevSelected))
@@ -420,6 +434,8 @@ namespace BarcodePrint.ViewModel
                         // (체험판 정보는 좌측 상단 전용 뱃지 1개로 표시)
                         PrinterStatusBadge = badge;
                         PrinterStatusColor = color;
+                        _sharedLastStatusBadge = badge;
+                        _sharedLastStatusColor = color;
 
                         if (statusChanged)
                         {
@@ -1378,6 +1394,50 @@ namespace BarcodePrint.ViewModel
             return gdiBitmap;
         }
 
+        public System.Windows.Media.ImageSource RenderPageThumbnail(List<TemplateElement> pageElements)
+        {
+            try
+            {
+                int effectiveW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80;
+                int effectiveH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60;
+
+                // 썸네일용 해상도 계산 (최대 140px 기준으로 선명하고 빠르게 렌더링)
+                double baseDotsPerMm = 96.0 / 25.4;
+                double rawW = effectiveW * baseDotsPerMm;
+                double rawH = effectiveH * baseDotsPerMm;
+                double scale = Math.Min(1.0, 140.0 / Math.Max(1.0, Math.Max(rawW, rawH)));
+                if (Math.Max(rawW, rawH) < 70.0)
+                {
+                    scale = Math.Min(2.5, 110.0 / Math.Max(1.0, Math.Max(rawW, rawH)));
+                }
+                double dotsPerMm = baseDotsPerMm * scale;
+                int pxW = Math.Max(16, (int)Math.Round(effectiveW * dotsPerMm));
+                int pxH = Math.Max(12, (int)Math.Round(effectiveH * dotsPerMm));
+
+                var drawingVisual = new DrawingVisual();
+                using (var dc = drawingVisual.RenderOpen())
+                {
+                    dc.DrawRectangle(System.Windows.Media.Brushes.White, null, new Rect(0, 0, pxW, pxH));
+                    if (pageElements != null)
+                    {
+                        foreach (var elem in pageElements)
+                        {
+                            RenderSingleElementOnDc(dc, elem, dotsPerMm, null);
+                        }
+                    }
+                }
+
+                var rtb = new RenderTargetBitmap(pxW, pxH, 96, 96, PixelFormats.Pbgra32);
+                rtb.Render(drawingVisual);
+                rtb.Freeze();
+                return rtb;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private void RenderSingleElementOnDc(DrawingContext dc, TemplateElement elem, double dotsPerMm, string[] colValues = null)
         {
             if (elem == null || dc == null) return;
@@ -1705,96 +1765,40 @@ namespace BarcodePrint.ViewModel
 
                 using (var labelBmp = GenerateLabelBitmapForPrint(col1, col2, col3, col4, col5, col6, col7, col8))
                 {
-                    // 물리 롤 용지 규격 (SIZE 명령어)은 장착된 롤 크기(PaperWidth, PaperHeight) 그대로 유지
-                    PRINT_INFO_CLASS.PrinterInfo.Paper_Width = PaperWidth > 0 ? PaperWidth : 80;
-                    PRINT_INFO_CLASS.PrinterInfo.Paper_Height = PaperHeight > 0 ? PaperHeight : 60;
-                    PRINT_INFO_CLASS.PrinterInfo.nPrintSpeed = PrintSpeed;
-                    PRINT_INFO_CLASS.PrinterInfo.nDarkness = PrintDarkness;
-                    PRINT_INFO_CLASS.PrinterInfo.nGAP = GapHeight;
-                    PRINT_INFO_CLASS.PrinterInfo.bRibbon = IsRibbon;
-                    // 소프트웨어 비트맵 레벨에서 이미 PrinterOffsetX, PrinterOffsetY가 완벽하게 시프트되었으므로 하드웨어 오프셋은 0 설정
-                    PRINT_INFO_CLASS.PrinterInfo.offset_X = 0;
-                    PRINT_INFO_CLASS.PrinterInfo.offset_Y = 0;
-                    PRINT_INFO_CLASS.PrinterInfo.bPaperRotated = IsRotated;
-                    PRINT_INFO_CLASS.PrinterInfo.PaperType = PaperType == "BLINE" ? PAPER_TYPE.BLINE : (PaperType == "CONTINUOUS" ? PAPER_TYPE.CONTINEUS : PAPER_TYPE.GAP);
-
-                    // 인쇄 후 동작 (PostPrintAction) 및 오프셋(PostPrintOffset) 후처리 명령어 준비
-                    string extraCmdsStr = null;
-                    if (PostPrintAction != "NONE" || PostPrintOffset != 0)
+                    if (IsMultiLabelLayout)
                     {
-                        var extraCmds = new StringBuilder();
-                        if (PostPrintOffset != 0)
-                        {
-                            extraCmds.Append($"OFFSET {PostPrintOffset} mm\r\n");
-                        }
+                        int cols = Math.Max(1, LabelColumns);
+                        int rows = Math.Max(1, LabelRows);
+                        int slotsPerSheet = cols * rows;
+                        int fullSheets = effectiveCopies / slotsPerSheet;
+                        int remainder = effectiveCopies % slotsPerSheet;
 
-                        switch (PostPrintAction)
-                        {
-                            case "CUTTER":
-                                extraCmds.Append("SET PEEL OFF\r\n");
-                                extraCmds.Append("SET TEAR OFF\r\n");
-                                switch (PostPrintCutTrigger)
-                                {
-                                    case "EVERY_PAGE":
-                                        extraCmds.Append("SET CUTTER 1\r\n");
-                                        break;
-                                    case "AFTER_COPIES":
-                                        extraCmds.Append($"SET CUTTER {effectiveCopies}\r\n");
-                                        break;
-                                    case "AFTER_JOB":
-                                        extraCmds.Append("SET CUTTER BATCH\r\n");
-                                        break;
-                                    case "CUSTOM_INTERVAL":
-                                        extraCmds.Append($"SET CUTTER {Math.Max(1, PostPrintCutInterval)}\r\n");
-                                        break;
-                                    default:
-                                        extraCmds.Append("SET CUTTER 1\r\n");
-                                        break;
-                                }
-                                extraCmds.Append("SET BACK ON\r\n");
-                                break;
-                            case "TEAR":
-                                extraCmds.Append("SET CUTTER OFF\r\n");
-                                extraCmds.Append("SET PEEL OFF\r\n");
-                                extraCmds.Append("SET TEAR ON\r\n");
-                                break;
-                            case "PEEL":
-                                extraCmds.Append("SET CUTTER OFF\r\n");
-                                extraCmds.Append("SET TEAR OFF\r\n");
-                                extraCmds.Append("SET PEEL ON\r\n");
-                                break;
-                            case "NONE":
-                                extraCmds.Append("SET CUTTER OFF\r\nSET PEEL OFF\r\nSET TEAR OFF\r\n");
-                                break;
-                            case "DEFAULT":
-                            default:
-                                // 프린터 자체 설정 사용 (추가 명령 없음)
-                                break;
-                        }
+                        double slotW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
+                        double slotH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
+                        double totalW = GetTotalSheetWidthMm();
+                        double totalH = GetTotalSheetHeightMm();
 
-                        if (extraCmds.Length > 0)
+                        bool allOk = true;
+                        if (fullSheets > 0)
                         {
-                            extraCmdsStr = extraCmds.ToString();
+                            var fullSlots = Enumerable.Repeat(labelBmp, slotsPerSheet).ToList();
+                            using (var sheetBmp = ComposeMultiLabelSheetBitmap(fullSlots, slotW, slotH, totalW, totalH))
+                            {
+                                allOk &= SendSheetBitmapToTsplPrinter(sheetBmp, totalW, totalH, fullSheets);
+                            }
                         }
+                        if (remainder > 0)
+                        {
+                            var partSlots = Enumerable.Repeat(labelBmp, remainder).ToList();
+                            using (var sheetBmp = ComposeMultiLabelSheetBitmap(partSlots, slotW, slotH, totalW, totalH))
+                            {
+                                allOk &= SendSheetBitmapToTsplPrinter(sheetBmp, totalW, totalH, 1);
+                            }
+                        }
+                        return allOk;
                     }
 
-                    byte[] tsplCommandBytes = PrintManager.ConvertBitmapToTSPL_(labelBmp, effectiveCopies, extraCmdsStr);
-
-                    bool printed = _printerService.SendLabelPrintBytes(SelectedPrinterName, tsplCommandBytes, _cachedPrinters, out string printErr);
-                    if (printed)
-                    {
-                        if (IsSerialEnabled)
-                        {
-                            int stepDelta = IsSerialDecrement ? -Math.Abs(SerialStep) : Math.Abs(SerialStep);
-                            SerialStartNumber = Math.Max(0, SerialStartNumber + stepDelta);
-                        }
-                    }
-                    else
-                    {
-                        StatusMessage = $"인쇄 실패: {printErr}";
-                        System.Diagnostics.Debug.WriteLine($"SendLabelPrintBytes 실패: {printErr}");
-                    }
-                    return printed;
+                    return SendSheetBitmapToTsplPrinter(labelBmp, PaperWidth > 0 ? PaperWidth : 80, PaperHeight > 0 ? PaperHeight : 60, effectiveCopies);
                 }
             }
             catch (Exception ex)
@@ -1803,6 +1807,158 @@ namespace BarcodePrint.ViewModel
                 StatusMessage = $"인쇄 생성 실패: {ex.Message}";
                 return false;
             }
+        }
+
+        private Bitmap ComposeMultiLabelSheetBitmap(List<Bitmap> slotBitmaps, double slotWMm, double slotHMm, double sheetWMm, double sheetHMm)
+        {
+            double printerDpi = PRINT_INFO_CLASS.PrinterInfo.printer_DPI > 0 ? (double)PRINT_INFO_CLASS.PrinterInfo.printer_DPI : 203.0;
+            double dotsPerMm = printerDpi / 25.4;
+
+            int sheetPxW = Math.Max(16, (int)Math.Round(sheetWMm * dotsPerMm));
+            int sheetPxH = Math.Max(16, (int)Math.Round(sheetHMm * dotsPerMm));
+            var sheetBmp = new Bitmap(sheetPxW, sheetPxH, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+
+            using (var g = Graphics.FromImage(sheetBmp))
+            {
+                g.Clear(System.Drawing.Color.White);
+                int cols = Math.Max(1, LabelColumns);
+                int rows = Math.Max(1, LabelRows);
+                int slotW = Math.Max(1, (int)Math.Round(slotWMm * dotsPerMm));
+                int slotH = Math.Max(1, (int)Math.Round(slotHMm * dotsPerMm));
+
+                for (int i = 0; i < slotBitmaps.Count && i < cols * rows; i++)
+                {
+                    var bmp = slotBitmaps[i];
+                    if (bmp == null) continue;
+                    int r = i / cols;
+                    int c = i % cols;
+                    int x = (int)Math.Round((PageMarginLeftMm + c * (slotWMm + ColumnGapMm)) * dotsPerMm);
+                    int y = (int)Math.Round((PageMarginTopMm + r * (slotHMm + RowGapMm)) * dotsPerMm);
+                    g.DrawImage(bmp, x, y, slotW, slotH);
+                }
+            }
+            return sheetBmp;
+        }
+
+        private bool SendSheetBitmapToTsplPrinter(Bitmap sheetBmp, double sheetWMm, double sheetHMm, int copies)
+        {
+            int effectiveCopies = Math.Max(1, copies);
+            PRINT_INFO_CLASS.PrinterInfo.Paper_Width = (int)Math.Round(sheetWMm);
+            PRINT_INFO_CLASS.PrinterInfo.Paper_Height = (int)Math.Round(sheetHMm);
+            PRINT_INFO_CLASS.PrinterInfo.Paper_Width_Mm = sheetWMm;
+            PRINT_INFO_CLASS.PrinterInfo.Paper_Height_Mm = sheetHMm;
+            PRINT_INFO_CLASS.PrinterInfo.nPrintSpeed = PrintSpeed;
+            PRINT_INFO_CLASS.PrinterInfo.nDarkness = PrintDarkness;
+            PRINT_INFO_CLASS.PrinterInfo.nGAP = GapHeight;
+            PRINT_INFO_CLASS.PrinterInfo.bRibbon = IsRibbon;
+            PRINT_INFO_CLASS.PrinterInfo.offset_X = 0;
+            PRINT_INFO_CLASS.PrinterInfo.offset_Y = 0;
+            PRINT_INFO_CLASS.PrinterInfo.bPaperRotated = IsRotated;
+            PRINT_INFO_CLASS.PrinterInfo.PaperType = PaperType == "BLINE" ? PAPER_TYPE.BLINE : (PaperType == "CONTINUOUS" ? PAPER_TYPE.CONTINEUS : PAPER_TYPE.GAP);
+
+            string extraCmdsStr = null;
+            if (PostPrintAction != "NONE" || PostPrintOffset != 0)
+            {
+                var extraCmds = new StringBuilder();
+                if (PostPrintOffset != 0) extraCmds.Append($"OFFSET {PostPrintOffset} mm\r\n");
+
+                switch (PostPrintAction)
+                {
+                    case "CUTTER":
+                        extraCmds.Append("SET PEEL OFF\r\nSET TEAR OFF\r\n");
+                        switch (PostPrintCutTrigger)
+                        {
+                            case "EVERY_PAGE": extraCmds.Append("SET CUTTER 1\r\n"); break;
+                            case "AFTER_COPIES": extraCmds.Append($"SET CUTTER {effectiveCopies}\r\n"); break;
+                            case "AFTER_JOB": extraCmds.Append("SET CUTTER BATCH\r\n"); break;
+                            case "CUSTOM_INTERVAL": extraCmds.Append($"SET CUTTER {Math.Max(1, PostPrintCutInterval)}\r\n"); break;
+                            default: extraCmds.Append("SET CUTTER 1\r\n"); break;
+                        }
+                        extraCmds.Append("SET BACK ON\r\n");
+                        break;
+                    case "TEAR": extraCmds.Append("SET CUTTER OFF\r\nSET PEEL OFF\r\nSET TEAR ON\r\n"); break;
+                    case "PEEL": extraCmds.Append("SET CUTTER OFF\r\nSET TEAR OFF\r\nSET PEEL ON\r\n"); break;
+                    case "NONE": extraCmds.Append("SET CUTTER OFF\r\nSET PEEL OFF\r\nSET TEAR OFF\r\n"); break;
+                }
+                if (extraCmds.Length > 0) extraCmdsStr = extraCmds.ToString();
+            }
+
+            try
+            {
+                byte[] tsplCommandBytes = PrintManager.ConvertBitmapToTSPL_(sheetBmp, effectiveCopies, extraCmdsStr);
+                bool printed = _printerService.SendLabelPrintBytes(SelectedPrinterName, tsplCommandBytes, _cachedPrinters, out string printErr);
+                if (printed)
+                {
+                    if (IsSerialEnabled)
+                    {
+                        int stepDelta = IsSerialDecrement ? -Math.Abs(SerialStep) : Math.Abs(SerialStep);
+                        SerialStartNumber = Math.Max(0, SerialStartNumber + stepDelta);
+                    }
+                }
+                else
+                {
+                    StatusMessage = $"인쇄 실패: {printErr}";
+                    System.Diagnostics.Debug.WriteLine($"SendLabelPrintBytes 실패: {printErr}");
+                }
+                return printed;
+            }
+            finally
+            {
+                PRINT_INFO_CLASS.PrinterInfo.Paper_Width_Mm = 0;
+                PRINT_INFO_CLASS.PrinterInfo.Paper_Height_Mm = 0;
+            }
+        }
+
+        public bool PrintRecordsMultiColumn(List<PrintRecordModel> targetRecords, int copiesPerRecord)
+        {
+            if (targetRecords == null || targetRecords.Count == 0) return false;
+            if (AvailablePrinters == null || AvailablePrinters.Count == 0 || string.IsNullOrEmpty(SelectedPrinterName))
+            {
+                _dialogService.ShowWarning("선택된 프린터가 없습니다. 프린터를 선택해 주세요.", "인쇄 알림");
+                return false;
+            }
+
+            int cols = Math.Max(1, LabelColumns);
+            int rows = Math.Max(1, LabelRows);
+            int slotsPerSheet = cols * rows;
+            int effCopies = Math.Max(1, copiesPerRecord);
+            double slotW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
+            double slotH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
+            double totalW = GetTotalSheetWidthMm();
+            double totalH = GetTotalSheetHeightMm();
+
+            var expanded = new List<PrintRecordModel>();
+            foreach (var rec in targetRecords)
+            {
+                for (int c = 0; c < effCopies; c++) expanded.Add(rec);
+            }
+
+            bool allOk = true;
+            for (int i = 0; i < expanded.Count; i += slotsPerSheet)
+            {
+                var batch = expanded.Skip(i).Take(slotsPerSheet).ToList();
+                var slotBitmaps = new List<Bitmap>();
+                try
+                {
+                    foreach (var rec in batch)
+                    {
+                        _currentPrintingRecord = rec;
+                        slotBitmaps.Add(GenerateLabelBitmapForPrint(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8));
+                    }
+                    using (var sheetBmp = ComposeMultiLabelSheetBitmap(slotBitmaps, slotW, slotH, totalW, totalH))
+                    {
+                        bool ok = SendSheetBitmapToTsplPrinter(sheetBmp, totalW, totalH, 1);
+                        foreach (var rec in batch) rec.Status = ok ? "인쇄 완료" : "인쇄 실패";
+                        if (!ok) allOk = false;
+                    }
+                }
+                finally
+                {
+                    _currentPrintingRecord = null;
+                    foreach (var b in slotBitmaps) b?.Dispose();
+                }
+            }
+            return allOk;
         }
 
         public void ExecutePrintRange()
@@ -1832,25 +1988,33 @@ namespace BarcodePrint.ViewModel
             bool allSuccess = true;
             int successCount = 0;
             int totalCopiesPrinted = 0;
-
-            try
+            if (IsMultiLabelLayout)
             {
-                foreach (var rec in targets)
-                {
-                    _currentPrintingRecord = rec;
-                    bool success = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
-                    rec.Status = success ? "인쇄 완료" : "인쇄 실패";
-                    if (success)
-                    {
-                        successCount++;
-                        totalCopiesPrinted += ExcelPrintCopies;
-                    }
-                    else allSuccess = false;
-                }
+                allSuccess = PrintRecordsMultiColumn(targets, ExcelPrintCopies);
+                successCount = targets.Count(r => r.Status == "인쇄 완료");
+                totalCopiesPrinted = successCount * ExcelPrintCopies;
             }
-            finally
+            else
             {
-                _currentPrintingRecord = null;
+                try
+                {
+                    foreach (var rec in targets)
+                    {
+                        _currentPrintingRecord = rec;
+                        bool success = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
+                        rec.Status = success ? "인쇄 완료" : "인쇄 실패";
+                        if (success)
+                        {
+                            successCount++;
+                            totalCopiesPrinted += ExcelPrintCopies;
+                        }
+                        else allSuccess = false;
+                    }
+                }
+                finally
+                {
+                    _currentPrintingRecord = null;
+                }
             }
 
             SaveHistoryRecords();
@@ -1911,8 +2075,123 @@ namespace BarcodePrint.ViewModel
             FocusFirstInputRequested?.Invoke();
         }
 
+        public void ExecutePrintPages(List<int> pageIndices, int copies)
+        {
+            if (CurrentTemplate == null || pageIndices == null || pageIndices.Count == 0) return;
+
+            int effCopies = Math.Max(1, Math.Min(999, copies));
+            SyncPagesToTemplate();
+            var savedElements = CurrentTemplate.Elements;
+            int successPages = 0;
+
+            if (IsMultiLabelLayout)
+            {
+                int cols = Math.Max(1, LabelColumns);
+                int rows = Math.Max(1, LabelRows);
+                int slotsPerSheet = cols * rows;
+                double slotW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
+                double slotH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
+                double totalW = GetTotalSheetWidthMm();
+                double totalH = GetTotalSheetHeightMm();
+
+                var expanded = new List<int>();
+                foreach (int p in pageIndices)
+                {
+                    if (p < 0 || p >= TotalPageCount) continue;
+                    for (int c = 0; c < effCopies; c++) expanded.Add(p);
+                }
+
+                try
+                {
+                    for (int i = 0; i < expanded.Count; i += slotsPerSheet)
+                    {
+                        var batch = expanded.Skip(i).Take(slotsPerSheet).ToList();
+                        var slotBitmaps = new List<Bitmap>();
+                        try
+                        {
+                            foreach (int p in batch)
+                            {
+                                var pageElems = GetPageElements(p);
+                                CurrentTemplate.Elements = pageElems;
+                                string pc1 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 1)?.Content ?? "";
+                                string pc2 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 2)?.Content ?? "";
+                                string pc3 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 3)?.Content ?? "";
+                                string pc4 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 4)?.Content ?? "";
+                                string pc5 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 5)?.Content ?? "";
+                                string pc6 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 6)?.Content ?? "";
+                                string pc7 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 7)?.Content ?? "";
+                                string pc8 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 8)?.Content ?? "";
+                                slotBitmaps.Add(GenerateLabelBitmapForPrint(pc1, pc2, pc3, pc4, pc5, pc6, pc7, pc8));
+                            }
+
+                            using (var sheetBmp = ComposeMultiLabelSheetBitmap(slotBitmaps, slotW, slotH, totalW, totalH))
+                            {
+                                if (SendSheetBitmapToTsplPrinter(sheetBmp, totalW, totalH, 1))
+                                {
+                                    successPages += batch.Count;
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            foreach (var b in slotBitmaps) b?.Dispose();
+                        }
+                    }
+                }
+                finally
+                {
+                    CurrentTemplate.Elements = savedElements;
+                }
+
+                StatusMessage = $"다중 배열 페이지 인쇄 완료: {pageIndices.Count}페이지 × {effCopies}매";
+                return;
+            }
+
+            try
+            {
+                foreach (int p in pageIndices)
+                {
+                    if (p < 0 || p >= TotalPageCount) continue;
+                    var pageElems = GetPageElements(p);
+                    CurrentTemplate.Elements = pageElems;
+
+                    string pc1 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 1)?.Content ?? "";
+                    string pc2 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 2)?.Content ?? "";
+                    string pc3 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 3)?.Content ?? "";
+                    string pc4 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 4)?.Content ?? "";
+                    string pc5 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 5)?.Content ?? "";
+                    string pc6 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 6)?.Content ?? "";
+                    string pc7 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 7)?.Content ?? "";
+                    string pc8 = pageElems?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 8)?.Content ?? "";
+
+                    if (SendToTsplPrinter(pc1, pc2, pc3, pc4, pc5, pc6, pc7, pc8, effCopies))
+                    {
+                        successPages++;
+                    }
+                }
+            }
+            finally
+            {
+                CurrentTemplate.Elements = savedElements;
+            }
+
+            StatusMessage = successPages == pageIndices.Count
+                ? $"다중 페이지 인쇄 완료: {pageIndices.Count}페이지 × {effCopies}매"
+                : $"다중 페이지 인쇄: {pageIndices.Count}페이지 중 {successPages}페이지 성공";
+        }
+
         public void ExecutePrintOnly()
         {
+            int copies = Math.Max(1, Math.Min(999, SinglePrintCopies));
+            int pageCount = TotalPageCount;
+
+            if (pageCount > 1 && CurrentTemplate != null)
+            {
+                var allPages = Enumerable.Range(0, pageCount).ToList();
+                ExecutePrintPages(allPages, copies);
+                return;
+            }
+
             string c1 = !string.IsNullOrEmpty(InputCol1) ? InputCol1 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 1)?.Content ?? "");
             string c2 = !string.IsNullOrEmpty(InputCol2) ? InputCol2 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 2)?.Content ?? "");
             string c3 = !string.IsNullOrEmpty(InputCol3) ? InputCol3 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 3)?.Content ?? "");
@@ -1933,7 +2212,6 @@ namespace BarcodePrint.ViewModel
                 return;
             }
 
-            int copies = Math.Max(1, Math.Min(999, SinglePrintCopies));
             bool printSuccess = SendToTsplPrinter(c1, c2, c3, c4, c5, c6, c7, c8, copies);
 
             StatusMessage = printSuccess ? $"단건 인쇄 완료: {copies}매" : $"인쇄 실패: {SelectedPrinterName}";
@@ -2035,27 +2313,36 @@ namespace BarcodePrint.ViewModel
 
             int successCount = 0;
             int totalCopiesPrinted = 0;
-            try
+            if (IsMultiLabelLayout)
             {
-                foreach (var rec in Records)
+                PrintRecordsMultiColumn(Records.ToList(), ExcelPrintCopies);
+                successCount = Records.Count(r => r.Status == "인쇄 완료");
+                totalCopiesPrinted = successCount * ExcelPrintCopies;
+            }
+            else
+            {
+                try
                 {
-                    _currentPrintingRecord = rec;
-                    bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
-                    if (ok)
+                    foreach (var rec in Records)
                     {
-                        rec.Status = "인쇄 완료";
-                        successCount++;
-                        totalCopiesPrinted += ExcelPrintCopies;
-                    }
-                    else
-                    {
-                        rec.Status = "인쇄 실패";
+                        _currentPrintingRecord = rec;
+                        bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
+                        if (ok)
+                        {
+                            rec.Status = "인쇄 완료";
+                            successCount++;
+                            totalCopiesPrinted += ExcelPrintCopies;
+                        }
+                        else
+                        {
+                            rec.Status = "인쇄 실패";
+                        }
                     }
                 }
-            }
-            finally
-            {
-                _currentPrintingRecord = null;
+                finally
+                {
+                    _currentPrintingRecord = null;
+                }
             }
 
             SaveHistoryRecords();
@@ -2078,27 +2365,36 @@ namespace BarcodePrint.ViewModel
 
             int successCount = 0;
             int totalCopiesPrinted = 0;
-            try
+            if (IsMultiLabelLayout)
             {
-                foreach (var rec in unprinted)
+                PrintRecordsMultiColumn(unprinted, ExcelPrintCopies);
+                successCount = unprinted.Count(r => r.Status == "인쇄 완료");
+                totalCopiesPrinted = successCount * ExcelPrintCopies;
+            }
+            else
+            {
+                try
                 {
-                    _currentPrintingRecord = rec;
-                    bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
-                    if (ok)
+                    foreach (var rec in unprinted)
                     {
-                        rec.Status = "인쇄 완료";
-                        successCount++;
-                        totalCopiesPrinted += ExcelPrintCopies;
-                    }
-                    else
-                    {
-                        rec.Status = "인쇄 실패";
+                        _currentPrintingRecord = rec;
+                        bool ok = SendToTsplPrinter(rec.Col1, rec.Col2, rec.Col3, rec.Col4, rec.Col5, rec.Col6, rec.Col7, rec.Col8, ExcelPrintCopies);
+                        if (ok)
+                        {
+                            rec.Status = "인쇄 완료";
+                            successCount++;
+                            totalCopiesPrinted += ExcelPrintCopies;
+                        }
+                        else
+                        {
+                            rec.Status = "인쇄 실패";
+                        }
                     }
                 }
-            }
-            finally
-            {
-                _currentPrintingRecord = null;
+                finally
+                {
+                    _currentPrintingRecord = null;
+                }
             }
 
             SaveHistoryRecords();

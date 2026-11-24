@@ -258,6 +258,7 @@
     <Compile Include="Model\PdfRenderHelper.cs" />
     <Compile Include="Model\PrinterOnlineDetector.cs" />
     <Compile Include="Model\ElementType.cs" />
+    <Compile Include="Model\DocumentTabItem.cs" />
     <Compile Include="Model\TemplateElement.cs" />
     <Compile Include="Model\TableCellItem.cs" />
     <Compile Include="Model\LabelTemplateModel.cs" />

@@ -318,9 +318,37 @@ namespace BarcodePrint.WpfView
                     if (i < recentList.Count)
                     {
                         var item = recentList[i];
+                        if (!string.IsNullOrEmpty(item.TemplateFilePath) && File.Exists(item.TemplateFilePath))
+                        {
+                            try
+                            {
+                                var tpl = LabelTemplateModel.LoadFromFile(item.TemplateFilePath);
+                                if (tpl != null && tpl.WidthMm > 0 && tpl.HeightMm > 0)
+                                {
+                                    int actualW = (int)Math.Round(tpl.WidthMm);
+                                    int actualH = (int)Math.Round(tpl.HeightMm);
+                                    if (item.Width != actualW || item.Height != actualH || item.Rotation != tpl.Rotation)
+                                    {
+                                        item.Width = actualW;
+                                        item.Height = actualH;
+                                        item.Rotation = tpl.Rotation;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        int dispW = (item.Rotation == 90 || item.Rotation == 270) ? item.Height : item.Width;
+                        int dispH = (item.Rotation == 90 || item.Rotation == 270) ? item.Width : item.Height;
+                        if (!string.IsNullOrEmpty(item.Title) &&
+                            System.Text.RegularExpressions.Regex.IsMatch(item.Title, @"^라벨\s+\d+×\d+\s*mm$"))
+                        {
+                            item.Title = $"라벨 {dispW}×{dispH} mm";
+                        }
+
                         buttons[i].Visibility = Visibility.Visible;
-                        if (titles[i] != null) titles[i].Text = !string.IsNullOrEmpty(item.Title) ? item.Title : $"{item.Width}×{item.Height} mm";
-                        if (sizes[i] != null) sizes[i].Text = $"{item.Width}×{item.Height} mm";
+                        if (titles[i] != null) titles[i].Text = !string.IsNullOrEmpty(item.Title) ? item.Title : $"라벨 {dispW}×{dispH} mm";
+                        if (sizes[i] != null) sizes[i].Text = $"{dispW}×{dispH} mm";
                         if (subtitles[i] != null)
                         {
                             subtitles[i].Text = !string.IsNullOrEmpty(item.LastModified)
@@ -616,7 +644,10 @@ namespace BarcodePrint.WpfView
             wizard.Owner = this;
             if (wizard.ShowDialog() == true)
             {
-                var mainWindow = new WpfMainWindow(wizard.SelectedWidth, wizard.SelectedHeight, wizard.SelectedPaperType, wizard.SelectedRotation);
+                var mainWindow = new WpfMainWindow(
+                    wizard.SelectedWidth, wizard.SelectedHeight, wizard.SelectedPaperType, wizard.SelectedRotation,
+                    wizard.SelectedColumns, wizard.SelectedRows, wizard.SelectedMarginLeft, wizard.SelectedMarginRight,
+                    wizard.SelectedColumnGap, wizard.SelectedRowGap);
                 NavigateToEditor(mainWindow);
             }
             else

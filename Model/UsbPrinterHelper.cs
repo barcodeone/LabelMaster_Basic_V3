@@ -137,6 +137,7 @@ namespace BarcodePrint.Model
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _btPortToNameCache = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _btNameToPortCache = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _netIpToNameCache = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _btConnectionCache = new System.Collections.Concurrent.ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         private static DateTime _lastLookupCacheClearTime = DateTime.Now;
 
         public static void InvalidatePrinterCache()
@@ -147,6 +148,7 @@ namespace BarcodePrint.Model
             _btPortToNameCache.Clear();
             _btNameToPortCache.Clear();
             _netIpToNameCache.Clear();
+            _btConnectionCache.Clear();
             _lastLookupCacheClearTime = DateTime.Now;
         }
 
@@ -157,8 +159,145 @@ namespace BarcodePrint.Model
                 _btPortToNameCache.Clear();
                 _btNameToPortCache.Clear();
                 _netIpToNameCache.Clear();
+                _btConnectionCache.Clear();
                 _lastLookupCacheClearTime = DateTime.Now;
             }
+        }
+
+        /// <summary>
+        /// 블루투스 프린터가 실제로 전원이 켜져 있고 연결 가능한 상태인지 확인합니다.
+        /// (단순 가상 COM 포트 레지스트리 존재 여부가 아닌 Bluetooth API fConnected 및 RFCOMM 포트 응답 확인)
+        /// </summary>
+        public static bool IsBluetoothDeviceConnected(string deviceName, string portName = null)
+        {
+            if (IsAppExiting) return false;
+            CheckLookupCacheExpiration();
+
+            string portOnly = "";
+            if (!string.IsNullOrWhiteSpace(portName))
+            {
+                var m = Regex.Match(portName, @"COM\d+", RegexOptions.IgnoreCase);
+                portOnly = m.Success ? m.Value.ToUpperInvariant() : portName.TrimEnd(':').ToUpperInvariant();
+            }
+            if (string.IsNullOrEmpty(portOnly) && !string.IsNullOrWhiteSpace(deviceName))
+            {
+                portOnly = GetBluetoothPortForDeviceName(deviceName);
+            }
+
+            if (string.IsNullOrEmpty(portOnly))
+            {
+                return false;
+            }
+
+            if (!GetAvailableComPorts().Contains(portOnly, StringComparer.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (_btConnectionCache.TryGetValue(portOnly, out bool cachedResult))
+            {
+                return cachedResult;
+            }
+
+            bool isConnected = false;
+
+            // 1단계: BluetoothFindFirstDevice (fIssueInquiry = false)로 현재 ACL 연결 상태(fConnected) 즉시 확인
+            try
+            {
+                string cleanTarget = (deviceName ?? "")
+                    .Replace("[블루투스]", "")
+                    .Replace("(페어링 필요)", "")
+                    .Replace("(가상포트 연결 필요)", "")
+                    .Replace(":", "")
+                    .Replace("-", "")
+                    .Replace(" ", "")
+                    .Trim()
+                    .ToUpperInvariant();
+
+                var sp = new BLUETOOTH_DEVICE_SEARCH_PARAMS();
+                sp.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_SEARCH_PARAMS));
+                sp.fReturnAuthenticated = true;
+                sp.fReturnRemembered = true;
+                sp.fReturnUnknown = false;
+                sp.fReturnConnected = true;
+                sp.fIssueInquiry = false;
+                sp.cTimeoutMultiplier = 1;
+                sp.hRadio = IntPtr.Zero;
+
+                var di = new BLUETOOTH_DEVICE_INFO();
+                di.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+
+                IntPtr hFind = BluetoothFindFirstDevice(ref sp, ref di);
+                if (hFind != IntPtr.Zero)
+                {
+                    try
+                    {
+                        var targetNums = Regex.Matches(deviceName ?? "", @"\d+").Cast<Match>().Select(m => m.Value).ToList();
+                        do
+                        {
+                            string curName = (di.szName ?? "").Trim();
+                            string cleanCurName = curName.Replace(":", "").Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
+                            if (!string.IsNullOrEmpty(cleanCurName) && !string.IsNullOrEmpty(cleanTarget))
+                            {
+                                var curNums = Regex.Matches(curName, @"\d+").Cast<Match>().Select(m => m.Value).ToList();
+                                bool numConflict = curNums.Any() && targetNums.Any() && !curNums.Intersect(targetNums).Any();
+                                if (!numConflict && (cleanCurName.Contains(cleanTarget) || cleanTarget.Contains(cleanCurName)))
+                                {
+                                    if (di.fConnected)
+                                    {
+                                        isConnected = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            di = new BLUETOOTH_DEVICE_INFO();
+                            di.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+                        } while (BluetoothFindNextDevice(hFind, ref di));
+                    }
+                    finally
+                    {
+                        BluetoothFindDeviceClose(hFind);
+                    }
+                }
+            }
+            catch { }
+
+            // 2단계: fConnected가 false인 경우(전원이 켜져 있으나 아직 SPP 미오픈 상태 vs 전원 꺼짐 구분),
+            // 가상 COM 포트 RFCOMM 연결을 짧게(최대 1.5초) 시도하여 실제 전원/응답 여부를 판별
+            if (!isConnected)
+            {
+                try
+                {
+                    var probeTask = Task.Run(() =>
+                    {
+                        try
+                        {
+                            using (var sp = new SerialPort(portOnly, 9600, Parity.None, 8, StopBits.One))
+                            {
+                                sp.ReadTimeout = 500;
+                                sp.WriteTimeout = 500;
+                                sp.Open();
+                                bool opened = sp.IsOpen;
+                                if (opened) sp.Close();
+                                return opened;
+                            }
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    });
+
+                    if (probeTask.Wait(1500))
+                    {
+                        isConnected = probeTask.Result;
+                    }
+                }
+                catch { }
+            }
+
+            _btConnectionCache[portOnly] = isConnected;
+            return isConnected;
         }
 
         public static List<string> GetAvailableComPorts()
@@ -298,7 +437,7 @@ namespace BarcodePrint.Model
                         bool isUsbPort = port.StartsWith("USB", StringComparison.OrdinalIgnoreCase);
                         bool isBtPort = port.ToUpper().Contains("COM") || port.ToUpper().Contains("BTH") || port.ToUpper().Contains("BLUETOOTH");
                         bool isLanPort = !isUsbPort && !isBtPort && 
-                                        (Regex.IsMatch(port, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b") || 
+                                        (Regex.IsMatch(port, @"(?<!\d)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?!\d)") || 
                                          port.StartsWith("IP_", StringComparison.OrdinalIgnoreCase) || 
                                          port.StartsWith("WSD", StringComparison.OrdinalIgnoreCase) ||
                                          port.Contains(":9100"));
@@ -319,7 +458,7 @@ namespace BarcodePrint.Model
                         }
                         else if (connType == "Bluetooth")
                         {
-                            isPhysicallyOnline = GetAvailableComPorts().Contains(port, StringComparer.OrdinalIgnoreCase);
+                            isPhysicallyOnline = IsBluetoothDeviceConnected(name, port);
                         }
 
                         string serial = "";
@@ -362,7 +501,7 @@ namespace BarcodePrint.Model
                         // 2. TCP/IP (LAN) 또는 Bluetooth 연결: 목록 열거 중에는 물리 포트(COM/ARP) 블로킹 호출을 하지 않고 레지스트리에서 즉시 확인
                         else if (connType == "LAN" && hasSerialFilter)
                         {
-                            var ipMatch = Regex.Match(port, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b");
+                            var ipMatch = Regex.Match(port, @"(?<!\d)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?!\d)");
                             if (ipMatch.Success)
                             {
                                 string ip = ipMatch.Value;

@@ -87,6 +87,33 @@ namespace BarcodePrint.WpfView
                 BorderExcelPrintRange.Visibility = Visibility.Collapsed;
             }
 
+            // 4-2. 다중 페이지 인쇄 범위 카드 초기화 (엑셀 모드가 아니고 2페이지 이상일 때)
+            if (BorderExcelPrintRange.Visibility != Visibility.Visible && _vm.HasMultiplePages)
+            {
+                BorderTemplatePageRange.Visibility = Visibility.Visible;
+                int totalPages = _vm.TotalPageCount;
+                TxtTemplatePageTotalInfo.Text = $"총 {totalPages}페이지";
+                RbPageAll.Content = $"전체 페이지 인쇄 (1 ~ {totalPages}페이지, 총 {totalPages}장)";
+                RbPageCurrent.Content = $"현재 페이지만 인쇄 (제 {_vm.CurrentPageNumber}페이지)";
+                TxtPageRangeStart.Text = "1";
+                TxtPageRangeEnd.Text = totalPages.ToString();
+            }
+            else
+            {
+                BorderTemplatePageRange.Visibility = Visibility.Collapsed;
+            }
+
+            // 4-3. 다중 행·열 용지 배열 안내 표시 (다중 배열일 때만)
+            if (_vm.IsMultiLabelLayout)
+            {
+                BorderMultiLayoutInfo.Visibility = Visibility.Visible;
+                TxtMultiLayoutSummary.Text = $"{_vm.LabelColumns}열 × {_vm.LabelRows}행 · 전체 {_vm.GetTotalSheetWidthMm():0.#}×{_vm.GetTotalSheetHeightMm():0.#}mm";
+            }
+            else
+            {
+                BorderMultiLayoutInfo.Visibility = Visibility.Collapsed;
+            }
+
             // 5. 인쇄 방식 & 센서 유형 초기화
             CboPrintMethod.SelectedIndex = _vm.IsRibbon ? 1 : 0;
             if (_vm.PaperType == "BLINE")
@@ -170,6 +197,13 @@ namespace BarcodePrint.WpfView
             {
                 TxtCopies.Text = "1";
             }
+        }
+
+        private void OnTemplatePageRangeOptionChanged(object sender, RoutedEventArgs e)
+        {
+            if (PanelPageRangeInputs == null || PanelPageSpecificInputs == null) return;
+            PanelPageRangeInputs.Visibility = (RbPageRange.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
+            PanelPageSpecificInputs.Visibility = (RbPageSpecific.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void OnExcelRangeOptionChanged(object sender, RoutedEventArgs e)
@@ -307,19 +341,61 @@ namespace BarcodePrint.WpfView
                     }
 
                     int successCount = 0;
-                    foreach (var idx in pageIndices)
+                    var specRecords = pageIndices.Select(idx => _vm.Records[idx]).ToList();
+                    if (_vm.IsMultiLabelLayout)
                     {
-                        var rec = _vm.Records[idx];
-                        bool ok = _vm.PrintSingleExcelRecord(rec, copies);
-                        if (ok)
+                        _vm.PrintRecordsMultiColumn(specRecords, copies);
+                        successCount = specRecords.Count(r => r.Status == "인쇄 완료");
+                    }
+                    else
+                    {
+                        foreach (var rec in specRecords)
                         {
-                            rec.Status = "인쇄 완료";
-                            successCount++;
+                            bool ok = _vm.PrintSingleExcelRecord(rec, copies);
+                            if (ok)
+                            {
+                                rec.Status = "인쇄 완료";
+                                successCount++;
+                            }
                         }
                     }
                     _vm.SaveHistoryRecords();
                     _vm.StatusMessage = $"지정 페이지 인쇄 완료: 총 {pageIndices.Count}개 중 {successCount}건 성공 (각 {copies}매)";
                 }
+            }
+            else if (_vm.HasMultiplePages)
+            {
+                _vm.SinglePrintCopies = copies;
+                int totalPages = _vm.TotalPageCount;
+                List<int> targetIndices;
+
+                if (RbPageCurrent.IsChecked == true)
+                {
+                    targetIndices = new List<int> { Math.Max(0, Math.Min(totalPages - 1, _vm.CurrentPageNumber - 1)) };
+                }
+                else if (RbPageRange.IsChecked == true)
+                {
+                    int.TryParse(TxtPageRangeStart.Text, out int startP);
+                    int.TryParse(TxtPageRangeEnd.Text, out int endP);
+                    startP = Math.Max(1, Math.Min(totalPages, startP));
+                    endP = Math.Max(startP, Math.Min(totalPages, endP));
+                    targetIndices = Enumerable.Range(startP - 1, endP - startP + 1).ToList();
+                }
+                else if (RbPageSpecific.IsChecked == true)
+                {
+                    targetIndices = ParseSpecificPages(TxtPageSpecific.Text?.Trim() ?? "", totalPages);
+                    if (targetIndices.Count == 0)
+                    {
+                        MessageBox.Show("인쇄할 올바른 페이지 번호를 입력해 주세요. (예: 1, 3, 5-8)", "페이지 입력 안내", MessageBoxButton.OK, MessageBoxImage.Information);
+                        return;
+                    }
+                }
+                else
+                {
+                    targetIndices = Enumerable.Range(0, totalPages).ToList();
+                }
+
+                _vm.ExecutePrintPages(targetIndices, copies);
             }
             else
             {

@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="라벨마스터 - LabelMaster (v1.1.2)"
+        Title="라벨마스터 - LabelMaster (v1.1.7)"
         Width="1180" Height="720" MinWidth="960" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         FontFamily="Pretendard, 맑은 고딕, Malgun Gothic, Segoe UI, sans-serif"
@@ -249,7 +249,7 @@
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="LABEL MASTER" FontWeight="Bold" FontSize="17" Foreground="{StaticResource TextMainBrush}"/>
-                        <TextBlock x:Name="TxtAppVersion" Text="라벨마스터 v1.1.2" FontSize="11.5" Foreground="{StaticResource TextSubBrush}" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="TxtAppVersion" Text="라벨마스터 v1.1.7" FontSize="11.5" Foreground="{StaticResource TextSubBrush}" Margin="0,2,0,0"/>
                     </StackPanel>
                 </DockPanel>
 

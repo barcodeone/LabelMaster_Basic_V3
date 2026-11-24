@@ -1116,12 +1116,8 @@ namespace BarcodePrint.Services
                     if (!string.IsNullOrEmpty(resolved)) return true;
                 }
 
-                // 3순위: PnP PrintQueue Present 상태 확인
-                if (!string.IsNullOrEmpty(printerName))
-                {
-                    return IsPrinterQueuePresent(printerName);
-                }
-
+                // 물리적 USBPRINT 및 SetupDi USB 경로가 모두 없으면 USB 포트는 오프라인으로 판정
+                // (PrintQueue 이름 부분 일치 폴백은 "XP-P423B(LAN)" 등 타 연결 프린터를 오탐하므로 사용하지 않음)
                 return false;
             }
             catch

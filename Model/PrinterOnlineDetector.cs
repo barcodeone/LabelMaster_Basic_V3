@@ -101,7 +101,7 @@ namespace BarcodePrint.Model
                                 {
                                     connType = "USB";
                                 }
-                                else if (Regex.IsMatch(port, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b") ||
+                                else if (Regex.IsMatch(port, @"(?<!\d)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?!\d)") ||
                                          port.StartsWith("IP_", StringComparison.OrdinalIgnoreCase) ||
                                          port.StartsWith("WSD", StringComparison.OrdinalIgnoreCase) ||
                                          port.Contains(":9100"))
@@ -147,15 +147,9 @@ namespace BarcodePrint.Model
                                 else if (connType == "Bluetooth")
                                 {
                                     if (workOffline) continue;
-                                    var comMatch = Regex.Match(port, @"COM\d+", RegexOptions.IgnoreCase);
-                                    if (comMatch.Success)
+                                    if (!UsbPrinterHelper.IsBluetoothDeviceConnected(name, port))
                                     {
-                                        string portOnly = comMatch.Value.ToUpper();
-                                        var availablePorts = UsbPrinterHelper.GetAvailableComPorts();
-                                        if (!availablePorts.Any(p => p.Equals(portOnly, StringComparison.OrdinalIgnoreCase)))
-                                        {
-                                            continue;
-                                        }
+                                        continue;
                                     }
                                 }
 
@@ -199,7 +193,7 @@ namespace BarcodePrint.Model
                 foreach (var bthName in pairedPrinters)
                 {
                     string port = UsbPrinterHelper.GetBluetoothPortForDeviceName(bthName);
-                    if (string.IsNullOrEmpty(port) || !availablePorts.Contains(port))
+                    if (string.IsNullOrEmpty(port) || !availablePorts.Contains(port) || !UsbPrinterHelper.IsBluetoothDeviceConnected(bthName, port))
                     {
                         continue;
                     }
@@ -262,7 +256,7 @@ namespace BarcodePrint.Model
         public static bool IsLanPortReachable(string port)
         {
             if (string.IsNullOrWhiteSpace(port)) return false;
-            var ipMatch = Regex.Match(port, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b");
+            var ipMatch = Regex.Match(port, @"(?<!\d)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?!\d)");
             if (!ipMatch.Success) return false;
 
             string ip = ipMatch.Value;
@@ -326,13 +320,13 @@ namespace BarcodePrint.Model
         {
             if (IsAppExiting || string.IsNullOrWhiteSpace(printerName)) return false;
 
-            // 블루투스 프린터인 경우 할당된 가상 직렬(COM) 포트의 시스템 존재 여부로 확인
+            // 블루투스 프린터인 경우 실제 블루투스 연결 및 RFCOMM 응답 여부로 확인
             if (printerName.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase))
             {
                 string port = UsbPrinterHelper.GetBluetoothPortForDeviceName(printerName);
                 if (!string.IsNullOrEmpty(port))
                 {
-                    return UsbPrinterHelper.GetAvailableComPorts().Contains(port, StringComparer.OrdinalIgnoreCase);
+                    return UsbPrinterHelper.IsBluetoothDeviceConnected(printerName, port);
                 }
                 return false;
             }

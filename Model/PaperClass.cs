@@ -122,6 +122,8 @@ namespace BarcodePrint.Model
         public bool bPaperRotated { get; set; } = false;//용지회전 (기본값: OFF)
         public int Paper_Width { get; set; } = 80;//가로폭 (기본값: 80mm)
         public int Paper_Height { get; set; } = 60;//세로폭 (기본값: 60mm)
+        public double Paper_Width_Mm { get; set; } = 0;//소수점 정밀 가로폭 (0이면 Paper_Width 사용)
+        public double Paper_Height_Mm { get; set; } = 0;//소수점 정밀 세로폭 (0이면 Paper_Height 사용)
 
         [field: NonSerialized]
         public string SelectedPaperType { get; set; } = "80x60(갭)"; // Paper Type 선택 (저장하지 않음)

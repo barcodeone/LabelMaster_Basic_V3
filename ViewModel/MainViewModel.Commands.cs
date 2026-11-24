@@ -83,6 +83,15 @@ namespace BarcodePrint.ViewModel
         public ICommand BringForwardCommand { get; private set; }
         public ICommand SendBackwardCommand { get; private set; }
         public ICommand CopySelectedCommand { get; private set; }
+        public ICommand UndoCommand { get; private set; }
+        public ICommand RedoCommand { get; private set; }
+        public ICommand SelectTabCommand { get; private set; }
+        public ICommand CloseTabCommand { get; private set; }
+        public ICommand NewTabCommand { get; private set; }
+        public ICommand AddPageCommand { get; private set; }
+        public ICommand DuplicatePageCommand { get; private set; }
+        public ICommand DeletePageCommand { get; private set; }
+        public ICommand SelectPageCommand { get; private set; }
         public ICommand DeselectElementCommand { get; private set; }
         public ICommand StepXCommand { get; private set; }
         public ICommand StepYCommand { get; private set; }
@@ -304,13 +313,22 @@ namespace BarcodePrint.ViewModel
             AddImageElementCommand = new RelayCommand(_ => AddImageElement());
             AddTableElementCommand = new RelayCommand(_ => AddNewElement(ElementType.TABLE));
             AddDateTimeElementCommand = new RelayCommand(_ => AddNewElement(ElementType.DATE_TIME));
-            ImportPdfCommand = new RelayCommand(_ => OpenPdfPrintStudio());
+            ImportPdfCommand = new RelayCommand(_ => ExecuteImportPdfToCanvas());
             DeleteSelectedElementCommand = new RelayCommand(_ => DeleteSelectedElement());
             BringToFrontCommand = new RelayCommand(_ => BringToFront(), _ => HasSelectedElement || HasMultipleSelectedElements);
             SendToBackCommand = new RelayCommand(_ => SendToBack(), _ => HasSelectedElement || HasMultipleSelectedElements);
             BringForwardCommand = new RelayCommand(_ => BringForward(), _ => HasSelectedElement || HasMultipleSelectedElements);
             SendBackwardCommand = new RelayCommand(_ => SendBackward(), _ => HasSelectedElement || HasMultipleSelectedElements);
             CopySelectedCommand = new RelayCommand(_ => DuplicateSelectedElement());
+            UndoCommand = new RelayCommand(_ => Undo(), _ => CanUndo);
+            RedoCommand = new RelayCommand(_ => Redo(), _ => CanRedo);
+            SelectTabCommand = new RelayCommand(p => { if (p is DocumentTabItem tab) SwitchToTab(tab); });
+            CloseTabCommand = new RelayCommand(p => { if (p is DocumentTabItem tab) CloseTab(tab); });
+            NewTabCommand = new RelayCommand(_ => CreateNewBlankTab());
+            AddPageCommand = new RelayCommand(_ => AddNewPage());
+            DuplicatePageCommand = new RelayCommand(_ => DuplicateCurrentPage());
+            DeletePageCommand = new RelayCommand(_ => DeleteCurrentPage(), _ => HasMultiplePages);
+            SelectPageCommand = new RelayCommand(p => { if (p is TemplatePageItem page) SwitchToPage(page.PageIndex); });
             DeselectElementCommand = new RelayCommand(_ => DeselectElement());
 
             StepXCommand = new RelayCommand(p => StepSelectedElementX(ParseStepDelta(p)));

@@ -169,7 +169,7 @@ namespace BarcodePrint.ViewModel
             get => _settings.ZoomRatio;
             set
             {
-                double clamped = Math.Max(0.15, Math.Min(3.0, value));
+                double clamped = Math.Max(0.15, Math.Min(8.0, value));
                 if (Math.Abs(_settings.ZoomRatio - clamped) > 0.01)
                 {
                     _settings.ZoomRatio = clamped;
@@ -181,6 +181,85 @@ namespace BarcodePrint.ViewModel
         }
 
         public string ZoomPercentageText => $"{Math.Round(ZoomRatio * 100)}%";
+
+        #endregion
+
+        #region Properties - Multi-Column / Multi-Row Sheet Layout (다중 행·열 라벨지)
+
+        private int _labelColumns = 1;
+        public int LabelColumns
+        {
+            get => _labelColumns;
+            set { int v = Math.Max(1, Math.Min(20, value)); if (_labelColumns != v) { _labelColumns = v; OnPropertyChanged(); OnPropertyChanged(nameof(IsMultiLabelLayout)); } }
+        }
+
+        private int _labelRows = 1;
+        public int LabelRows
+        {
+            get => _labelRows;
+            set { int v = Math.Max(1, Math.Min(50, value)); if (_labelRows != v) { _labelRows = v; OnPropertyChanged(); OnPropertyChanged(nameof(IsMultiLabelLayout)); } }
+        }
+
+        private double _pageMarginLeftMm = 0.0;
+        public double PageMarginLeftMm
+        {
+            get => _pageMarginLeftMm;
+            set { double v = Math.Max(0.0, value); if (Math.Abs(_pageMarginLeftMm - v) > 0.001) { _pageMarginLeftMm = v; OnPropertyChanged(); OnPropertyChanged(nameof(IsMultiLabelLayout)); } }
+        }
+
+        private double _pageMarginTopMm = 0.0;
+        public double PageMarginTopMm
+        {
+            get => _pageMarginTopMm;
+            set { double v = Math.Max(0.0, value); if (Math.Abs(_pageMarginTopMm - v) > 0.001) { _pageMarginTopMm = v; OnPropertyChanged(); OnPropertyChanged(nameof(IsMultiLabelLayout)); } }
+        }
+
+        private double _pageMarginRightMm = 0.0;
+        public double PageMarginRightMm
+        {
+            get => _pageMarginRightMm;
+            set { double v = Math.Max(0.0, value); if (Math.Abs(_pageMarginRightMm - v) > 0.001) { _pageMarginRightMm = v; OnPropertyChanged(); OnPropertyChanged(nameof(IsMultiLabelLayout)); } }
+        }
+
+        private double _pageMarginBottomMm = 0.0;
+        public double PageMarginBottomMm
+        {
+            get => _pageMarginBottomMm;
+            set { double v = Math.Max(0.0, value); if (Math.Abs(_pageMarginBottomMm - v) > 0.001) { _pageMarginBottomMm = v; OnPropertyChanged(); OnPropertyChanged(nameof(IsMultiLabelLayout)); } }
+        }
+
+        private double _columnGapMm = 2.0;
+        public double ColumnGapMm
+        {
+            get => _columnGapMm;
+            set { double v = Math.Max(0.0, value); if (Math.Abs(_columnGapMm - v) > 0.001) { _columnGapMm = v; OnPropertyChanged(); } }
+        }
+
+        private double _rowGapMm = 2.0;
+        public double RowGapMm
+        {
+            get => _rowGapMm;
+            set { double v = Math.Max(0.0, value); if (Math.Abs(_rowGapMm - v) > 0.001) { _rowGapMm = v; OnPropertyChanged(); } }
+        }
+
+        public bool IsMultiLabelLayout =>
+            LabelColumns > 1 || LabelRows > 1 ||
+            PageMarginLeftMm > 0 || PageMarginRightMm > 0 ||
+            PageMarginTopMm > 0 || PageMarginBottomMm > 0;
+
+        public double GetTotalSheetWidthMm()
+        {
+            double cellW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
+            if (!IsMultiLabelLayout) return PaperWidth > 0 ? PaperWidth : 80.0;
+            return PageMarginLeftMm + (LabelColumns * cellW) + (Math.Max(0, LabelColumns - 1) * ColumnGapMm) + PageMarginRightMm;
+        }
+
+        public double GetTotalSheetHeightMm()
+        {
+            double cellH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
+            if (!IsMultiLabelLayout) return PaperHeight > 0 ? PaperHeight : 60.0;
+            return PageMarginTopMm + (LabelRows * cellH) + (Math.Max(0, LabelRows - 1) * RowGapMm) + PageMarginBottomMm;
+        }
 
         #endregion
 
@@ -1799,12 +1878,16 @@ namespace BarcodePrint.ViewModel
         private string _statusMessage = "준비 완료";
         public string StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
 
-        private string _printerStatusBadge = "🔴 오프라인";
+        private static List<UsbPrinterInfo> _sharedLastPrinters = new List<UsbPrinterInfo>();
+        private static string _sharedLastStatusBadge = "";
+        private static string _sharedLastStatusColor = "";
+
+        private string _printerStatusBadge = !string.IsNullOrEmpty(_sharedLastStatusBadge) ? _sharedLastStatusBadge : "🟡 연결 확인 중...";
         public string PrinterStatusBadge { get => _printerStatusBadge; set => SetProperty(ref _printerStatusBadge, value); }
 
         private bool _isInitializing = false;
         private bool _isFilteringPrinters = false;
-        private string _printerStatusColor = "#D32F2F";
+        private string _printerStatusColor = !string.IsNullOrEmpty(_sharedLastStatusColor) ? _sharedLastStatusColor : "#D97706";
         public string PrinterStatusColor { get => _printerStatusColor; set => SetProperty(ref _printerStatusColor, value); }
 
         private void SyncSelectedPrinterConnectionDetails(string printerName)
@@ -1881,7 +1964,7 @@ namespace BarcodePrint.ViewModel
                 var info = _cachedPrinters?.FirstOrDefault(p => norm(p.Name).Equals(key) || norm(p.FriendlyName).Equals(key));
                 if (info != null && !string.IsNullOrEmpty(info.Address))
                 {
-                    var match = Regex.Match(info.Address, @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b");
+                    var match = Regex.Match(info.Address, @"(?<!\d)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?!\d)");
                     if (match.Success)
                     {
                         TcpPrinterIp = match.Value;
@@ -2253,6 +2336,15 @@ namespace BarcodePrint.ViewModel
             _currentTemplate.PaperType = PaperType;
             _currentTemplate.GapHeightMm = GapHeight;
             _currentTemplate.BlineOffsetMm = BlineOffset;
+            _currentTemplate.LabelColumns = LabelColumns;
+            _currentTemplate.LabelRows = LabelRows;
+            _currentTemplate.PageMarginLeftMm = PageMarginLeftMm;
+            _currentTemplate.PageMarginTopMm = PageMarginTopMm;
+            _currentTemplate.PageMarginRightMm = PageMarginRightMm;
+            _currentTemplate.PageMarginBottomMm = PageMarginBottomMm;
+            _currentTemplate.ColumnGapMm = ColumnGapMm;
+            _currentTemplate.RowGapMm = RowGapMm;
+            SyncPagesToTemplate();
 
             if (!string.IsNullOrEmpty(_loadedExcelFilePath))
             {
@@ -2320,7 +2412,31 @@ namespace BarcodePrint.ViewModel
                 string paperType = !string.IsNullOrEmpty(_currentTemplate.PaperType) ? _currentTemplate.PaperType : (PaperType ?? "GAP");
                 int rot = _currentTemplate.Rotation;
 
+                // 자동 생성된 규격 제목("라벨 W×H mm")인 경우 현재 유효 규격에 맞춰 제목 동기화
+                if (!string.IsNullOrEmpty(_currentRecentTitle) &&
+                    System.Text.RegularExpressions.Regex.IsMatch(_currentRecentTitle, @"^라벨\s+\d+×\d+\s*mm$"))
+                {
+                    string expectedTitle = $"라벨 {EffectivePaperWidth}×{EffectivePaperHeight} mm";
+                    if (!string.Equals(_currentRecentTitle, expectedTitle, StringComparison.Ordinal))
+                    {
+                        _currentRecentTitle = expectedTitle;
+                    }
+                }
+
                 string targetPath = _currentTemplateFilePath;
+                bool isInternalRecentSnapshot = !string.IsNullOrEmpty(targetPath) &&
+                    targetPath.IndexOf(recentDir, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                // 내부 RecentWorks 스냅샷인데 규격/방향이 바뀌었다면 기존 규격 스냅샷을 덮어쓰지 않고 새 규격 파일로 분리 저장
+                if (isInternalRecentSnapshot)
+                {
+                    string expectedSuffix = $"_{w}x{h}_{paperType}_{rot}.lbm";
+                    if (!targetPath.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetPath = "";
+                    }
+                }
+
                 if (!string.IsNullOrEmpty(targetPath))
                 {
                     if (!_templateService.ExportTemplateModel(_currentTemplate, targetPath, out _))
@@ -2338,6 +2454,8 @@ namespace BarcodePrint.ViewModel
                     _templateService.ExportTemplateModel(_currentTemplate, targetPath, out _);
                     _currentTemplateFilePath = targetPath;
                 }
+
+                SyncActiveTabTitle(_currentRecentTitle, targetPath);
 
                 return targetPath;
             }
@@ -2420,6 +2538,7 @@ namespace BarcodePrint.ViewModel
                     string title = Path.GetFileNameWithoutExtension(filePath);
                     _currentTemplateFilePath = filePath;
                     _currentRecentTitle = title;
+                    SyncActiveTabTitle(title, filePath);
                     _settings.AddRecentWork(title, (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, filePath);
 
                     StatusMessage = $"템플릿 저장 완료: {Path.GetFileName(filePath)}";

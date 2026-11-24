@@ -208,6 +208,7 @@
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
+                                            <Canvas x:Name="CanvasMiniatureMultiPreview" Width="116" Height="74" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                         </Grid>
                                     </Border>
 
@@ -215,6 +216,93 @@
                                 </Grid>
                             </Border>
                         </Grid>
+                    </Border>
+
+                    <!-- Multi-Column / Multi-Row Label Layout Card (기본 접힘 상태, 필요 시 클릭하여 확장) -->
+                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="10" Padding="14,10" Margin="0,0,0,10">
+                        <StackPanel>
+                            <Button Click="OnToggleMultiLayoutClick" Background="Transparent" BorderThickness="0" Padding="0" HorizontalContentAlignment="Stretch" Cursor="Hand">
+                                <DockPanel>
+                                    <Border DockPanel.Dock="Right" Background="#EEF2FF" CornerRadius="4" Padding="8,3" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TxtMultiLayoutSummary" Text="1열 × 1행 · 단일 라벨" FontSize="11" FontWeight="Bold" Foreground="#4338CA"/>
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TxtMultiLayoutArrow" Text="▶" FontSize="11" Foreground="#4338CA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBlock Text="🧩 다중 행·열 라벨지 배열 설정" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text=" (2열·다열 용지 시 클릭)" FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Button>
+
+                            <StackPanel x:Name="PanelMultiLayoutContent" Visibility="Collapsed" Margin="0,10,0,0">
+                                <!-- 빠른 배열 프리셋 칩 -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <TextBlock Text="빠른 선택:" FontSize="11" FontWeight="SemiBold" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <Button Content="2열 × 1행" Click="OnMultiPresetClick" Tag="2,1" Padding="8,3" Margin="0,0,6,0" FontSize="11" FontWeight="SemiBold" Background="White" BorderBrush="#CBD5E1" Cursor="Hand"/>
+                                    <Button Content="3열 × 1행" Click="OnMultiPresetClick" Tag="3,1" Padding="8,3" Margin="0,0,6,0" FontSize="11" FontWeight="SemiBold" Background="White" BorderBrush="#CBD5E1" Cursor="Hand"/>
+                                    <Button Content="2열 × 2행" Click="OnMultiPresetClick" Tag="2,2" Padding="8,3" Margin="0,0,6,0" FontSize="11" FontWeight="SemiBold" Background="White" BorderBrush="#CBD5E1" Cursor="Hand"/>
+                                    <Button Content="1열 × 1행 (초기화)" Click="OnMultiPresetClick" Tag="1,1" Padding="8,3" FontSize="11" Foreground="#64748B" Background="#F1F5F9" BorderBrush="#CBD5E1" Cursor="Hand"/>
+                                </StackPanel>
+
+                                <!-- 1. 칸 수 & 칸 간격 -->
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,8">
+                                        <StackPanel>
+                                            <TextBlock Text="라벨 칸 수 (개수)" FontSize="11" FontWeight="Bold" Foreground="#334155" Margin="0,0,0,6"/>
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock Text="가로 열:" Width="54" FontSize="11.5" Foreground="#475569" VerticalAlignment="Center"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="-" Click="OnMultiStepperClick" Tag="COL:-1" Width="26" Height="26" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                    <TextBox x:Name="TxtLabelColumns" Text="1" Width="44" Height="26" Margin="3,0" FontSize="12.5" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" TextChanged="OnDimensionsChanged"/>
+                                                    <Button Content="+" Click="OnMultiStepperClick" Tag="COL:1" Width="26" Height="26" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel>
+                                                <TextBlock Text="세로 행:" Width="54" FontSize="11.5" Foreground="#475569" VerticalAlignment="Center"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="-" Click="OnMultiStepperClick" Tag="ROW:-1" Width="26" Height="26" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                    <TextBox x:Name="TxtLabelRows" Text="1" Width="44" Height="26" Margin="3,0" FontSize="12.5" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" TextChanged="OnDimensionsChanged"/>
+                                                    <Button Content="+" Click="OnMultiStepperClick" Tag="ROW:1" Width="26" Height="26" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="2" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,8">
+                                        <StackPanel>
+                                            <TextBlock Text="여백 및 칸 간격 (mm)" FontSize="11" FontWeight="Bold" Foreground="#334155" Margin="0,0,0,6"/>
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock Text="열/행 간격:" Width="66" FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="-" Click="OnMultiStepperClick" Tag="CGAP:-0.5" Width="20" Height="24" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                    <TextBox x:Name="TxtColumnGap" Text="2" Width="34" Height="24" Margin="2,0" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" TextChanged="OnDimensionsChanged"/>
+                                                    <Button Content="+" Click="OnMultiStepperClick" Tag="CGAP:0.5" Width="20" Height="24" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1" Margin="0,0,6,0"/>
+                                                    <Button Content="-" Click="OnMultiStepperClick" Tag="RGAP:-0.5" Width="20" Height="24" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                    <TextBox x:Name="TxtRowGap" Text="2" Width="34" Height="24" Margin="2,0" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" TextChanged="OnDimensionsChanged"/>
+                                                    <Button Content="+" Click="OnMultiStepperClick" Tag="RGAP:0.5" Width="20" Height="24" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel>
+                                                <TextBlock Text="좌/우 여백:" Width="66" FontSize="11" Foreground="#64748B" VerticalAlignment="Center"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="-" Click="OnMultiStepperClick" Tag="ML:-0.5" Width="20" Height="24" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                    <TextBox x:Name="TxtMarginLeft" Text="0" Width="34" Height="24" Margin="2,0" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" TextChanged="OnDimensionsChanged"/>
+                                                    <Button Content="+" Click="OnMultiStepperClick" Tag="ML:0.5" Width="20" Height="24" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1" Margin="0,0,6,0"/>
+                                                    <Button Content="-" Click="OnMultiStepperClick" Tag="MR:-0.5" Width="20" Height="24" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                    <TextBox x:Name="TxtMarginRight" Text="0" Width="34" Height="24" Margin="2,0" FontSize="11.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" TextChanged="OnDimensionsChanged"/>
+                                                    <Button Content="+" Click="OnMultiStepperClick" Tag="MR:0.5" Width="20" Height="24" FontWeight="Bold" Background="#F1F5F9" BorderBrush="#CBD5E1"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
                     </Border>
 
                     <!-- User Custom Saved Presets Section -->

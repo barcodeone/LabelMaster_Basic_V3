@@ -19,6 +19,8 @@ namespace BarcodePrint.WpfView
         private int _totalPages = 0;
         private int _currentPageIndex = 0;
         private int _rotationAngle = 0; // 0, 90, 180, 270
+        private string _cachedPageKey = null;
+        private int _previewRequestId = 0;
 
         private double _paperWidthMm = 100.0;
         private double _paperHeightMm = 100.0;
@@ -136,39 +138,62 @@ namespace BarcodePrint.WpfView
             BtnNextPage.IsEnabled = _currentPageIndex < _totalPages - 1;
             TxtPageIndicator.Text = $"{_currentPageIndex + 1} / {_totalPages} 페이지";
 
-            PanelLoading.Visibility = Visibility.Visible;
-            ImgPdfPreview.Opacity = 0.3;
-
             int targetPage = _currentPageIndex;
             string pdfPath = _pdfFilePath;
+            string pageKey = $"{pdfPath}|{targetPage}";
+            int reqId = ++_previewRequestId;
 
-            await Task.Run(() =>
+            try
             {
-                var bmp = PdfRenderHelper.RenderPageToBitmap(pdfPath, targetPage, 203);
-                _cachedPageBitmap?.Dispose();
-                _cachedPageBitmap = bmp;
-            });
-
-            if (_cachedPageBitmap != null)
-            {
-                Bitmap displayBmp = (Bitmap)_cachedPageBitmap.Clone();
-                if (_rotationAngle != 0)
+                if (_cachedPageBitmap == null || _cachedPageKey != pageKey)
                 {
-                    switch (_rotationAngle)
+                    PanelLoading.Visibility = Visibility.Visible;
+                    ImgPdfPreview.Opacity = 0.3;
+
+                    Bitmap renderedBmp = await Task.Run(() => PdfRenderHelper.RenderPageToBitmap(pdfPath, targetPage, 203));
+                    if (reqId != _previewRequestId)
                     {
-                        case 90: displayBmp.RotateFlip(RotateFlipType.Rotate90FlipNone); break;
-                        case 180: displayBmp.RotateFlip(RotateFlipType.Rotate180FlipNone); break;
-                        case 270: displayBmp.RotateFlip(RotateFlipType.Rotate270FlipNone); break;
+                        renderedBmp?.Dispose();
+                        return;
+                    }
+
+                    _cachedPageBitmap?.Dispose();
+                    _cachedPageBitmap = renderedBmp;
+                    _cachedPageKey = renderedBmp != null ? pageKey : null;
+                }
+
+                if (_cachedPageBitmap != null)
+                {
+                    using (Bitmap displayBmp = (Bitmap)_cachedPageBitmap.Clone())
+                    {
+                        if (_rotationAngle != 0)
+                        {
+                            switch (_rotationAngle)
+                            {
+                                case 90: displayBmp.RotateFlip(RotateFlipType.Rotate90FlipNone); break;
+                                case 180: displayBmp.RotateFlip(RotateFlipType.Rotate180FlipNone); break;
+                                case 270: displayBmp.RotateFlip(RotateFlipType.Rotate270FlipNone); break;
+                            }
+                        }
+
+                        ImgPdfPreview.Source = ConvertBitmapToBitmapSource(displayBmp);
                     }
                 }
 
-                ImgPdfPreview.Source = ConvertBitmapToBitmapSource(displayBmp);
-                displayBmp.Dispose();
+                TxtBottomStatus.Text = $"현재 {_currentPageIndex + 1}페이지 미리보기 로드 완료. (인쇄 크기: {_paperWidthMm}x{_paperHeightMm} mm)";
             }
-
-            PanelLoading.Visibility = Visibility.Collapsed;
-            ImgPdfPreview.Opacity = 1.0;
-            TxtBottomStatus.Text = $"현재 {_currentPageIndex + 1}페이지 미리보기 로드 완료. (인쇄 크기: {_paperWidthMm}x{_paperHeightMm} mm)";
+            catch (Exception ex)
+            {
+                TxtBottomStatus.Text = $"미리보기 렌더링 오류: {ex.Message}";
+            }
+            finally
+            {
+                if (reqId == _previewRequestId)
+                {
+                    PanelLoading.Visibility = Visibility.Collapsed;
+                    ImgPdfPreview.Opacity = 1.0;
+                }
+            }
         }
 
         private BitmapSource ConvertBitmapToBitmapSource(Bitmap bitmap)
@@ -486,7 +511,10 @@ namespace BarcodePrint.WpfView
                 _isUpdatingRangeText = true;
                 try
                 {
-                    TxtCustomRange.Text = start == end ? $"{start}" : $"{start}~{end}";
+                    if (TxtCustomRange != null)
+                    {
+                        TxtCustomRange.Text = start == end ? $"{start}" : $"{start}~{end}";
+                    }
                 }
                 finally
                 {
@@ -611,7 +639,7 @@ namespace BarcodePrint.WpfView
             }
             else
             {
-                targetPages = ParsePageRanges(TxtCustomRange.Text, _totalPages);
+                targetPages = ParsePageRanges(TxtCustomRange?.Text ?? "", _totalPages);
                 if (targetPages.Count == 0)
                 {
                     MessageBox.Show($"올바른 페이지 번호 또는 구간을 입력해주세요. (예: 1-3, 5 / 1 ~ {_totalPages})", "입력 확인", MessageBoxButton.OK, MessageBoxImage.Warning);

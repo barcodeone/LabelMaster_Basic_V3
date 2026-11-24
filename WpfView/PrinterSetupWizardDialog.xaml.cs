@@ -58,7 +58,7 @@ namespace BarcodePrint.WpfView
                 }
                 else if (p.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase))
                 {
-                    isOnline = UsbPrinterHelper.GetAvailableComPorts().Contains(p.PortName, StringComparer.OrdinalIgnoreCase);
+                    isOnline = UsbPrinterHelper.IsBluetoothDeviceConnected(p.FriendlyName ?? p.Name, p.PortName);
                 }
 
                 _onlinePrinters.Add(new OnlinePrinterItem
@@ -74,24 +74,14 @@ namespace BarcodePrint.WpfView
 
             if (_onlinePrinters.Count > 0)
             {
-                int onlineCount = _onlinePrinters.Count(p => p.IsOnline);
-                if (onlineCount > 0)
-                {
-                    TxtPrinterNotice.Text = $"🟢 실제 온라인(연결됨) 프린터 {onlineCount}대 감지 (전체 {_onlinePrinters.Count}대 설치됨)";
-                    TxtPrinterNotice.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129));
-                }
-                else
-                {
-                    TxtPrinterNotice.Text = $"ℹ️ 시스템에 설치된 라벨 프린터 {_onlinePrinters.Count}대 검색됨 (현재 오프라인)";
-                    TxtPrinterNotice.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139));
-                }
+                TxtPrinterNotice.Text = $"ℹ️ 시스템에 설치된 라벨 프린터 {_onlinePrinters.Count}대 검색됨";
+                TxtPrinterNotice.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139));
 
-                int targetIdx = 0;
+                int targetIdx = -1;
                 for (int i = 0; i < _onlinePrinters.Count; i++)
                 {
                     var item = _onlinePrinters[i];
-                    string statusTag = item.IsOnline ? "🟢 [온라인] " : "⚪ [오프라인] ";
-                    string display = $"{statusTag}{item.Name} ({item.ConnectionType}: {item.PortName})";
+                    string display = $"{item.Name} ({item.ConnectionType}: {item.PortName})";
                     var cboItem = new ComboBoxItem
                     {
                         Content = display,
@@ -105,11 +95,10 @@ namespace BarcodePrint.WpfView
                     }
                 }
 
-                // 마지막 선택된 프린터가 오프라인이고 온라인인 다른 프린터가 있다면 온라인 프린터 우선 선택
-                if (onlineCount > 0 && !_onlinePrinters[targetIdx].IsOnline)
+                if (targetIdx < 0)
                 {
                     int firstOnlineIdx = _onlinePrinters.FindIndex(p => p.IsOnline);
-                    if (firstOnlineIdx >= 0) targetIdx = firstOnlineIdx;
+                    targetIdx = firstOnlineIdx >= 0 ? firstOnlineIdx : 0;
                 }
 
                 CboPrinters.SelectedIndex = targetIdx;
@@ -158,20 +147,10 @@ namespace BarcodePrint.WpfView
                 string portDisplay = FormatCompactPort(item.PortName, item.ConnectionType);
                 string driverDisplay = !string.IsNullOrEmpty(item.DriverName) ? $" | 드라이버: {item.DriverName}" : "";
                 TxtSelectedPrinterPort.Text = $"포트: {portDisplay}{driverDisplay}";
-                if (item.IsOnline)
-                {
-                    TxtSelectedPrinterStatus.Text = "상태: 🟢 정상 온라인 (연결 및 인쇄 준비 완료)";
-                    TxtSelectedPrinterStatus.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129));
-                    TxtPrinterNotice.Text = $"🟢 현재 선택: [{item.Name}] (온라인 상태 - 바로 연결 및 동작 테스트가 가능합니다)";
-                    TxtPrinterNotice.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129));
-                }
-                else
-                {
-                    TxtSelectedPrinterStatus.Text = "상태: 🔴 오프라인 (전원 꺼짐 또는 USB/LAN 케이블 미연결)";
-                    TxtSelectedPrinterStatus.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68));
-                    TxtPrinterNotice.Text = $"🔴 현재 선택: [{item.Name}] (오프라인 상태 - 프린터 전원을 켠 후 테스트해주세요)";
-                    TxtPrinterNotice.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68));
-                }
+                TxtSelectedPrinterStatus.Text = "상태: 선택됨 (아래 [연결테스트]로 동작 여부를 확인할 수 있습니다)";
+                TxtSelectedPrinterStatus.Foreground = new SolidColorBrush(Color.FromRgb(37, 99, 235));
+                TxtPrinterNotice.Text = $"✅ 현재 선택: [{item.Name}] ({item.ConnectionType}: {portDisplay})";
+                TxtPrinterNotice.Foreground = new SolidColorBrush(Color.FromRgb(37, 99, 235));
             }
             else
             {
@@ -197,17 +176,7 @@ namespace BarcodePrint.WpfView
             settings.LastSelectedPrinterName = selected;
             settings.Save();
 
-            var item = GetSelectedPrinterItem();
-            bool isOnline = item != null && item.IsOnline;
-
-            if (isOnline)
-            {
-                MessageBox.Show($"[{selected}] 프린터로 성공적으로 연결되었습니다!\n\n창을 닫지 않고 바로 아래의 [📄 연결테스트] 또는 [🎯 용지센싱]을 실행해보세요.", "프린터 연결 완료", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            else
-            {
-                MessageBox.Show($"[{selected}] 프린터로 설정되었습니다.\n\n⚠️ 주의: 현재 이 프린터는 전원이 꺼져 있거나 오프라인 상태입니다.\n프린터 전원을 켠 후 [연결테스트]를 시도해주세요.", "프린터 설정 완료 (오프라인)", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
+            MessageBox.Show($"[{selected}] 프린터로 연결 설정되었습니다!\n\n창을 닫지 않고 바로 아래의 [📄 연결테스트] 또는 [🎯 용지센싱]을 실행해보세요.", "프린터 연결 완료", MessageBoxButton.OK, MessageBoxImage.Information);
 
             OnPrinterSelectionChanged(null, null);
         }

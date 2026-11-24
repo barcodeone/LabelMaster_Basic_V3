@@ -140,8 +140,12 @@ namespace BarcodePrint.Model
             List<byte> tsplCommandBytes = new List<byte>();
 
             // 용지 크기 결정 (0 이하 기본값 방어 및 InvariantCulture 포맷팅)
-            float paperW = (float)PRINT_INFO_CLASS.PrinterInfo.Paper_Width;
-            float paperH = (float)PRINT_INFO_CLASS.PrinterInfo.Paper_Height;
+            float paperW = (float)(PRINT_INFO_CLASS.PrinterInfo.Paper_Width_Mm > 0
+                ? PRINT_INFO_CLASS.PrinterInfo.Paper_Width_Mm
+                : PRINT_INFO_CLASS.PrinterInfo.Paper_Width);
+            float paperH = (float)(PRINT_INFO_CLASS.PrinterInfo.Paper_Height_Mm > 0
+                ? PRINT_INFO_CLASS.PrinterInfo.Paper_Height_Mm
+                : PRINT_INFO_CLASS.PrinterInfo.Paper_Height);
             if (paperW <= 0) paperW = 80f;
             if (paperH <= 0) paperH = 60f;
 

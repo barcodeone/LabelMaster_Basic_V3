@@ -17,7 +17,8 @@
         Drop="Window_Drop"
         DragOver="Window_DragOver"
         KeyDown="Window_KeyDown"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewMouseDown="Window_PreviewMouseDown">
 
     <Window.DataContext>
         <vm:MainViewModel/>
@@ -1173,153 +1174,173 @@
                     <Grid.RowDefinitions>
                         <!-- 0. 상단 정렬 및 용지 수치 툴바 -->
                         <RowDefinition Height="Auto"/>
-                        <!-- 1. 캔버스 및 줌 컨트롤러 -->
+                        <!-- 1. 다중 문서 탭 바 -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- 2. 캔버스 및 줌 컨트롤러 -->
                         <RowDefinition Height="*"/>
-                        <!-- 2. 하단 내비게이터 및 안내문구 -->
+                        <!-- 3. 하단 내비게이터 및 안내문구 -->
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- 0. Top Alignment & Element Options Bar (1단: 정렬 & 규격, 2단: 글꼴/스타일 & 위치/크기) -->
                     <Border Grid.Row="0" Background="#F8FAFC" CornerRadius="8" Padding="10,8" Margin="0,0,0,10" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
                         <StackPanel>
-                            <!-- 1단: 정렬 도구 버튼 세트 & 규격 미세 조정 (모두 왼쪽 정렬 배치) -->
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <!-- 1. 위치 초기화 (아이콘 + 텍스트) -->
-                                <Button Command="{Binding ResetLayoutCommand}" Style="{StaticResource ModernButtonStyle}" Background="#FFFFFF" BorderBrush="#CBD5E1" Foreground="#334155" Height="30" Padding="10,0" Margin="0,0,8,0" ToolTip="선택한 요소(또는 라벨 서식) 위치 초기화">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="↺" FontSize="13" FontWeight="Bold" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="위치 초기화" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
+                            <!-- 1단: 실행취소/다시실행, 격자/스냅, 정렬 도구 버튼 세트 & 사이즈 미세 조정 (좁은 해상도 시 자동 줄바꿈) -->
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- 그룹 1: 실행취소/다시실행, 격자/스냅, 위치 초기화 -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,6,2">
+                                    <Button Command="{Binding UndoCommand}" Style="{StaticResource ModernAlignIconBtnStyle}" ToolTip="실행 취소 (Ctrl+Z)" Margin="0,0,2,0">
+                                        <TextBlock Text="↶" FontSize="15" FontWeight="Bold" Foreground="#334155" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Button>
+                                    <Button Command="{Binding RedoCommand}" Style="{StaticResource ModernAlignIconBtnStyle}" ToolTip="다시 실행 (Ctrl+Y)" Margin="0,0,6,0">
+                                        <TextBlock Text="↷" FontSize="15" FontWeight="Bold" Foreground="#334155" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Button>
 
-                                <Rectangle Width="1" Height="18" Fill="#CBD5E1" Margin="2,0,10,0" VerticalAlignment="Center"/>
+                                    <ToggleButton IsChecked="{Binding ShowCanvasGrid}" Style="{StaticResource ModernToggleBtnStyle}" Height="28" Padding="8,0" Margin="0,0,3,0" ToolTip="캔버스 격자 눈금(1mm / 5mm) 표시">
+                                        <TextBlock Text="격자" FontSize="11.5" FontWeight="SemiBold"/>
+                                    </ToggleButton>
+                                    <ToggleButton IsChecked="{Binding SnapToGrid}" Style="{StaticResource ModernToggleBtnStyle}" Height="28" Padding="8,0" Margin="0,0,6,0" ToolTip="이동 시 1mm 격자 자동 맞춤 (Shift: 0.5mm)">
+                                        <TextBlock Text="스냅" FontSize="11.5" FontWeight="SemiBold"/>
+                                    </ToggleButton>
 
-                                <TextBlock Text="정렬:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Rectangle Width="1" Height="18" Fill="#CBD5E1" Margin="2,0,8,0" VerticalAlignment="Center"/>
 
-                                <!-- 2. 좌측 정렬 -->
-                                <Button Command="{Binding AlignLeftCommand}" ToolTip="선택 항목 좌측 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <Viewbox Width="16" Height="16">
-                                        <Canvas Width="16" Height="16">
-                                            <Line X1="2" Y1="1.5" X2="2" Y2="14.5" Stroke="#2563EB" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                            <Rectangle Canvas.Left="4" Canvas.Top="3.5" Width="10" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                            <Rectangle Canvas.Left="4" Canvas.Top="9" Width="6" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                </Button>
+                                    <Button Command="{Binding ResetLayoutCommand}" Style="{StaticResource ModernButtonStyle}" Background="#FFFFFF" BorderBrush="#CBD5E1" Foreground="#334155" Height="30" Padding="10,0" Margin="0,0,4,0" ToolTip="선택한 요소(또는 라벨 서식) 위치 초기화">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="↺" FontSize="13" FontWeight="Bold" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="위치 초기화" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
 
-                                <!-- 3. 가로 중앙 정렬 -->
-                                <Button Command="{Binding AlignCenterCommand}" ToolTip="선택 항목 가로 중앙 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <Viewbox Width="16" Height="16">
-                                        <Canvas Width="16" Height="16">
-                                            <Line X1="8" Y1="1.5" X2="8" Y2="14.5" Stroke="#2563EB" StrokeThickness="1.5" StrokeDashArray="2,1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                            <Rectangle Canvas.Left="2.5" Canvas.Top="3.5" Width="11" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                            <Rectangle Canvas.Left="5" Canvas.Top="9" Width="6" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                </Button>
+                                <!-- 그룹 2: 정렬 도구 -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,8,2">
+                                    <Rectangle Width="1" Height="18" Fill="#CBD5E1" Margin="0,0,8,0" VerticalAlignment="Center"/>
 
-                                <!-- 4. 우측 정렬 -->
-                                <Button Command="{Binding AlignRightCommand}" ToolTip="선택 항목 우측 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <Viewbox Width="16" Height="16">
-                                        <Canvas Width="16" Height="16">
-                                            <Line X1="14" Y1="1.5" X2="14" Y2="14.5" Stroke="#2563EB" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                            <Rectangle Canvas.Left="2" Canvas.Top="3.5" Width="10" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                            <Rectangle Canvas.Left="6" Canvas.Top="9" Width="6" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                </Button>
+                                    <TextBlock Text="정렬:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
 
-                                <Rectangle Width="1" Height="16" Fill="#E2E8F0" Margin="4,0"/>
+                                    <!-- 좌측 정렬 -->
+                                    <Button Command="{Binding AlignLeftCommand}" ToolTip="선택 항목 좌측 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <Viewbox Width="16" Height="16">
+                                            <Canvas Width="16" Height="16">
+                                                <Line X1="2" Y1="1.5" X2="2" Y2="14.5" Stroke="#2563EB" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                <Rectangle Canvas.Left="4" Canvas.Top="3.5" Width="10" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                                <Rectangle Canvas.Left="4" Canvas.Top="9" Width="6" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
 
-                                <!-- 5. 상단 정렬 -->
-                                <Button Command="{Binding AlignTopCommand}" ToolTip="선택 항목 상단 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <Viewbox Width="16" Height="16">
-                                        <Canvas Width="16" Height="16">
-                                            <Line X1="1.5" Y1="2" X2="14.5" Y2="2" Stroke="#2563EB" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                            <Rectangle Canvas.Left="3.5" Canvas.Top="4" Width="3.5" Height="10" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                            <Rectangle Canvas.Left="9" Canvas.Top="4" Width="3.5" Height="6" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                </Button>
+                                    <!-- 가로 중앙 정렬 -->
+                                    <Button Command="{Binding AlignCenterCommand}" ToolTip="선택 항목 가로 중앙 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <Viewbox Width="16" Height="16">
+                                            <Canvas Width="16" Height="16">
+                                                <Line X1="8" Y1="1.5" X2="8" Y2="14.5" Stroke="#2563EB" StrokeThickness="1.5" StrokeDashArray="2,1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                <Rectangle Canvas.Left="2.5" Canvas.Top="3.5" Width="11" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                                <Rectangle Canvas.Left="5" Canvas.Top="9" Width="6" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
 
-                                <!-- 6. 세로 중앙 정렬 -->
-                                <Button Command="{Binding AlignMiddleCommand}" ToolTip="선택 항목 세로 중앙 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <Viewbox Width="16" Height="16">
-                                        <Canvas Width="16" Height="16">
-                                            <Line X1="1.5" Y1="8" X2="14.5" Y2="8" Stroke="#2563EB" StrokeThickness="1.5" StrokeDashArray="2,1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                            <Rectangle Canvas.Left="3.5" Canvas.Top="2.5" Width="3.5" Height="11" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                            <Rectangle Canvas.Left="9" Canvas.Top="5" Width="3.5" Height="6" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                </Button>
+                                    <!-- 우측 정렬 -->
+                                    <Button Command="{Binding AlignRightCommand}" ToolTip="선택 항목 우측 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <Viewbox Width="16" Height="16">
+                                            <Canvas Width="16" Height="16">
+                                                <Line X1="14" Y1="1.5" X2="14" Y2="14.5" Stroke="#2563EB" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                <Rectangle Canvas.Left="2" Canvas.Top="3.5" Width="10" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                                <Rectangle Canvas.Left="6" Canvas.Top="9" Width="6" Height="3.5" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
 
-                                <!-- 7. 하단 정렬 -->
-                                <Button Command="{Binding AlignBottomCommand}" ToolTip="선택 항목 하단 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <Viewbox Width="16" Height="16">
-                                        <Canvas Width="16" Height="16">
-                                            <Line X1="1.5" Y1="14" X2="14.5" Y2="14" Stroke="#2563EB" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                            <Rectangle Canvas.Left="3.5" Canvas.Top="2" Width="3.5" Height="10" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                            <Rectangle Canvas.Left="9" Canvas.Top="6" Width="3.5" Height="6" RadiusX="1" RadiusY="1" Fill="#64748B"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                </Button>
+                                    <Rectangle Width="1" Height="16" Fill="#E2E8F0" Margin="4,0"/>
 
-                                <Rectangle Width="1" Height="16" Fill="#E2E8F0" Margin="4,0"/>
+                                    <!-- 상단 정렬 -->
+                                    <Button Command="{Binding AlignTopCommand}" ToolTip="선택 항목 상단 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <Viewbox Width="16" Height="16">
+                                            <Canvas Width="16" Height="16">
+                                                <Line X1="1.5" Y1="2" X2="14.5" Y2="2" Stroke="#2563EB" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                <Rectangle Canvas.Left="3.5" Canvas.Top="4" Width="3.5" Height="10" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                                <Rectangle Canvas.Left="9" Canvas.Top="4" Width="3.5" Height="6" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
 
-                                <!-- 8. 세로 균등 분배 -->
-                                <Button Command="{Binding DistributeVerticalCommand}" ToolTip="세로 간격 균등 분배" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <Viewbox Width="16" Height="16">
-                                        <Canvas Width="16" Height="16">
-                                            <Line X1="2" Y1="1.8" X2="14" Y2="1.8" Stroke="#2563EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                            <Rectangle Canvas.Left="3" Canvas.Top="4.5" Width="10" Height="2.5" RadiusX="0.8" RadiusY="0.8" Fill="#64748B"/>
-                                            <Rectangle Canvas.Left="3" Canvas.Top="9" Width="10" Height="2.5" RadiusX="0.8" RadiusY="0.8" Fill="#64748B"/>
-                                            <Line X1="2" Y1="14.2" X2="14" Y2="14.2" Stroke="#2563EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                </Button>
+                                    <!-- 세로 중앙 정렬 -->
+                                    <Button Command="{Binding AlignMiddleCommand}" ToolTip="선택 항목 세로 중앙 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <Viewbox Width="16" Height="16">
+                                            <Canvas Width="16" Height="16">
+                                                <Line X1="1.5" Y1="8" X2="14.5" Y2="8" Stroke="#2563EB" StrokeThickness="1.5" StrokeDashArray="2,1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                <Rectangle Canvas.Left="3.5" Canvas.Top="2.5" Width="3.5" Height="11" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                                <Rectangle Canvas.Left="9" Canvas.Top="5" Width="3.5" Height="6" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
 
-                                <!-- 9. 가로 균등 분배 -->
-                                <Button Command="{Binding DistributeHorizontalCommand}" ToolTip="가로 간격 균등 분배" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <Viewbox Width="16" Height="16">
-                                        <Canvas Width="16" Height="16">
-                                            <Line X1="1.8" Y1="2" X2="1.8" Y2="14" Stroke="#2563EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                            <Rectangle Canvas.Left="4.5" Canvas.Top="3" Width="2.5" Height="10" RadiusX="0.8" RadiusY="0.8" Fill="#64748B"/>
-                                            <Rectangle Canvas.Left="9" Canvas.Top="3" Width="2.5" Height="10" RadiusX="0.8" RadiusY="0.8" Fill="#64748B"/>
-                                            <Line X1="14.2" Y1="2" X2="14.2" Y2="14" Stroke="#2563EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                </Button>
+                                    <!-- 하단 정렬 -->
+                                    <Button Command="{Binding AlignBottomCommand}" ToolTip="선택 항목 하단 맞춤" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <Viewbox Width="16" Height="16">
+                                            <Canvas Width="16" Height="16">
+                                                <Line X1="1.5" Y1="14" X2="14.5" Y2="14" Stroke="#2563EB" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                <Rectangle Canvas.Left="3.5" Canvas.Top="2" Width="3.5" Height="10" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                                <Rectangle Canvas.Left="9" Canvas.Top="6" Width="3.5" Height="6" RadiusX="1" RadiusY="1" Fill="#64748B"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
 
-                                <Rectangle Width="1" Height="16" Fill="#E2E8F0" Margin="4,0"/>
+                                    <Rectangle Width="1" Height="16" Fill="#E2E8F0" Margin="4,0"/>
 
-                                <TextBlock Text="순서:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <!-- 세로 균등 분배 -->
+                                    <Button Command="{Binding DistributeVerticalCommand}" ToolTip="세로 간격 균등 분배" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <Viewbox Width="16" Height="16">
+                                            <Canvas Width="16" Height="16">
+                                                <Line X1="2" Y1="1.8" X2="14" Y2="1.8" Stroke="#2563EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                <Rectangle Canvas.Left="3" Canvas.Top="4.5" Width="10" Height="2.5" RadiusX="0.8" RadiusY="0.8" Fill="#64748B"/>
+                                                <Rectangle Canvas.Left="3" Canvas.Top="9" Width="10" Height="2.5" RadiusX="0.8" RadiusY="0.8" Fill="#64748B"/>
+                                                <Line X1="2" Y1="14.2" X2="14" Y2="14.2" Stroke="#2563EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
 
-                                <!-- 맨 앞으로 -->
-                                <Button Command="{Binding BringToFrontCommand}" ToolTip="선택 항목을 맨 앞으로 가져오기 (Ctrl+Shift+])" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <TextBlock Text="⮵" FontSize="14" FontWeight="Bold" Foreground="#2563EB" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Button>
+                                    <!-- 가로 균등 분배 -->
+                                    <Button Command="{Binding DistributeHorizontalCommand}" ToolTip="가로 간격 균등 분배" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <Viewbox Width="16" Height="16">
+                                            <Canvas Width="16" Height="16">
+                                                <Line X1="1.8" Y1="2" X2="1.8" Y2="14" Stroke="#2563EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                <Rectangle Canvas.Left="4.5" Canvas.Top="3" Width="2.5" Height="10" RadiusX="0.8" RadiusY="0.8" Fill="#64748B"/>
+                                                <Rectangle Canvas.Left="9" Canvas.Top="3" Width="2.5" Height="10" RadiusX="0.8" RadiusY="0.8" Fill="#64748B"/>
+                                                <Line X1="14.2" Y1="2" X2="14.2" Y2="14" Stroke="#2563EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
+                                </StackPanel>
 
-                                <!-- 한 단계 앞으로 -->
-                                <Button Command="{Binding BringForwardCommand}" ToolTip="선택 항목을 한 단계 앞으로 가져오기 (Ctrl+])" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <TextBlock Text="⬆" FontSize="13" FontWeight="Bold" Foreground="#3B82F6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Button>
+                                <!-- 그룹 3: 순서(Z-Index) -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,8,2">
+                                    <Rectangle Width="1" Height="16" Fill="#E2E8F0" Margin="0,0,6,0"/>
 
-                                <!-- 한 단계 뒤로 -->
-                                <Button Command="{Binding SendBackwardCommand}" ToolTip="선택 항목을 한 단계 뒤로 보내기 (Ctrl+[)" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <TextBlock Text="⬇" FontSize="13" FontWeight="Bold" Foreground="#3B82F6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Button>
+                                    <TextBlock Text="순서:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
 
-                                <!-- 맨 뒤로 -->
-                                <Button Command="{Binding SendToBackCommand}" ToolTip="선택 항목을 맨 뒤로 보내기 (Ctrl+Shift+[)" Style="{StaticResource ModernAlignIconBtnStyle}">
-                                    <TextBlock Text="⮶" FontSize="14" FontWeight="Bold" Foreground="#2563EB" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Button>
+                                    <Button Command="{Binding BringToFrontCommand}" ToolTip="선택 항목을 맨 앞으로 가져오기 (Ctrl+Shift+])" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <TextBlock Text="⮵" FontSize="14" FontWeight="Bold" Foreground="#2563EB" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Button>
 
-                                <!-- 정렬 도구와 규격 사이 구분선 -->
-                                <Rectangle Width="1" Height="18" Fill="#CBD5E1" Margin="10,0" VerticalAlignment="Center"/>
+                                    <Button Command="{Binding BringForwardCommand}" ToolTip="선택 항목을 한 단계 앞으로 가져오기 (Ctrl+])" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <TextBlock Text="⬆" FontSize="13" FontWeight="Bold" Foreground="#3B82F6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Button>
 
-                                <!-- 용지 규격 미세 조정 (왼쪽 정렬로 고정) -->
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="규격: " VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <Button Command="{Binding SendBackwardCommand}" ToolTip="선택 항목을 한 단계 뒤로 보내기 (Ctrl+[)" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <TextBlock Text="⬇" FontSize="13" FontWeight="Bold" Foreground="#3B82F6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Button>
+
+                                    <Button Command="{Binding SendToBackCommand}" ToolTip="선택 항목을 맨 뒤로 보내기 (Ctrl+Shift+[)" Style="{StaticResource ModernAlignIconBtnStyle}">
+                                        <TextBlock Text="⮶" FontSize="14" FontWeight="Bold" Foreground="#2563EB" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Button>
+                                </StackPanel>
+
+                                <!-- 그룹 4: 용지 사이즈 미세 조정 -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,0,2">
+                                    <Rectangle Width="1" Height="18" Fill="#CBD5E1" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="사이즈: " VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}"/>
                                     <Button Content="-" Command="{Binding DecreasePaperWidthCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="26" Height="28" FontSize="13" FontWeight="Bold"/>
                                     <TextBox Text="{Binding PaperWidthStr, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" Width="48" Height="28" Margin="2,0" FontSize="13" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
                                     <Button Content="+" Command="{Binding IncreasePaperWidthCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="26" Height="28" FontSize="13" FontWeight="Bold" Margin="0,0,4,0"/>
@@ -1329,15 +1350,15 @@
                                     <Button Content="+" Command="{Binding IncreasePaperHeightCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="26" Height="28" FontSize="13" FontWeight="Bold" Margin="0,0,4,0"/>
                                     <TextBlock Text="mm" VerticalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
                                 </StackPanel>
-                            </StackPanel>
+                            </WrapPanel>
 
                             <!-- 1단과 2단 사이의 세련된 구분선 -->
                             <Separator Background="#E2E8F0" Margin="0,6,0,6"/>
 
-                            <!-- 2단: [글꼴 및 스타일] & [위치 및 크기] (정렬 영역 아래칸) -->
-                            <DockPanel LastChildFill="False">
-                                <!-- 좌측: 글꼴 및 스타일 (텍스트 및 표 요소 선택 시 활성화) -->
-                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding IsSelectedElementTextOrTable}">
+                            <!-- 2단: [글꼴 및 스타일] & [위치 및 크기] (좁은 해상도 시 자동 줄바꿈) -->
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- 그룹 A: 글꼴 & 크기 -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,8,2" IsEnabled="{Binding IsSelectedElementTextOrTable}">
                                     <TextBlock Text="글꼴:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="2,0,5,0"/>
                                     
                                     <!-- 글꼴 드롭다운 -->
@@ -1348,8 +1369,11 @@
                                     <Button Content="-" Command="{Binding StepFontSizeCommand}" CommandParameter="-1" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="28" FontSize="13" Margin="0,0,1,0"/>
                                     <TextBox Text="{Binding SelectedElementFontSize, UpdateSourceTrigger=PropertyChanged}" Width="36" Height="28" FontSize="12" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1"/>
                                     <Button Content="+" Command="{Binding StepFontSizeCommand}" CommandParameter="1" Style="{StaticResource MiniStepBtnStyle}" Width="22" Height="28" FontSize="13" Margin="1,0,3,0"/>
-                                    <TextBlock Text="pt" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="pt" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
 
+                                <!-- 그룹 B: B/I/U, 세/미/반, 텍스트 정렬 -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,8,2" IsEnabled="{Binding IsSelectedElementTextOrTable}">
                                     <!-- 굵게 / 기울임 / 밑줄 토글 -->
                                     <ToggleButton IsChecked="{Binding SelectedElementIsBold}" Width="28" Height="28" Margin="0,0,2,0" Style="{StaticResource ModernToggleBtnStyle}" ToolTip="굵게 (Bold)">
                                         <TextBlock Text="B" FontWeight="Bold" FontSize="13"/>
@@ -1374,7 +1398,7 @@
                                         </Border>
                                     </ToggleButton>
 
-                                    <!-- 텍스트 정렬 (워드프로세서 표준 텍스트 줄 정렬 벡터 아이콘) -->
+                                    <!-- 텍스트 정렬 -->
                                     <Button Click="OnSelectedAlignLeftClick" ToolTip="텍스트 좌측 정렬" Style="{StaticResource ModernAlignIconBtnStyle}" Width="28" Height="28" Margin="0,0,2,0">
                                         <Viewbox Width="14" Height="14">
                                             <Canvas Width="16" Height="16">
@@ -1404,11 +1428,9 @@
                                     </Button>
                                 </StackPanel>
 
-                                <!-- 중앙 수직 구분선 -->
-                                <Rectangle DockPanel.Dock="Left" Width="1" Height="20" Fill="#CBD5E1" Margin="10,0"/>
-
-                                <!-- 우측: 위치 및 크기 (mm) (선택된 요소 X, Y, 폭, 높이) -->
-                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding HasSelectedElement}">
+                                <!-- 그룹 C: 위치 (X, Y) -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,8,2" IsEnabled="{Binding HasSelectedElement}">
+                                    <Rectangle Width="1" Height="20" Fill="#CBD5E1" Margin="0,0,8,0"/>
                                     <TextBlock Text="위치:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                     
                                     <!-- X -->
@@ -1421,8 +1443,11 @@
                                     <TextBlock Text="Y" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,2,0"/>
                                     <Button Content="-" Command="{Binding StepYCommand}" CommandParameter="-0.5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="28" Margin="0,0,1,0"/>
                                     <TextBox Text="{Binding SelectedElementY, UpdateSourceTrigger=PropertyChanged, StringFormat='{}{0:0.#}'}" Width="38" Height="28" FontSize="11.5" FontWeight="Bold" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" BorderBrush="#CBD5E1"/>
-                                    <Button Content="+" Command="{Binding StepYCommand}" CommandParameter="0.5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="28" Margin="1,0,10,0"/>
+                                    <Button Content="+" Command="{Binding StepYCommand}" CommandParameter="0.5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="28" Margin="1,0,0,0"/>
+                                </StackPanel>
 
+                                <!-- 그룹 D: 크기 (폭, 높이 mm) -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,0,2" IsEnabled="{Binding HasSelectedElement}">
                                     <TextBlock Text="크기:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                     
                                     <!-- 폭(W) -->
@@ -1438,12 +1463,73 @@
                                     <Button Content="+" Command="{Binding StepHeightCommand}" CommandParameter="0.5" Style="{StaticResource MiniStepBtnStyle}" Width="20" Height="28" Margin="1,0,3,0"/>
                                     <TextBlock Text="mm" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                 </StackPanel>
-                            </DockPanel>
+                            </WrapPanel>
                         </StackPanel>
                     </Border>
 
-                    <!-- 1. 광활한 캔버스 워크스페이스 + 세로형 줌 컨트롤러 -->
-                    <Grid Grid.Row="1">
+                    <!-- 1. 다중 문서 탭 바 -->
+                    <Border Grid.Row="1" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="4,3" Margin="0,0,0,8">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Command="{Binding NewTabCommand}" ToolTip="새 문서 탭 추가" Width="26" Height="24" Margin="4,0,0,0"
+                                    Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" FontWeight="Bold" FontSize="14" Foreground="#2563EB" Content="+"/>
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ItemsControl ItemsSource="{Binding OpenTabs}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border CornerRadius="5" Margin="0,0,4,0" Padding="8,3" BorderThickness="1" Cursor="Hand">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#E2E8F0"/>
+                                                            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                    <Setter Property="Background" Value="#FFFFFF"/>
+                                                                    <Setter Property="BorderBrush" Value="#2563EB"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Border.InputBindings>
+                                                        <MouseBinding MouseAction="LeftClick" Command="{Binding DataContext.SelectTabCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                                    </Border.InputBindings>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="📄" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Title}" FontSize="11.5" VerticalAlignment="Center" MaxWidth="140" TextTrimming="CharacterEllipsis">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="FontWeight" Value="Normal"/>
+                                                                    <Setter Property="Foreground" Value="#475569"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                            <Setter Property="FontWeight" Value="Bold"/>
+                                                                            <Setter Property="Foreground" Value="#1E293B"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock Text="{Binding SizeBadge, StringFormat=' ({0})'}" FontSize="10" Foreground="#64748B" VerticalAlignment="Center" Margin="2,0,4,0"/>
+                                                        <Button Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"
+                                                                Content="✕" FontSize="9.5" FontWeight="Bold" Foreground="#64748B" Background="Transparent" BorderThickness="0"
+                                                                Width="16" Height="16" Padding="0" Cursor="Hand" ToolTip="탭 닫기"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- 2. 광활한 캔버스 워크스페이스 + 세로형 줌 컨트롤러 -->
+                    <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
@@ -1477,8 +1563,12 @@
 
                             <!-- [1,1] Canvas ScrollViewer -->
                             <ScrollViewer x:Name="CanvasScrollViewer" Grid.Row="1" Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#F1F5F9"
+                                          PreviewMouseDown="OnCanvasScrollViewerPreviewMouseDown"
+                                          PreviewMouseMove="OnCanvasScrollViewerPreviewMouseMove"
+                                          PreviewMouseUp="OnCanvasScrollViewerPreviewMouseUp"
+                                          PreviewMouseWheel="OnCanvasScrollViewerPreviewMouseWheel"
                                           ScrollChanged="OnCanvasScrollViewerScrollChanged" SizeChanged="OnCanvasScrollViewerSizeChanged">
-                                <Grid HorizontalAlignment="Center" VerticalAlignment="Top" Margin="30">
+                                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="60">
                                     <Border BorderBrush="#94A3B8" BorderThickness="1" Background="White" CornerRadius="4">
                                         <Border.Effect>
                                             <DropShadowEffect BlurRadius="12" Direction="270" ShadowDepth="3" Opacity="0.12"/>
@@ -1513,16 +1603,139 @@
                         <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="6,10" Margin="8,0,0,0" VerticalAlignment="Center">
                             <StackPanel HorizontalAlignment="Center">
                                 <Button Content="➕" Command="{Binding ZoomInCommand}" ToolTip="확대" Style="{StaticResource MiniStepBtnStyle}" Width="28" Height="28" Margin="0,0,0,8" Padding="0" FontSize="13"/>
-                                <Slider Orientation="Vertical" Height="150" Minimum="0.15" Maximum="3.0" Value="{Binding ZoomRatio}" HorizontalAlignment="Center" Margin="0,4"/>
+                                <Slider Orientation="Vertical" Height="150" Minimum="0.15" Maximum="8.0" Value="{Binding ZoomRatio}" HorizontalAlignment="Center" Margin="0,4"/>
                                 <Button Content="➖" Command="{Binding ZoomOutCommand}" ToolTip="축소" Style="{StaticResource MiniStepBtnStyle}" Width="28" Height="28" Margin="0,8,0,8" Padding="0" FontSize="13"/>
-                                <Button Content="1:1" Command="{Binding ResetZoomCommand}" ToolTip="100% 원본 배율" Style="{StaticResource MiniStepBtnStyle}" Width="32" Height="26" Margin="0,0,0,6" Padding="0" FontSize="11" FontWeight="Bold"/>
+                                <Button Content="1:1" Command="{Binding ResetZoomCommand}" ToolTip="100% 원본 배율" Style="{StaticResource MiniStepBtnStyle}" Width="32" Height="26" Margin="0,0,0,4" Padding="0" FontSize="11" FontWeight="Bold"/>
+                                <Button Content="중앙" Click="OnCenterCanvasViewClick" ToolTip="편집 영역(용지)을 화면 중앙으로 이동 (Space+드래그 / 휠버튼 드래그로도 이동 가능)" Style="{StaticResource MiniStepBtnStyle}" Width="32" Height="24" Margin="0,0,0,6" Padding="0" FontSize="10" FontWeight="Bold" Foreground="#2563EB"/>
                                 <TextBlock Text="{Binding ZoomPercentageText}" FontSize="11.5" FontWeight="Bold" Foreground="{StaticResource PrimaryAccentBrush}" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </Border>
                     </Grid>
 
-                    <!-- 2. Bottom Page Navigator & Drag Notice -->
-                    <StackPanel Grid.Row="2" Margin="0,8,0,0">
+                    <!-- 3. Bottom Page Navigator & Drag Notice -->
+                    <StackPanel Grid.Row="3" Margin="0,8,0,0">
+                        <!-- 다중 페이지 미리보기 썸네일 & 추가/전환 바 -->
+                        <Border x:Name="PageNavigatorBorder" Focusable="True" FocusVisualStyle="{x:Null}" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="10,6" HorizontalAlignment="Center" Margin="0,0,0,6">
+                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" MaxWidth="680" HorizontalAlignment="Center">
+                                    <ItemsControl ItemsSource="{Binding TemplatePages}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="3,0" Padding="3" CornerRadius="5" Cursor="Hand"
+                                                        AllowDrop="True"
+                                                        MouseLeftButtonDown="OnPageThumbnailMouseDown"
+                                                        MouseMove="OnPageThumbnailMouseMove"
+                                                        MouseLeftButtonUp="OnPageThumbnailMouseUp"
+                                                        DragOver="OnPageThumbnailDragOver"
+                                                        Drop="OnPageThumbnailDrop"
+                                                        ToolTip="{Binding PageNumber, StringFormat='{}{0}페이지 (클릭: 전환 / 드래그: 순서 변경 / Del: 페이지 삭제)'}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#FFFFFF"/>
+                                                            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+                                                            <Setter Property="BorderThickness" Value="1.2"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                    <Setter Property="Background" Value="#EFF6FF"/>
+                                                                    <Setter Property="BorderBrush" Value="#2563EB"/>
+                                                                    <Setter Property="BorderThickness" Value="2"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Grid>
+                                                        <StackPanel>
+                                                            <Border Width="64" Height="38" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="2" ClipToBounds="True">
+                                                                <Image Source="{Binding Thumbnail}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False"/>
+                                                            </Border>
+                                                            <TextBlock Text="{Binding PageNumber, StringFormat='{}{0}P'}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0" Foreground="#334155"/>
+                                                        </StackPanel>
+                                                        <Button Content="✕"
+                                                                Click="OnDeletePageThumbnailClick"
+                                                                Tag="{Binding PageIndex}"
+                                                                Width="16" Height="16"
+                                                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                                Margin="0,-2,-2,0"
+                                                                Padding="0"
+                                                                FontSize="9" FontWeight="Bold"
+                                                                Foreground="#475569"
+                                                                Background="#E2E8F0"
+                                                                BorderBrush="#CBD5E1"
+                                                                BorderThickness="1"
+                                                                RenderTransformOrigin="0.5,0.5"
+                                                                Cursor="Hand"
+                                                                ToolTip="이 페이지 삭제"
+                                                                Visibility="{Binding DataContext.HasMultiplePages, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                            <Button.RenderTransform>
+                                                                <ScaleTransform x:Name="btnScale" ScaleX="1" ScaleY="1"/>
+                                                            </Button.RenderTransform>
+                                                            <Button.Template>
+                                                                <ControlTemplate TargetType="Button">
+                                                                    <Border x:Name="btnBg"
+                                                                            Background="{TemplateBinding Background}"
+                                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                                            TextElement.Foreground="{TemplateBinding Foreground}"
+                                                                            CornerRadius="8">
+                                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter TargetName="btnBg" Property="Background" Value="#475569"/>
+                                                                            <Setter TargetName="btnBg" Property="BorderBrush" Value="#334155"/>
+                                                                            <Setter TargetName="btnBg" Property="TextElement.Foreground" Value="#FFFFFF"/>
+                                                                            <Setter Property="RenderTransform">
+                                                                                <Setter.Value>
+                                                                                    <ScaleTransform ScaleX="1.15" ScaleY="1.15"/>
+                                                                                </Setter.Value>
+                                                                            </Setter>
+                                                                        </Trigger>
+                                                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                                                            <Setter TargetName="btnBg" Property="Background" Value="#475569"/>
+                                                                            <Setter TargetName="btnBg" Property="BorderBrush" Value="#2563EB"/>
+                                                                            <Setter TargetName="btnBg" Property="BorderThickness" Value="1.5"/>
+                                                                            <Setter TargetName="btnBg" Property="TextElement.Foreground" Value="#FFFFFF"/>
+                                                                            <Setter Property="RenderTransform">
+                                                                                <Setter.Value>
+                                                                                    <ScaleTransform ScaleX="1.15" ScaleY="1.15"/>
+                                                                                </Setter.Value>
+                                                                            </Setter>
+                                                                        </Trigger>
+                                                                        <Trigger Property="IsPressed" Value="True">
+                                                                            <Setter TargetName="btnBg" Property="Background" Value="#334155"/>
+                                                                            <Setter TargetName="btnBg" Property="TextElement.Foreground" Value="#FFFFFF"/>
+                                                                            <Setter Property="RenderTransform">
+                                                                                <Setter.Value>
+                                                                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                                </Setter.Value>
+                                                                            </Setter>
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </Button.Template>
+                                                        </Button>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <Rectangle Height="1" Fill="#E2E8F0" Margin="0,6,0,5"/>
+
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Button Content="+ 페이지 추가" Command="{Binding AddPageCommand}" Style="{StaticResource MiniStepBtnStyle}" Height="24" Padding="9,0" Margin="0,0,4,0" FontSize="11" FontWeight="Bold" Foreground="#2563EB" ToolTip="새 빈 페이지 추가"/>
+                                    <Button Content="복제" Command="{Binding DuplicatePageCommand}" Style="{StaticResource MiniStepBtnStyle}" Height="24" Padding="8,0" FontSize="11" FontWeight="SemiBold" ToolTip="현재 페이지를 복제하여 새 페이지 추가"/>
+                                    <TextBlock Text="{Binding PageStatusText}" FontSize="10.5" FontWeight="SemiBold" Foreground="#64748B" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <Border Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1.2" CornerRadius="6" Padding="8,4" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding IsExcelFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,0,0,6">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button Content="◀ 이전" Command="{Binding PreviewPreviousPageCommand}" Style="{StaticResource MiniStepBtnStyle}" Width="56" Height="26" FontSize="11.5" FontWeight="Bold" ToolTip="이전 라벨 (이전 행)"/>

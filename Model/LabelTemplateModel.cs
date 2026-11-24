@@ -24,8 +24,23 @@ namespace BarcodePrint.Model
 
         public List<TemplateElement> Elements { get; set; } = new List<TemplateElement>();
 
+        /// <summary>
+        /// 다중 페이지 라벨 지원을 위한 페이지별 요소 목록 (null이거나 1개 이하이면 단일 페이지)
+        /// </summary>
+        public List<List<TemplateElement>> Pages { get; set; }
+
         public string ExcelFileName { get; set; }
         public string ExcelFilePath { get; set; }
+
+        // 다중 행·열 라벨지 배열 설정 (예: 2열 롤 라벨지, A4 라벨지 등)
+        public int LabelColumns { get; set; } = 1;
+        public int LabelRows { get; set; } = 1;
+        public double PageMarginLeftMm { get; set; } = 0.0;
+        public double PageMarginTopMm { get; set; } = 0.0;
+        public double PageMarginRightMm { get; set; } = 0.0;
+        public double PageMarginBottomMm { get; set; } = 0.0;
+        public double ColumnGapMm { get; set; } = 2.0;
+        public double RowGapMm { get; set; } = 2.0;
 
         public static LabelTemplateModel CreateDefault(double widthMm = 70.0, double heightMm = 30.0)
         {

@@ -43,6 +43,7 @@ namespace BarcodePrint.ViewModel
             try
             {
                 RequestPreviewRedraw?.Invoke();
+                RefreshActivePageThumbnail();
             }
             catch (Exception ex)
             {

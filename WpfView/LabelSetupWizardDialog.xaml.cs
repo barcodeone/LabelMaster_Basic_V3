@@ -20,6 +20,12 @@ namespace BarcodePrint.WpfView
         public string SelectedPaperType { get; private set; } = "GAP";
         public int SelectedRotation { get; private set; } = 0;
         public bool SelectedUseRibbon { get; private set; } = false;
+        public int SelectedColumns { get; private set; } = 1;
+        public int SelectedRows { get; private set; } = 1;
+        public double SelectedMarginLeft { get; private set; } = 0.0;
+        public double SelectedMarginRight { get; private set; } = 0.0;
+        public double SelectedColumnGap { get; private set; } = 2.0;
+        public double SelectedRowGap { get; private set; } = 2.0;
 
         public LabelSetupWizardDialog(double initialWidth = 0, double initialHeight = 0)
         {
@@ -249,6 +255,7 @@ namespace BarcodePrint.WpfView
 
             SelectedWidth = w;
             SelectedHeight = h;
+            CaptureMultiLayoutFields();
 
             // 2단계 (용지 종류): 현재 선택값 반영 (기본: GAP)
             if (RbPaperGap != null && RbPaperGap.IsChecked == true) SelectedPaperType = "GAP";
@@ -305,6 +312,7 @@ namespace BarcodePrint.WpfView
 
                 SelectedWidth = w;
                 SelectedHeight = h;
+                CaptureMultiLayoutFields();
             }
             else if (_currentStep == 2)
             {
@@ -367,6 +375,83 @@ namespace BarcodePrint.WpfView
             }
         }
 
+        private void OnToggleMultiLayoutClick(object sender, RoutedEventArgs e)
+        {
+            if (PanelMultiLayoutContent == null) return;
+            bool willExpand = PanelMultiLayoutContent.Visibility != Visibility.Visible;
+            PanelMultiLayoutContent.Visibility = willExpand ? Visibility.Visible : Visibility.Collapsed;
+            if (TxtMultiLayoutArrow != null)
+            {
+                TxtMultiLayoutArrow.Text = willExpand ? "▼" : "▶";
+            }
+        }
+
+        private void OnMultiPresetClick(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Button btn) || btn.Tag == null) return;
+            string[] parts = btn.Tag.ToString().Split(',');
+            if (parts.Length == 2)
+            {
+                if (TxtLabelColumns != null) TxtLabelColumns.Text = parts[0];
+                if (TxtLabelRows != null) TxtLabelRows.Text = parts[1];
+                if (parts[0] == "1" && parts[1] == "1")
+                {
+                    if (TxtMarginLeft != null) TxtMarginLeft.Text = "0";
+                    if (TxtMarginRight != null) TxtMarginRight.Text = "0";
+                }
+            }
+        }
+
+        private void OnMultiStepperClick(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Button btn) || btn.Tag == null) return;
+            string[] parts = btn.Tag.ToString().Split(':');
+            if (parts.Length != 2) return;
+
+            string key = parts[0];
+            if (!double.TryParse(parts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out double delta)) return;
+
+            var inv = CultureInfo.InvariantCulture;
+            switch (key)
+            {
+                case "COL":
+                    int cols = int.TryParse(TxtLabelColumns?.Text?.Trim(), out int c) ? c : 1;
+                    if (TxtLabelColumns != null) TxtLabelColumns.Text = Math.Max(1, Math.Min(20, cols + (int)delta)).ToString();
+                    break;
+                case "ROW":
+                    int rows = int.TryParse(TxtLabelRows?.Text?.Trim(), out int r) ? r : 1;
+                    if (TxtLabelRows != null) TxtLabelRows.Text = Math.Max(1, Math.Min(50, rows + (int)delta)).ToString();
+                    break;
+                case "ML":
+                    double ml = double.TryParse(TxtMarginLeft?.Text?.Trim(), NumberStyles.Any, inv, out double vml) ? vml : 0;
+                    if (TxtMarginLeft != null) TxtMarginLeft.Text = Math.Max(0, Math.Round(ml + delta, 1)).ToString("0.#", inv);
+                    break;
+                case "MR":
+                    double mr = double.TryParse(TxtMarginRight?.Text?.Trim(), NumberStyles.Any, inv, out double vmr) ? vmr : 0;
+                    if (TxtMarginRight != null) TxtMarginRight.Text = Math.Max(0, Math.Round(mr + delta, 1)).ToString("0.#", inv);
+                    break;
+                case "CGAP":
+                    double cg = double.TryParse(TxtColumnGap?.Text?.Trim(), NumberStyles.Any, inv, out double vcg) ? vcg : 2;
+                    if (TxtColumnGap != null) TxtColumnGap.Text = Math.Max(0, Math.Round(cg + delta, 1)).ToString("0.#", inv);
+                    break;
+                case "RGAP":
+                    double rg = double.TryParse(TxtRowGap?.Text?.Trim(), NumberStyles.Any, inv, out double vrg) ? vrg : 2;
+                    if (TxtRowGap != null) TxtRowGap.Text = Math.Max(0, Math.Round(rg + delta, 1)).ToString("0.#", inv);
+                    break;
+            }
+        }
+
+        private void CaptureMultiLayoutFields()
+        {
+            var inv = CultureInfo.InvariantCulture;
+            SelectedColumns = int.TryParse(TxtLabelColumns?.Text?.Trim(), out int cols) ? Math.Max(1, Math.Min(20, cols)) : 1;
+            SelectedRows = int.TryParse(TxtLabelRows?.Text?.Trim(), out int rows) ? Math.Max(1, Math.Min(50, rows)) : 1;
+            SelectedMarginLeft = double.TryParse(TxtMarginLeft?.Text?.Trim(), NumberStyles.Any, inv, out double ml) ? Math.Max(0, ml) : 0.0;
+            SelectedMarginRight = double.TryParse(TxtMarginRight?.Text?.Trim(), NumberStyles.Any, inv, out double mr) ? Math.Max(0, mr) : 0.0;
+            SelectedColumnGap = double.TryParse(TxtColumnGap?.Text?.Trim(), NumberStyles.Any, inv, out double cg) ? Math.Max(0, cg) : 2.0;
+            SelectedRowGap = double.TryParse(TxtRowGap?.Text?.Trim(), NumberStyles.Any, inv, out double rg) ? Math.Max(0, rg) : 2.0;
+        }
+
         private void OnDimensionsChanged(object sender, TextChangedEventArgs e)
         {
             if (BorderMiniaturePreview == null || TxtMiniatureDims == null || TxtMiniatureRatioDesc == null) return;
@@ -397,6 +482,82 @@ namespace BarcodePrint.WpfView
                 else
                 {
                     TxtMiniatureRatioDesc.Text = $"세로형 라벨 (1:{(h / w):0.#})";
+                }
+
+                if (TxtMultiLayoutSummary != null)
+                {
+                    var inv = CultureInfo.InvariantCulture;
+                    int cols = int.TryParse(TxtLabelColumns?.Text?.Trim(), out int c) ? Math.Max(1, Math.Min(20, c)) : 1;
+                    int rows = int.TryParse(TxtLabelRows?.Text?.Trim(), out int r) ? Math.Max(1, Math.Min(50, r)) : 1;
+                    double ml = double.TryParse(TxtMarginLeft?.Text?.Trim(), NumberStyles.Any, inv, out double v1) ? Math.Max(0, v1) : 0;
+                    double mr = double.TryParse(TxtMarginRight?.Text?.Trim(), NumberStyles.Any, inv, out double v2) ? Math.Max(0, v2) : 0;
+                    double cg = double.TryParse(TxtColumnGap?.Text?.Trim(), NumberStyles.Any, inv, out double v3) ? Math.Max(0, v3) : 2;
+                    double rg = double.TryParse(TxtRowGap?.Text?.Trim(), NumberStyles.Any, inv, out double v4) ? Math.Max(0, v4) : 2;
+                    double totalW = ml + (cols * w) + (Math.Max(0, cols - 1) * cg) + mr;
+                    double totalH = (rows * h) + (Math.Max(0, rows - 1) * rg);
+                    TxtMultiLayoutSummary.Text = (cols > 1 || rows > 1 || ml > 0 || mr > 0)
+                        ? $"{cols}열 × {rows}행 · 전체 {totalW:0.#}×{totalH:0.#}mm"
+                        : "1열 × 1행 · 단일 라벨";
+
+                    if (CanvasMiniatureMultiPreview != null)
+                    {
+                        if (cols > 1 || rows > 1)
+                        {
+                            BorderMiniaturePreview.Visibility = Visibility.Collapsed;
+                            CanvasMiniatureMultiPreview.Visibility = Visibility.Visible;
+                            CanvasMiniatureMultiPreview.Children.Clear();
+
+                            double cScale = Math.Min(110.0 / Math.Max(1.0, totalW), 70.0 / Math.Max(1.0, totalH));
+                            double sheetW = Math.Max(20.0, totalW * cScale);
+                            double sheetH = Math.Max(16.0, totalH * cScale);
+                            double offX = (CanvasMiniatureMultiPreview.Width - sheetW) / 2.0;
+                            double offY = (CanvasMiniatureMultiPreview.Height - sheetH) / 2.0;
+
+                            var sheetBg = new Border
+                            {
+                                Width = sheetW,
+                                Height = sheetH,
+                                Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)),
+                                BorderBrush = new SolidColorBrush(Color.FromRgb(148, 163, 184)),
+                                BorderThickness = new Thickness(1),
+                                CornerRadius = new CornerRadius(2)
+                            };
+                            Canvas.SetLeft(sheetBg, offX);
+                            Canvas.SetTop(sheetBg, offY);
+                            CanvasMiniatureMultiPreview.Children.Add(sheetBg);
+
+                            double cellW = Math.Max(4.0, w * cScale);
+                            double cellH = Math.Max(4.0, h * cScale);
+                            for (int ri = 0; ri < rows; ri++)
+                            {
+                                for (int ci = 0; ci < cols; ci++)
+                                {
+                                    bool isPrimary = (ri == 0 && ci == 0);
+                                    double cx = offX + (ml + ci * (w + cg)) * cScale;
+                                    double cy = offY + (ri * (h + rg)) * cScale;
+                                    var cellBox = new Border
+                                    {
+                                        Width = cellW,
+                                        Height = cellH,
+                                        Background = Brushes.White,
+                                        BorderBrush = new SolidColorBrush(isPrimary ? Color.FromRgb(37, 99, 235) : Color.FromRgb(148, 163, 184)),
+                                        BorderThickness = new Thickness(isPrimary ? 1.5 : 1.0),
+                                        CornerRadius = new CornerRadius(2)
+                                    };
+                                    Canvas.SetLeft(cellBox, cx);
+                                    Canvas.SetTop(cellBox, cy);
+                                    CanvasMiniatureMultiPreview.Children.Add(cellBox);
+                                }
+                            }
+
+                            TxtMiniatureRatioDesc.Text = $"{cols}열 × {rows}행 ({totalW:0.#}×{totalH:0.#}mm)";
+                        }
+                        else
+                        {
+                            BorderMiniaturePreview.Visibility = Visibility.Visible;
+                            CanvasMiniatureMultiPreview.Visibility = Visibility.Collapsed;
+                        }
+                    }
                 }
             }
         }
