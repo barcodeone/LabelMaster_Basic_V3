@@ -829,6 +829,9 @@ namespace BarcodePrint.ViewModel
                     }
                 }
 
+                // 하드웨어 해상도(DPI) 전역 동기화 (300 DPI / 203 DPI 자동 반영)
+                BarcodePrint.Services.PrinterService.SyncGlobalPrinterDpi(currentPrinter, dict);
+
                 // 네트워크 프린터의 경우 수신된 모델명을 영구 저장하고 표시 이름 자동 승격
                 string modelName = null;
                 if (dict.TryGetValue("모델명", out string mdl) && !string.IsNullOrWhiteSpace(mdl) && mdl != "-")

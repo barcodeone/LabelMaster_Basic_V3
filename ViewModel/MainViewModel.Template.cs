@@ -133,6 +133,9 @@ namespace BarcodePrint.ViewModel
             OnPropertyChanged(nameof(SelectedElementSerialSuffix));
             OnPropertyChanged(nameof(SelectedElementSerialStartNumber));
             OnPropertyChanged(nameof(SelectedElementSerialStep));
+            OnPropertyChanged(nameof(SelectedElementSerialStepAbs));
+            OnPropertyChanged(nameof(SelectedElementSerialDirectionIndex));
+            OnPropertyChanged(nameof(SelectedElementSerialStepLabel));
             OnPropertyChanged(nameof(SelectedElementSerialDigits));
             OnPropertyChanged(nameof(SelectedElementSerialPreview));
             OnPropertyChanged(nameof(SelectedElementIsKeep));
@@ -1446,10 +1449,62 @@ namespace BarcodePrint.ViewModel
                 {
                     SelectedElement.SerialStep = clamped;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedElementSerialStepAbs));
+                    OnPropertyChanged(nameof(SelectedElementSerialDirectionIndex));
+                    OnPropertyChanged(nameof(SelectedElementSerialStepLabel));
                     OnPropertyChanged(nameof(SelectedElementSerialPreview));
                     UpdatePreview();
                 }
             }
+        }
+
+        public int SelectedElementSerialDirectionIndex
+        {
+            get => (SelectedElement != null && SelectedElement.SerialStep < 0) ? 1 : 0;
+            set
+            {
+                if (SelectedElement != null)
+                {
+                    int absStep = Math.Max(1, Math.Abs(SelectedElement.SerialStep));
+                    int newStep = (value == 1) ? -absStep : absStep;
+                    if (SelectedElement.SerialStep != newStep)
+                    {
+                        SelectedElement.SerialStep = newStep;
+                        OnPropertyChanged();
+                        OnPropertyChanged(nameof(SelectedElementSerialStep));
+                        OnPropertyChanged(nameof(SelectedElementSerialStepAbs));
+                        OnPropertyChanged(nameof(SelectedElementSerialStepLabel));
+                        OnPropertyChanged(nameof(SelectedElementSerialPreview));
+                        UpdatePreview();
+                    }
+                }
+            }
+        }
+
+        public int SelectedElementSerialStepAbs
+        {
+            get => SelectedElement != null ? Math.Max(1, Math.Abs(SelectedElement.SerialStep)) : 1;
+            set
+            {
+                if (SelectedElement != null)
+                {
+                    int absVal = Math.Max(1, Math.Abs(value));
+                    int newStep = SelectedElement.SerialStep < 0 ? -absVal : absVal;
+                    if (SelectedElement.SerialStep != newStep)
+                    {
+                        SelectedElement.SerialStep = newStep;
+                        OnPropertyChanged();
+                        OnPropertyChanged(nameof(SelectedElementSerialStep));
+                        OnPropertyChanged(nameof(SelectedElementSerialPreview));
+                        UpdatePreview();
+                    }
+                }
+            }
+        }
+
+        public string SelectedElementSerialStepLabel
+        {
+            get => (SelectedElement != null && SelectedElement.SerialStep < 0) ? "감소 단위" : "증가 단위";
         }
 
         public int SelectedElementSerialDigits

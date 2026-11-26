@@ -1893,6 +1893,7 @@ namespace BarcodePrint.ViewModel
         private void SyncSelectedPrinterConnectionDetails(string printerName)
         {
             if (string.IsNullOrEmpty(printerName)) return;
+            PrinterService.SyncGlobalPrinterDpi(printerName);
 
             Func<string, string> norm = s => (s ?? "")
                 .Replace("[블루투스]", "")

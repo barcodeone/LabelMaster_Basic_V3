@@ -1761,6 +1761,8 @@ namespace BarcodePrint.ViewModel
                     return false;
                 }
 
+                BarcodePrint.Services.PrinterService.SyncGlobalPrinterDpi(SelectedPrinterName);
+
                 int effectiveCopies = Math.Max(1, copies);
                 var serialElements = CurrentTemplate?.Elements?.Where(el => el != null && el.IsSerial).ToList();
                 bool hasElementSerial = serialElements != null && serialElements.Count > 0;
@@ -2289,6 +2291,7 @@ namespace BarcodePrint.ViewModel
 
                 int wMm = Math.Max(1, overrideWidthMm.Value);
                 int hMm = Math.Max(1, overrideHeightMm.Value);
+                BarcodePrint.Services.PrinterService.SyncGlobalPrinterDpi(SelectedPrinterName);
 
                 bool hasTemplateContent = CurrentTemplate != null &&
                     ((CurrentTemplate.Elements != null && CurrentTemplate.Elements.Count > 0) || ActiveColumnCount > 0);

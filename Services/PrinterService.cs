@@ -583,6 +583,61 @@ namespace BarcodePrint.Services
         /// <summary>
         /// New_xPix TSPL 양방향 통신 기반 실시간 하드웨어 스펙 및 상세 정보 조회 (xPix 기준 100% 동일화)
         /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _detectedPrinterDpiCache
+            = new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        public static int ResolvePrinterDpi(string printerName, Dictionary<string, string> hardwareDetails = null)
+        {
+            if (hardwareDetails != null)
+            {
+                if ((hardwareDetails.TryGetValue("해상도", out string dpiStr) || hardwareDetails.TryGetValue("DPI", out dpiStr)) &&
+                    int.TryParse(Regex.Match(dpiStr ?? "", @"\d+").Value, out int parsed) &&
+                    parsed >= 150 && parsed <= 1200)
+                {
+                    if (!string.IsNullOrWhiteSpace(printerName)) _detectedPrinterDpiCache[printerName] = parsed;
+                    return parsed;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(printerName) && _detectedPrinterDpiCache.TryGetValue(printerName, out int cachedDpi) && cachedDpi >= 150 && cachedDpi <= 1200)
+            {
+                return cachedDpi;
+            }
+
+            if (!string.IsNullOrWhiteSpace(printerName))
+            {
+                try
+                {
+                    string cleanName = printerName.Replace("[블루투스]", "").Replace("[네트워크]", "").Trim();
+                    var ps = new System.Drawing.Printing.PrinterSettings { PrinterName = cleanName };
+                    if (ps.IsValid)
+                    {
+                        int xDpi = ps.DefaultPageSettings.PrinterResolution.X;
+                        if (xDpi >= 150 && xDpi <= 1200)
+                        {
+                            return xDpi;
+                        }
+                        foreach (System.Drawing.Printing.PrinterResolution res in ps.PrinterResolutions)
+                        {
+                            if (res.X >= 150 && res.X <= 1200)
+                            {
+                                return res.X;
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return 203;
+        }
+
+        public static void SyncGlobalPrinterDpi(string printerName, Dictionary<string, string> hardwareDetails = null)
+        {
+            int dpi = ResolvePrinterDpi(printerName, hardwareDetails);
+            PRINT_INFO_CLASS.PrinterInfo.printer_DPI = dpi;
+        }
+
         public Dictionary<string, string> GetPrinterHardwareDetails(string printerName, List<UsbPrinterInfo> cachedPrinters)
         {
             var rawDetails = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -833,9 +888,21 @@ namespace BarcodePrint.Services
             details["IS_SUCCESS"] = isSuccess ? "true" : "false";
             details["통신 모드"] = (rawDetails.Count > 0) ? "TSPL 양방향 모드" : "Windows 스풀러 인쇄 모드";
 
-            // 해상도
-            if (rawDetails.TryGetValue("DPI", out string dpiVal)) details["해상도"] = dpiVal;
-            else details["해상도"] = "203";
+            // 해상도 (TSPL 응답 우선 → 미수신 시 Windows 드라이버 해상도 자동 조회 → 기본 203)
+            if (rawDetails.TryGetValue("DPI", out string dpiVal) &&
+                int.TryParse(Regex.Match(dpiVal ?? "", @"\d+").Value, out int tsplDpi) &&
+                tsplDpi >= 150 && tsplDpi <= 1200)
+            {
+                details["해상도"] = tsplDpi.ToString();
+                _detectedPrinterDpiCache[printerName] = tsplDpi;
+                PRINT_INFO_CLASS.PrinterInfo.printer_DPI = tsplDpi;
+            }
+            else
+            {
+                int driverDpi = ResolvePrinterDpi(printerName);
+                details["해상도"] = driverDpi.ToString();
+                PRINT_INFO_CLASS.PrinterInfo.printer_DPI = driverDpi;
+            }
 
             // 모델명
             if (rawDetails.TryGetValue("MDL", out string mdlVal)) details["모델명"] = mdlVal;
