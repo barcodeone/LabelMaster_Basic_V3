@@ -11,6 +11,7 @@ namespace BarcodePrint.Model
     public class DocumentTabItem : INotifyPropertyChanged
     {
         public string Id { get; } = Guid.NewGuid().ToString();
+        public bool IsDirty { get; set; }
 
         private string _title = "새 문서";
         public string Title

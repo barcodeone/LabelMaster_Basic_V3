@@ -33,7 +33,7 @@ namespace BarcodePrint.Model
         /// </summary>
         public static string GetSecureFilePath(string originalFileName)
         {
-            string infoFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
+            string infoFolder = AppDataPathHelper.WritableInfoDirectory;
             if (!Directory.Exists(infoFolder))
             {
                 Directory.CreateDirectory(infoFolder);
@@ -50,7 +50,7 @@ namespace BarcodePrint.Model
         {
             try
             {
-                string infoFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
+                string infoFolder = AppDataPathHelper.WritableInfoDirectory;
                 
                 if (!Directory.Exists(infoFolder))
                 {

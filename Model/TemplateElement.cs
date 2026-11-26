@@ -51,6 +51,23 @@ namespace BarcodePrint.Model
         public string DateTimeFormat { get; set; } = "yyyy-MM-dd HH:mm"; // 날짜/시간 서식 (예: yyyy-MM-dd, yyyy.MM.dd, yyyy-MM-dd HH:mm 등)
         public bool AutoUpdateDate { get; set; } = true;                  // 인쇄 및 렌더링 시 현재 시각 자동 업데이트 여부
 
+        // [연속 순번(Serial) 속성]
+        public bool IsSerial { get; set; } = false;
+        public string SerialPrefix { get; set; } = "";
+        public string SerialSuffix { get; set; } = "";
+        public int SerialStartNumber { get; set; } = 1;
+        public int SerialStep { get; set; } = 1;
+        public int SerialDigits { get; set; } = 4;
+
+        public string FormatSerialValue(int offsetSteps = 0)
+        {
+            int step = SerialStep != 0 ? SerialStep : 1;
+            int num = Math.Max(0, SerialStartNumber + (offsetSteps * step));
+            int digits = Math.Max(0, Math.Min(10, SerialDigits));
+            string numStr = digits > 0 ? num.ToString($"D{digits}") : num.ToString();
+            return $"{SerialPrefix ?? ""}{numStr}{SerialSuffix ?? ""}";
+        }
+
         // 도형 / 선 속성
         public string ShapeType { get; set; } = "RECTANGLE"; // RECTANGLE, ROUNDED_RECT, CIRCLE, TRIANGLE, DIAMOND, etc.
         public string LineStyle { get; set; } = "SOLID";     // SOLID, DASHED, DOTTED, DASH_DOT, DOUBLE, WAVY, ZIGZAG

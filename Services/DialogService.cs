@@ -56,6 +56,14 @@ namespace BarcodePrint.Services
             return result == MessageBoxResult.Yes;
         }
 
+        public MessageBoxResult ShowYesNoCancel(string message, string title = "저장 확인")
+        {
+            var owner = GetOwnerWindow();
+            return owner != null
+                ? MessageBox.Show(owner, message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question)
+                : MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+        }
+
         public bool ShowOpenFileDialog(string filter, string defaultExt, out string filePath)
         {
             var ofd = new OpenFileDialog

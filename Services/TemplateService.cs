@@ -63,7 +63,7 @@ namespace BarcodePrint.Services
                     return false;
                 }
                 string json = JsonConvert.SerializeObject(model, Formatting.Indented);
-                File.WriteAllText(filePath, json, Encoding.UTF8);
+                AppDataPathHelper.WriteAllTextAtomic(filePath, json);
                 return true;
             }
             catch (Exception ex)

@@ -30,6 +30,7 @@ namespace BarcodePrint.WpfView
         public LabelSetupWizardDialog(double initialWidth = 0, double initialHeight = 0)
         {
             InitializeComponent();
+            Loaded += OnWizardLoaded;
             LoadCustomSizes();
 
             // 마지막으로 사용했던 라벨 규격 불러오기 (파라미터 우선, 없으면 AppSettings에서 로드)
@@ -70,6 +71,28 @@ namespace BarcodePrint.WpfView
 
 
         #region Custom Sizes Load / Save / Render
+
+        private void OnWizardLoaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (Owner != null)
+                {
+                    if (Owner.WindowState == WindowState.Maximized)
+                    {
+                        var wa = SystemParameters.WorkArea;
+                        Left = wa.Left + (wa.Width - ActualWidth) / 2.0;
+                        Top = wa.Top + (wa.Height - ActualHeight) / 2.0;
+                    }
+                    else
+                    {
+                        Left = Owner.Left + (Owner.Width - ActualWidth) / 2.0;
+                        Top = Owner.Top + (Owner.Height - ActualHeight) / 2.0;
+                    }
+                }
+            }
+            catch { }
+        }
 
         private void LoadCustomSizes()
         {

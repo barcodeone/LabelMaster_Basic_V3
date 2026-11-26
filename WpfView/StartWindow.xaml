@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="라벨마스터 - LabelMaster (v1.1.7)"
+        Title="라벨마스터 - LabelMaster (v1.1.8)"
         Width="1180" Height="720" MinWidth="960" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         FontFamily="Pretendard, 맑은 고딕, Malgun Gothic, Segoe UI, sans-serif"
@@ -220,8 +220,8 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <!-- 1. Left Fixed Sidebar (Width: 254 - 배너 230px 규격에 정확히 맞춤) -->
-            <ColumnDefinition Width="254"/>
+            <!-- 1. Left Fixed Sidebar (Width: 274 - 배너 230px + 스크롤바 여유 폭 확보) -->
+            <ColumnDefinition Width="274"/>
             <!-- 2. Right Main Dashboard Workspace -->
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -230,7 +230,7 @@
         <!-- [1. LEFT DESKTOP SIDEBAR] (통합 네비게이션 허브)               -->
         <!-- ============================================================== -->
         <Border Grid.Column="0" Background="{StaticResource SidebarBgBrush}" BorderBrush="{StaticResource SidebarBorderBrush}" BorderThickness="0,0,1,0">
-            <Grid Margin="12,12,12,12">
+            <Grid Margin="12,12,6,12">
                 <Grid.RowDefinitions>
                     <!-- Brand Logo & App Name -->
                     <RowDefinition Height="Auto"/>
@@ -249,7 +249,7 @@
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="LABEL MASTER" FontWeight="Bold" FontSize="17" Foreground="{StaticResource TextMainBrush}"/>
-                        <TextBlock x:Name="TxtAppVersion" Text="라벨마스터 v1.1.7" FontSize="11.5" Foreground="{StaticResource TextSubBrush}" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="TxtAppVersion" Text="라벨마스터 v1.1.8" FontSize="11.5" Foreground="{StaticResource TextSubBrush}" Margin="0,2,0,0"/>
                     </StackPanel>
                 </DockPanel>
 
@@ -320,18 +320,6 @@
                         </Border>
                     </StackPanel>
                 </ScrollViewer>
-
-                <!-- Bottom Compact Printer Status Badge in Sidebar (상태 동기화 보장) -->
-                <Border Grid.Row="3" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,10,0,0">
-                    <DockPanel LastChildFill="True">
-                        <Ellipse x:Name="DotSidebarPrinter" Width="9" Height="9" Fill="#94A3B8" Margin="0,0,8,0" VerticalAlignment="Center" DockPanel.Dock="Left"/>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtSidePrinterStatusText" Text="프린터 확인 중..." FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextMainBrush}" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="TxtSidePrinterName" Text="-" FontSize="11" Foreground="{StaticResource TextSubBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
-                            <TextBlock x:Name="TxtSidePrinterPort" Text="포트: -" FontSize="10" Foreground="#94A3B8" Visibility="Collapsed"/>
-                        </StackPanel>
-                    </DockPanel>
-                </Border>
             </Grid>
         </Border>
 
@@ -347,7 +335,7 @@
             </Grid.RowDefinitions>
 
             <!-- Top Header Bar (프린터 상태 및 설정 통합 단일화) -->
-            <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="28,0">
+            <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="24,0">
                 <Grid VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -359,17 +347,20 @@
                         <TextBlock Text="라벨마스터" FontWeight="Bold" FontSize="24" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <!-- Top Right Single Printer Status Badge & Settings Button -->
+                    <!-- Top Right Printer Status Box & Settings Button -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border x:Name="BorderPrinterBadge" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1.2" CornerRadius="20" Padding="14,7" Cursor="Hand" MouseLeftButtonDown="OnPrinterBadgeClick" ToolTip="클릭하여 프린터 검색 및 연결 마법사를 실행합니다">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Ellipse x:Name="DotPrinterStatus" Width="10" Height="10" Fill="#94A3B8" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="TxtPrinterStatus" Text="프린터 상태 확인 중..." FontSize="13.5" FontWeight="SemiBold" Foreground="{StaticResource TextMainBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Text=" ▾" FontSize="11" Foreground="{StaticResource TextSubBrush}" Margin="5,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
+                        <Border x:Name="BorderTopPrinterStatus" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="12,5" ToolTip="현재 연결된 프린터 상태">
+                            <DockPanel LastChildFill="True">
+                                <Ellipse x:Name="DotSidebarPrinter" Width="9" Height="9" Fill="#94A3B8" Margin="0,0,8,0" VerticalAlignment="Center" DockPanel.Dock="Left"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtSidePrinterStatusText" Text="프린터 확인 중..." FontSize="11.5" FontWeight="Bold" Foreground="{StaticResource TextMainBrush}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="TxtSidePrinterName" Text="-" FontSize="10.5" Foreground="{StaticResource TextSubBrush}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" MaxWidth="200"/>
+                                    <TextBlock x:Name="TxtSidePrinterPort" Text="포트: -" FontSize="10" Foreground="#94A3B8" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </DockPanel>
                         </Border>
 
-                        <Button Click="OnOpenPrinterSettingsClick" Style="{StaticResource MacPrimaryBtnStyle}" Height="36" Padding="14,0" Margin="12,0,0,0" ToolTip="프린터 하드웨어 설정 (인쇄 농도, 속도, 용지 규격, 센서 측정)">
+                        <Button Click="OnOpenPrinterSettingsClick" Style="{StaticResource MacPrimaryBtnStyle}" Height="36" Padding="14,0" Margin="10,0,0,0" ToolTip="프린터 하드웨어 설정 (인쇄 농도, 속도, 용지 규격, 센서 측정)">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="⚙️" FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="프린터 설정" FontSize="13" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
@@ -379,41 +370,47 @@
                 </Grid>
             </Border>
 
-            <!-- Main Dashboard Content (반응형 동적 크기 조절 지원) -->
-            <ScrollViewer x:Name="MainDashboardScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" SizeChanged="OnDashboardSizeChanged">
-                <StackPanel Margin="28,20,28,32" MaxWidth="1550">
+            <!-- Main Dashboard Content + Bottom Docked 4-Column Banner -->
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <ScrollViewer x:Name="MainDashboardScrollViewer" Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" SizeChanged="OnDashboardSizeChanged">
+                    <StackPanel Margin="24,12,24,8" MaxWidth="1550">
 
                     <!-- ============================================================== -->
                     <!-- [1. 최상단] 🏢 한국 Xprinter 공식 홈페이지 배너                     -->
                     <!-- ============================================================== -->
                     <Border Background="{StaticResource StoreBannerGradientBrush}" 
-                            CornerRadius="12" Padding="22,18" Margin="0,0,0,20" 
+                            CornerRadius="12" Padding="18,11" Margin="0,0,0,12" 
                             Cursor="Hand" MouseLeftButtonDown="OnOfficialSiteClick" Effect="{StaticResource BannerShadow}"
                             ToolTip="클릭하여 한국 Xprinter 공식 홈페이지(xprinter.co.kr)로 이동합니다">
                         <DockPanel LastChildFill="True">
                             <!-- 우측 구매 버튼 (화이트 & 오렌지 텍스트로 가시성 극대화) -->
-                            <Border DockPanel.Dock="Right" Background="White" CornerRadius="8" Padding="18,10" VerticalAlignment="Center" Margin="16,0,0,0">
-                                <TextBlock Text="홈페이지 바로가기 ➔" FontSize="13.5" FontWeight="Bold" Foreground="#EA580C"/>
+                            <Border DockPanel.Dock="Right" Background="White" CornerRadius="8" Padding="16,8" VerticalAlignment="Center" Margin="16,0,0,0">
+                                <TextBlock Text="홈페이지 바로가기 ➔" FontSize="13" FontWeight="Bold" Foreground="#EA580C"/>
                             </Border>
 
                             <!-- 좌측 배너 아이콘 + 뱃지 + 텍스트 -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#33FFFFFF" VerticalAlignment="Center" Margin="0,0,14,0">
-                                    <TextBlock Text="🌐" FontSize="19" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Width="34" Height="34" CornerRadius="17" Background="#33FFFFFF" VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Text="🌐" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <Border Background="#2BFFFFFF" BorderBrush="#FFFFFF" BorderThickness="1" CornerRadius="4" Padding="8,3.5" Margin="0,0,14,0" VerticalAlignment="Center">
+                                <Border Background="#2BFFFFFF" BorderBrush="#FFFFFF" BorderThickness="1" CornerRadius="4" Padding="8,3" Margin="0,0,12,0" VerticalAlignment="Center">
                                     <TextBlock Text="한국 Xprinter" FontSize="11.5" FontWeight="Bold" Foreground="White"/>
                                 </Border>
-                                <TextBlock FontSize="14.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Text="#대한민국 넘버원 택배/라벨프린터  #드라이버 설치 및 고객지원"/>
+                                <TextBlock FontSize="14" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Text="#대한민국 넘버원 택배/라벨프린터  #드라이버 설치 및 고객지원"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
 
                     <!-- ============================================================== -->
-                    <!-- [2. 메인 1순위] ➕ 새 라벨 만들기 (대형 블루 그라디언트 히어로 CTA - 세로 크기 확대) -->
+                    <!-- [2. 메인 1순위] ➕ 새 라벨 만들기 (대형 블루 그라디언트 히어로 CTA) -->
                     <!-- ============================================================== -->
-                    <Button Click="OnNewTemplateClick" Style="{StaticResource HeroNewTemplateBtnStyle}" Margin="0,0,0,26">
-                        <Grid Height="146" Margin="28,0">
+                    <Button Click="OnNewTemplateClick" Style="{StaticResource HeroNewTemplateBtnStyle}" Margin="0,0,0,14">
+                        <Grid Height="106" Margin="24,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -421,25 +418,25 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- 큼직한 화이트 서클 플러스 아이콘 -->
-                            <Border Grid.Column="0" Width="72" Height="72" CornerRadius="36" Background="White" VerticalAlignment="Center" Margin="0,0,22,0">
-                                <TextBlock Text="➕" FontSize="30" FontWeight="Bold" Foreground="#1D4ED8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Column="0" Width="58" Height="58" CornerRadius="29" Background="White" VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="➕" FontSize="25" FontWeight="Bold" Foreground="#1D4ED8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
 
                             <!-- 제목 및 직관적인 안내 문구 -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="새 라벨 만들기" FontSize="23" FontWeight="Bold" Foreground="White"/>
-                                    <Border Background="#33FFFFFF" BorderBrush="#80FFFFFF" BorderThickness="1" CornerRadius="4" Padding="9,3.5" Margin="14,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="자유 규격 마법사" FontSize="12" FontWeight="Bold" Foreground="White"/>
+                                    <TextBlock Text="새 라벨 만들기" FontSize="21" FontWeight="Bold" Foreground="White"/>
+                                    <Border Background="#33FFFFFF" BorderBrush="#80FFFFFF" BorderThickness="1" CornerRadius="4" Padding="8,3" Margin="12,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="자유 규격 마법사" FontSize="11.5" FontWeight="Bold" Foreground="White"/>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Text="용지 크기(가로×세로 mm)와 여백, 종류를 직접 설정하여 새로운 빈 라벨을 디자인하고 인쇄합니다." FontSize="13.5" Foreground="#DBEAFE" Margin="0,8,0,0"/>
+                                <TextBlock Text="용지 크기(가로×세로 mm)와 여백, 종류를 직접 설정하여 새로운 빈 라벨을 디자인하고 인쇄합니다." FontSize="13" Foreground="#DBEAFE" Margin="0,6,0,0"/>
                             </StackPanel>
 
                             <!-- 우측 대형 강조 화이트 CTA 버튼 -->
-                            <Border Grid.Column="2" Background="White" CornerRadius="9" Padding="24,14" VerticalAlignment="Center" Cursor="Hand">
+                            <Border Grid.Column="2" Background="White" CornerRadius="9" Padding="20,12" VerticalAlignment="Center" Cursor="Hand">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="➕ 시작하기 ➔" FontSize="15" FontWeight="Bold" Foreground="#1D4ED8" VerticalAlignment="Center"/>
+                                    <TextBlock Text="➕ 시작하기 ➔" FontSize="14.5" FontWeight="Bold" Foreground="#1D4ED8" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -448,7 +445,7 @@
                     <!-- ============================================================== -->
                     <!-- [3. 메인 2순위] 🕒 최근 작업 내역 (최신순 최대 4개 표시)          -->
                     <!-- ============================================================== -->
-                    <DockPanel Margin="2,0,2,12">
+                    <DockPanel Margin="2,0,2,8">
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="🕒 최근 작업 내역" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextMainBrush}"/>
                             <TextBlock Text="최근에 작업하던 라벨 크기와 내용을 불러와 바로 작업을 이어갑니다." FontSize="11.5" Foreground="{StaticResource TextSubBrush}" Margin="0,2,0,0"/>
@@ -464,7 +461,7 @@
                     </DockPanel>
 
                     <!-- 최근 작업내역 4열 균등 그리드 (최대 4개 표시) -->
-                    <Grid Margin="0,0,0,26">
+                    <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="14"/>
@@ -477,7 +474,7 @@
 
                         <!-- [0. 최근 작업 없을 때] 📭 빈 카드 (Empty Card) -->
                         <Border x:Name="CardRecentEmpty" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1.5" CornerRadius="10" Visibility="Collapsed">
-                            <Grid x:Name="GridRecentEmpty" Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecentEmpty" Height="112" Margin="12,10">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                     <Border Width="40" Height="40" CornerRadius="20" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1" HorizontalAlignment="Center" Margin="0,0,0,8">
                                         <TextBlock Text="📭" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -490,7 +487,7 @@
 
                         <!-- [1. 최신 작업 1순위] -->
                         <Button x:Name="BtnRecent0" Grid.Column="0" Style="{StaticResource PresetCardButtonStyle}" Click="OnRecentCardClick" Tag="0" Visibility="Collapsed">
-                            <Grid x:Name="GridRecent0" Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecent0" Height="112" Margin="12,10">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
@@ -518,7 +515,7 @@
 
                         <!-- [2. 최신 작업 2순위] -->
                         <Button x:Name="BtnRecent1" Grid.Column="2" Style="{StaticResource PresetCardButtonStyle}" Click="OnRecentCardClick" Tag="1" Visibility="Collapsed">
-                            <Grid x:Name="GridRecent1" Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecent1" Height="112" Margin="12,10">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
@@ -546,7 +543,7 @@
 
                         <!-- [3. 최신 작업 3순위] -->
                         <Button x:Name="BtnRecent2" Grid.Column="4" Style="{StaticResource PresetCardButtonStyle}" Click="OnRecentCardClick" Tag="2" Visibility="Collapsed">
-                            <Grid x:Name="GridRecent2" Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecent2" Height="112" Margin="12,10">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
@@ -574,7 +571,7 @@
 
                         <!-- [4. 최신 작업 4순위] -->
                         <Button x:Name="BtnRecent3" Grid.Column="6" Style="{StaticResource PresetCardButtonStyle}" Click="OnRecentCardClick" Tag="3" Visibility="Collapsed">
-                            <Grid x:Name="GridRecent3" Height="140" Margin="14,14">
+                            <Grid x:Name="GridRecent3" Height="112" Margin="12,10">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
@@ -602,16 +599,142 @@
                     </Grid>
 
                     <!-- ============================================================== -->
-                    <!-- [4. 하단 HTML 웹뷰 배너 공간 (반응형 동적 비율 조절)]             -->
+                    <!-- [3-2. 세로 확장 시 표시] 📁 최근 저장한 문서 (정식 .lbm 파일 4개) -->
                     <!-- ============================================================== -->
-                    <Border x:Name="QuickToolsHtmlBorder" Height="130" MinHeight="130" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Margin="0,14,0,26" Effect="{StaticResource CardShadow}">
-                        <Border CornerRadius="11" ClipToBounds="True">
-                            <WebBrowser x:Name="QuickToolsWebBrowser" Height="130" MinHeight="130" Navigating="OnQuickToolsWebBrowserNavigating" LoadCompleted="OnQuickToolsWebBrowserLoadCompleted"/>
-                        </Border>
-                    </Border>
+                    <StackPanel x:Name="SavedDocsSection" Visibility="Collapsed" Margin="0,6,0,0">
+                        <DockPanel Margin="2,0,2,8">
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="📁 최근 저장한 문서" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextMainBrush}"/>
+                                <TextBlock Text="직접 저장하거나 불러온 정식 라벨 서식 파일(*.lbm)을 빠르게 엽니다." FontSize="11.5" Foreground="{StaticResource TextSubBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </DockPanel>
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="14"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="14"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="14"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border x:Name="CardSavedEmpty" Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1.5" CornerRadius="10" Visibility="Collapsed">
+                                <Grid Height="106" Margin="12,10">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="📂 저장된 문서 없음" FontWeight="Bold" FontSize="13" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="서식을 저장하면 여기에 표시됩니다." FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Button x:Name="BtnSaved0" Grid.Column="0" Style="{StaticResource PresetCardButtonStyle}" Click="OnSavedDocClick" Tag="0" Visibility="Collapsed">
+                                <Grid Height="106" Margin="12,10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border Width="34" Height="34" CornerRadius="8" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1.2" Margin="0,0,8,0">
+                                            <TextBlock Text="📄" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtSavedTitle0" Text="저장 문서 1" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextMainBrush}" TextTrimming="CharacterEllipsis" MaxWidth="140"/>
+                                            <Border Background="#EFF6FF" CornerRadius="4" Padding="5,1.5" Margin="0,2,0,0" HorizontalAlignment="Left">
+                                                <TextBlock x:Name="TxtSavedSize0" Text="100×75 mm" FontSize="10.5" FontWeight="Bold" Foreground="#2563EB"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" x:Name="TxtSavedSubtitle0" Text="저장된 서식 파일" FontSize="11" Foreground="{StaticResource TextSubBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="2" Text="문서 열기 ➔" FontSize="11.5" FontWeight="Bold" Foreground="#2563EB" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+
+                            <Button x:Name="BtnSaved1" Grid.Column="2" Style="{StaticResource PresetCardButtonStyle}" Click="OnSavedDocClick" Tag="1" Visibility="Collapsed">
+                                <Grid Height="106" Margin="12,10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border Width="34" Height="34" CornerRadius="8" Background="#ECFDF5" BorderBrush="#A7F3D0" BorderThickness="1.2" Margin="0,0,8,0">
+                                            <TextBlock Text="📄" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtSavedTitle1" Text="저장 문서 2" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextMainBrush}" TextTrimming="CharacterEllipsis" MaxWidth="140"/>
+                                            <Border Background="#ECFDF5" CornerRadius="4" Padding="5,1.5" Margin="0,2,0,0" HorizontalAlignment="Left">
+                                                <TextBlock x:Name="TxtSavedSize1" Text="100×75 mm" FontSize="10.5" FontWeight="Bold" Foreground="#059669"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" x:Name="TxtSavedSubtitle1" Text="저장된 서식 파일" FontSize="11" Foreground="{StaticResource TextSubBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="2" Text="문서 열기 ➔" FontSize="11.5" FontWeight="Bold" Foreground="#059669" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+
+                            <Button x:Name="BtnSaved2" Grid.Column="4" Style="{StaticResource PresetCardButtonStyle}" Click="OnSavedDocClick" Tag="2" Visibility="Collapsed">
+                                <Grid Height="106" Margin="12,10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border Width="34" Height="34" CornerRadius="8" Background="#F5F3FF" BorderBrush="#DDD6FE" BorderThickness="1.2" Margin="0,0,8,0">
+                                            <TextBlock Text="📄" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtSavedTitle2" Text="저장 문서 3" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextMainBrush}" TextTrimming="CharacterEllipsis" MaxWidth="140"/>
+                                            <Border Background="#F5F3FF" CornerRadius="4" Padding="5,1.5" Margin="0,2,0,0" HorizontalAlignment="Left">
+                                                <TextBlock x:Name="TxtSavedSize2" Text="100×75 mm" FontSize="10.5" FontWeight="Bold" Foreground="#7C3AED"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" x:Name="TxtSavedSubtitle2" Text="저장된 서식 파일" FontSize="11" Foreground="{StaticResource TextSubBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="2" Text="문서 열기 ➔" FontSize="11.5" FontWeight="Bold" Foreground="#7C3AED" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+
+                            <Button x:Name="BtnSaved3" Grid.Column="6" Style="{StaticResource PresetCardButtonStyle}" Click="OnSavedDocClick" Tag="3" Visibility="Collapsed">
+                                <Grid Height="106" Margin="12,10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border Width="34" Height="34" CornerRadius="8" Background="#FFFBEB" BorderBrush="#FDE68A" BorderThickness="1.2" Margin="0,0,8,0">
+                                            <TextBlock Text="📄" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtSavedTitle3" Text="저장 문서 4" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextMainBrush}" TextTrimming="CharacterEllipsis" MaxWidth="140"/>
+                                            <Border Background="#FFFBEB" CornerRadius="4" Padding="5,1.5" Margin="0,2,0,0" HorizontalAlignment="Left">
+                                                <TextBlock x:Name="TxtSavedSize3" Text="100×75 mm" FontSize="10.5" FontWeight="Bold" Foreground="#D97706"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" x:Name="TxtSavedSubtitle3" Text="저장된 서식 파일" FontSize="11" Foreground="{StaticResource TextSubBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="2" Text="문서 열기 ➔" FontSize="11.5" FontWeight="Bold" Foreground="#D97706" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
 
                 </StackPanel>
             </ScrollViewer>
+
+                <!-- ============================================================== -->
+                <!-- [4. 하단 고정 HTML 웹뷰 배너 공간 (4칸짜리 광고 배너)]               -->
+                <!-- ============================================================== -->
+                <Border x:Name="QuickToolsHtmlBorder" Grid.Row="1" Height="120" MinHeight="110" MaxWidth="1550" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Margin="24,4,24,14" Effect="{StaticResource CardShadow}">
+                    <Border CornerRadius="11" ClipToBounds="True">
+                        <WebBrowser x:Name="QuickToolsWebBrowser" Height="120" MinHeight="110" Navigating="OnQuickToolsWebBrowserNavigating" LoadCompleted="OnQuickToolsWebBrowserLoadCompleted"/>
+                    </Border>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

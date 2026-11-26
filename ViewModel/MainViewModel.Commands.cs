@@ -76,6 +76,7 @@ namespace BarcodePrint.ViewModel
         public ICommand AddImageElementCommand { get; private set; }
         public ICommand AddTableElementCommand { get; private set; }
         public ICommand AddDateTimeElementCommand { get; private set; }
+        public ICommand AddSerialElementCommand { get; private set; }
         public ICommand ImportPdfCommand { get; private set; }
         public ICommand DeleteSelectedElementCommand { get; private set; }
         public ICommand BringToFrontCommand { get; private set; }
@@ -140,6 +141,7 @@ namespace BarcodePrint.ViewModel
 
         // 라벨 템플릿 파일 (*.lbm) 내보내기 및 불러오기 커맨드
         public ICommand ExportTemplateCommand { get; private set; }
+        public ICommand SaveAsTemplateCommand { get; private set; }
         public ICommand ImportTemplateCommand { get; private set; }
         public ICommand SaveTemplateCommand { get; private set; }
         public ICommand LoadTemplateCommand { get; private set; }
@@ -196,6 +198,7 @@ namespace BarcodePrint.ViewModel
             OpenAboutCommand = new RelayCommand(_ => ExecuteOpenAbout());
             OpenColumnFormatCommand = new RelayCommand(param => ExecuteOpenColumnFormat(param));
             ExportTemplateCommand = new RelayCommand(_ => ExecuteExportTemplate());
+            SaveAsTemplateCommand = new RelayCommand(_ => ExecuteSaveAsTemplate());
             ImportTemplateCommand = new RelayCommand(_ => ExecuteImportTemplate());
             SaveTemplateCommand = ExportTemplateCommand;
             LoadTemplateCommand = ImportTemplateCommand;
@@ -313,6 +316,7 @@ namespace BarcodePrint.ViewModel
             AddImageElementCommand = new RelayCommand(_ => AddImageElement());
             AddTableElementCommand = new RelayCommand(_ => AddNewElement(ElementType.TABLE));
             AddDateTimeElementCommand = new RelayCommand(_ => AddNewElement(ElementType.DATE_TIME));
+            AddSerialElementCommand = new RelayCommand(_ => AddNewElement(ElementType.TEXT, "SERIAL"));
             ImportPdfCommand = new RelayCommand(_ => ExecuteImportPdfToCanvas());
             DeleteSelectedElementCommand = new RelayCommand(_ => DeleteSelectedElement());
             BringToFrontCommand = new RelayCommand(_ => BringToFront(), _ => HasSelectedElement || HasMultipleSelectedElements);

@@ -95,21 +95,44 @@ namespace BarcodePrint.WpfView
 
         public StartWindow DashboardWindow { get; set; }
         private bool _isReturningToDashboard = false;
+        private System.Windows.Threading.DispatcherTimer _autoSaveTimer;
 
         public WpfMainWindow()
         {
             InitializeComponentSafely();
             Loaded += WpfMainWindow_Loaded;
+
+            // 작업 중 비정상 종료 시에도 최근 작업 내역이 유실되지 않도록 60초 주기로 백그라운드 자동 저장
+            _autoSaveTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(60)
+            };
+            _autoSaveTimer.Tick += (s, e) =>
+            {
+                if (IsLoaded && !_isReturningToDashboard)
+                {
+                    ViewModel?.SaveSettingsSilently(immediate: false);
+                }
+            };
+            _autoSaveTimer.Start();
+
             Closing += (s, e) =>
             {
                 CommitInlineCanvasTextEdit();
+                if (!_isReturningToDashboard && ViewModel != null && !ViewModel.ConfirmSaveAllOpenTabs())
+                {
+                    e.Cancel = true;
+                    return;
+                }
+
+                _autoSaveTimer?.Stop();
                 if (!_isReturningToDashboard)
                 {
                     BarcodePrint.Model.PrinterOnlineDetector.IsAppExiting = true;
                     BarcodePrint.Model.UsbPrinterHelper.IsAppExiting = true;
                 }
                 ViewModel?.StopRealtimeStatusMonitoring();
-                ViewModel?.SaveSettingsSilently();
+                ViewModel?.SaveSettingsSilently(immediate: true);
                 if (!_isReturningToDashboard)
                 {
                     BarcodePrint.Model.PrinterOnlineDetector.WaitForWmiCompletion(600);
@@ -186,9 +209,15 @@ namespace BarcodePrint.WpfView
 
         private void OnGoHomeClick(object sender, RoutedEventArgs e)
         {
-            _isReturningToDashboard = true;
             CommitInlineCanvasTextEdit();
-            ViewModel?.SaveSettingsSilently();
+            if (ViewModel != null && !ViewModel.ConfirmSaveAllOpenTabs())
+            {
+                return;
+            }
+
+            _isReturningToDashboard = true;
+            _autoSaveTimer?.Stop();
+            ViewModel?.SaveSettingsSilently(immediate: true);
             AppSettings.Default?.SaveImmediate();
 
             if (DashboardWindow != null)
@@ -333,13 +362,27 @@ namespace BarcodePrint.WpfView
             }
         }
 
+        private static DependencyObject GetSafeParent(DependencyObject obj)
+        {
+            if (obj == null) return null;
+            if (obj is Visual || obj is System.Windows.Media.Media3D.Visual3D)
+            {
+                return VisualTreeHelper.GetParent(obj);
+            }
+            if (obj is ContentElement ce)
+            {
+                return ContentOperations.GetParent(ce) ?? LogicalTreeHelper.GetParent(ce);
+            }
+            return LogicalTreeHelper.GetParent(obj);
+        }
+
         private static bool IsVisualDescendantOf(DependencyObject child, DependencyObject parent)
         {
             DependencyObject current = child;
             while (current != null)
             {
                 if (current == parent) return true;
-                current = VisualTreeHelper.GetParent(current);
+                current = GetSafeParent(current);
             }
             return false;
         }
@@ -601,23 +644,37 @@ namespace BarcodePrint.WpfView
             {
                 double screenH = SystemParameters.WorkArea.Height;
                 double screenW = SystemParameters.WorkArea.Width;
-                if (screenH <= 768 || screenW <= 1366)
+                if (this.Height > screenH - 16) this.Height = Math.Max(560, screenH - 16);
+                if (this.Width > screenW - 16) this.Width = Math.Max(960, screenW - 16);
+                if (screenH <= 768 && screenW <= 1366)
                 {
-                    if (this.Height > screenH - 10) this.Height = Math.Max(560, screenH - 10);
-                    if (this.Width > screenW - 10) this.Width = Math.Max(960, screenW - 10);
-                    if (screenH <= 768 && screenW <= 1366)
-                    {
-                        this.WindowState = WindowState.Maximized;
-                    }
+                    this.WindowState = WindowState.Maximized;
                 }
             }
             catch { }
+
+            Dispatcher.BeginInvoke(new Action(FitCanvasToViewportIfOverflow), System.Windows.Threading.DispatcherPriority.Loaded);
 
             if (ViewModel != null)
             {
                 ViewModel.EnsureInitialTab();
                 ViewModel.FocusFirstInputRequested = FocusFirstInput;
                 ViewModel.RequestPreviewRedraw = RedrawInteractiveCanvas;
+                ViewModel.RequestNewLabelWizard = () =>
+                {
+                    var choiceDlg = new EmptyTabsActionDialog { Owner = this };
+                    if (choiceDlg.ShowDialog() == true)
+                    {
+                        if (choiceDlg.Choice == EmptyTabsActionChoice.NewDocument)
+                        {
+                            OnNewTemplateWizardClick(this, new RoutedEventArgs());
+                        }
+                        else if (choiceDlg.Choice == EmptyTabsActionChoice.OpenDocument)
+                        {
+                            ViewModel?.ExecuteImportTemplate();
+                        }
+                    }
+                };
                 ViewModel.ScrollToLatestRecordRequested = ScrollToLatestRecord;
                 ViewModel.ActiveColumnCountChanged += UpdateDataGridColumnsVisibility;
                 ViewModel.PropertyChanged += (s, args) =>
@@ -855,8 +912,7 @@ namespace BarcodePrint.WpfView
             {
                 if (current is T match) return match;
                 if (current is ContextMenu cm) current = cm.PlacementTarget;
-                else if (current is Visual) current = VisualTreeHelper.GetParent(current);
-                else break;
+                else current = GetSafeParent(current);
             }
             return null;
         }
@@ -1329,6 +1385,13 @@ namespace BarcodePrint.WpfView
 
             targetCanvas.Children.Clear();
 
+            if (ViewModel.OpenTabs.Count == 0)
+            {
+                targetCanvas.Width = 0;
+                targetCanvas.Height = 0;
+                return;
+            }
+
             int wMm = ViewModel.EffectivePaperWidth > 0 ? ViewModel.EffectivePaperWidth : 80;
             int hMm = ViewModel.EffectivePaperHeight > 0 ? ViewModel.EffectivePaperHeight : 60;
 
@@ -1462,6 +1525,11 @@ namespace BarcodePrint.WpfView
                         IsHitTestVisible = false
                     });
                 }
+            }
+
+            if (ViewModel.CurrentTemplate == null)
+            {
+                return;
             }
 
             // 1-1. 표 위 제목 (Title) 실시간 렌더링
@@ -2165,7 +2233,7 @@ namespace BarcodePrint.WpfView
                             Data = ShapeGeometryHelper.CreateShapeGeometry(elem.ShapeType, shapeW, shapeH, strokeS),
                             Stroke = isSelected ? Brushes.Blue : Brushes.Black,
                             StrokeThickness = strokeS,
-                            Fill = elem.IsFilled ? Brushes.Black : null, // 채우기 없을 시 null로 하여 안쪽 텍스트 클릭 가능
+                            Fill = elem.IsFilled ? Brushes.Black : Brushes.Transparent, // 채우기 없을 때도 Transparent로 지정해 내부 클릭/드래그 가능
                             Cursor = Cursors.SizeAll,
                             Tag = elem
                         };
@@ -2496,7 +2564,9 @@ namespace BarcodePrint.WpfView
             string textToMeasure = ViewModel != null ? ViewModel.GetElementEffectiveContent(elem) : elem.Content;
             if (string.IsNullOrEmpty(textToMeasure))
             {
-                textToMeasure = !string.IsNullOrEmpty(elem.HeaderName) ? $"[{elem.HeaderName}]" : "텍스트";
+                textToMeasure = (elem.Type == ElementType.TEXT)
+                    ? "텍스트 입력"
+                    : (!string.IsNullOrEmpty(elem.HeaderName) ? $"[{elem.HeaderName}]" : "텍스트");
             }
             else if (elem.IncludeHeaderOnLabel && !string.IsNullOrEmpty(elem.HeaderName))
             {
@@ -2756,9 +2826,13 @@ namespace BarcodePrint.WpfView
             double top = yMm * MM_TO_PX;
 
             string displayVal = isPrice ? PriceFormatHelper.FormatPrice(rawText, true) : rawText;
+            bool isEmptyTextPlaceholder = string.IsNullOrEmpty(displayVal) && !isBarcode && index != 99 && index != 101;
             if (string.IsNullOrEmpty(displayVal))
             {
-                displayVal = (isIncludeHeader && !isBarcode && index >= 0 && index != 99 && index != 101) ? $"{headerName}: [{headerName}]" : $"[{headerName}]";
+                string placeholder = (isBarcode || index == 99 || index == 101) ? $"[{headerName}]" : "텍스트 입력";
+                displayVal = (isIncludeHeader && !isBarcode && index >= 0 && index != 99 && index != 101)
+                    ? $"{headerName}: {placeholder}"
+                    : placeholder;
             }
             else if (isIncludeHeader && !isBarcode && index >= 0 && index != 99 && index != 101)
             {
@@ -2872,7 +2946,9 @@ namespace BarcodePrint.WpfView
                 double lineSpacing = (elem != null && elem.LineSpacing > 0) ? elem.LineSpacing : 1.0;
                 double letterSpacing = (elem != null) ? elem.LetterSpacing : 0.0;
 
-                var textFg = (elem != null && elem.IsInverse) ? Brushes.White : ((index == 99) ? Brushes.DarkBlue : ((index == 101) ? Brushes.DarkGreen : Brushes.Black));
+                var textFg = (elem != null && elem.IsInverse)
+                    ? Brushes.White
+                    : (isEmptyTextPlaceholder ? new SolidColorBrush(Color.FromRgb(148, 163, 184)) : ((index == 99) ? Brushes.DarkBlue : ((index == 101) ? Brushes.DarkGreen : Brushes.Black)));
                 var textBlock = new TextBlock
                 {
                     FontFamily = new FontFamily(string.IsNullOrWhiteSpace(fontName) ? "맑은 고딕" : fontName),
@@ -2884,7 +2960,8 @@ namespace BarcodePrint.WpfView
                     TextAlignment = textAlignment,
                     TextWrapping = isWrapped ? TextWrapping.Wrap : TextWrapping.NoWrap,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Center
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsHitTestVisible = false
                 };
 
                 if (Math.Abs(lineSpacing - 1.0) > 0.001)
@@ -2916,8 +2993,12 @@ namespace BarcodePrint.WpfView
                         {
                             if (spacePx > 0)
                             {
-                                double spaceSize = Math.Max(0.5, spacePx * 3.5);
-                                textBlock.Inlines.Add(new Run(" ") { FontSize = spaceSize });
+                                textBlock.Inlines.Add(new InlineUIContainer(new Border
+                                {
+                                    Width = spacePx,
+                                    Height = 1,
+                                    IsHitTestVisible = false
+                                }));
                             }
                         }
                     }
@@ -3612,7 +3693,7 @@ namespace BarcodePrint.WpfView
                         hitElement = fe;
                         break;
                     }
-                    hit = VisualTreeHelper.GetParent(hit);
+                    hit = GetSafeParent(hit);
                 }
 
                 string tagStr = hitElement?.Tag?.ToString() ?? "";
@@ -5388,7 +5469,7 @@ namespace BarcodePrint.WpfView
                     {
                         return; // 스크롤바 조작은 그대로 통과
                     }
-                    src = VisualTreeHelper.GetParent(src);
+                    src = GetSafeParent(src);
                 }
 
                 // 용지 바깥 회색 영역 클릭 시 선택 해제
@@ -5415,6 +5496,29 @@ namespace BarcodePrint.WpfView
                 CanvasScrollViewer.ReleaseMouseCapture();
                 CanvasScrollViewer.Cursor = Cursors.Arrow;
                 e.Handled = true;
+            }
+        }
+
+        private void FitCanvasToViewportIfOverflow()
+        {
+            if (CanvasScrollViewer == null || GlobalPreviewCanvas == null || ViewModel == null) return;
+            CanvasScrollViewer.UpdateLayout();
+
+            double vpW = CanvasScrollViewer.ViewportWidth;
+            double vpH = CanvasScrollViewer.ViewportHeight;
+            double cW = GlobalPreviewCanvas.Width;
+            double cH = GlobalPreviewCanvas.Height;
+            if (vpW <= 80 || vpH <= 80 || cW <= 0 || cH <= 0) return;
+
+            const double padding = 80.0; // Margin(36*2) + 여유
+            double maxFitZoomW = (vpW - padding) / cW;
+            double maxFitZoomH = (vpH - padding) / cH;
+            double maxFitZoom = Math.Max(0.2, Math.Min(maxFitZoomW, maxFitZoomH));
+
+            if (ViewModel.ZoomRatio > maxFitZoom)
+            {
+                ViewModel.ZoomRatio = Math.Round(maxFitZoom, 2);
+                RedrawInteractiveCanvas();
             }
         }
 
@@ -5445,7 +5549,7 @@ namespace BarcodePrint.WpfView
                 while (cur != null && cur != sender)
                 {
                     if (cur is Button) return;
-                    cur = VisualTreeHelper.GetParent(cur);
+                    cur = GetSafeParent(cur);
                 }
             }
 

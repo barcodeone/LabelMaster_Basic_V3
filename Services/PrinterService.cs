@@ -454,6 +454,33 @@ namespace BarcodePrint.Services
             errorMessage = "";
             try
             {
+                var info = cachedPrinters?.FirstOrDefault(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
+                string portName = GetEffectivePrinterPort(info, printerName);
+
+                bool isBt = (printerName ?? "").StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) ||
+                            (printerName ?? "").Contains("블루투스") ||
+                            (info != null && info.Type.Equals("Bluetooth", StringComparison.OrdinalIgnoreCase));
+                bool isLan = (printerName ?? "").StartsWith("[네트워크]", StringComparison.OrdinalIgnoreCase) ||
+                             (info != null && info.Type.Equals("LAN", StringComparison.OrdinalIgnoreCase));
+
+                // 0차 시도: USB Direct (CreateFile) 또는 LAN TCP(9100) 직접 전송 (스풀러 대기/오프라인 플래그 우회)
+                if (!isBt && !isLan && IsUsbPortConnected(portName, printerName))
+                {
+                    string usbPath = ResolveUsbPath(portName);
+                    if (!string.IsNullOrEmpty(usbPath) && SendBytesUsbDirect(usbPath, tsplBytes))
+                    {
+                        return true;
+                    }
+                }
+                else if (isLan)
+                {
+                    string ip = Regex.Match(portName ?? "", @"(\d{1,3}\.){3}\d{1,3}").Value;
+                    if (!string.IsNullOrEmpty(ip) && SendBytesLanDirect(ip, 9100, tsplBytes))
+                    {
+                        return true;
+                    }
+                }
+
                 // 1차 시도: Windows Print Spooler RAW 전송
                 bool spoolerSuccess = PrinterHelper.SendBytesToPrinter(printerName, tsplBytes);
                 if (spoolerSuccess)
@@ -462,9 +489,6 @@ namespace BarcodePrint.Services
                 }
 
                 // 2차 시도: TSPL SDK 직렬 통신 폴백
-                var info = cachedPrinters?.FirstOrDefault(p => p.Name.Equals(printerName, StringComparison.OrdinalIgnoreCase));
-                string portName = GetEffectivePrinterPort(info, printerName);
-
                 IntPtr pHandle = TSPLPrint.InitPrinter(printerName);
                 if (pHandle != IntPtr.Zero)
                 {
@@ -631,7 +655,7 @@ namespace BarcodePrint.Services
                 {
                     rawTsplResponse = QueryTsplHardwareInfoBluetooth(portName);
                 }
-                else if (IsUsbPortConnected(portName))
+                else if (IsUsbPortConnected(portName, printerName))
                 {
                     rawTsplResponse = QueryTsplHardwareInfoDirect(portName);
                 }
@@ -701,7 +725,7 @@ namespace BarcodePrint.Services
                         liveStatus = "오프라인 (통신 응답 없음)";
                     }
                 }
-                else if (connType == "USB" && (!HasConnectedUsbPrinters() || !IsUsbPortConnected(portName)))
+                else if (connType == "USB" && !HasConnectedUsbPrinters())
                 {
                     isSpoolerOnline = false;
                     liveStatus = "오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
@@ -730,7 +754,11 @@ namespace BarcodePrint.Services
                                             bool isWorkOffline = (pInfo.Attributes & 0x00000400) != 0;
                                             bool isUsbPhysicallyOnline = (connType == "USB") && IsUsbPortConnected(portName, printerName);
 
-                                            if (isWorkOffline && !isUsbPhysicallyOnline)
+                                            if (connType == "USB" && !isUsbPhysicallyOnline && (isWorkOffline || (status & 0x00000080u) != 0 || (status & 0x00000002u) != 0))
+                                            {
+                                                liveStatus = "오프라인 (USB 케이블 미연결 / 전원 꺼짐)";
+                                            }
+                                            else if (isWorkOffline && !isUsbPhysicallyOnline)
                                             {
                                                 liveStatus = "오프라인 (WorkOffline)";
                                             }
@@ -1460,6 +1488,60 @@ namespace BarcodePrint.Services
             // 2차 재시도 (응답 누락 시 350ms 대기 후 재시도)
             Thread.Sleep(350);
             return SendAndReceiveUsbDirect(usbPath, cmdBytes);
+        }
+
+        private bool SendBytesUsbDirect(string usbPath, byte[] bytes)
+        {
+            if (string.IsNullOrEmpty(usbPath) || bytes == null || bytes.Length == 0) return false;
+            try
+            {
+                IntPtr handle = CreateFile(usbPath, 0xC0000000, 0x07, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
+                if (handle == new IntPtr(-1) || handle == IntPtr.Zero) return false;
+
+                using (var safeHandle = new SafeFileHandle(handle, true))
+                using (var fs = new FileStream(safeHandle, FileAccess.ReadWrite, 4096, true))
+                {
+                    fs.Write(bytes, 0, bytes.Length);
+                    fs.Flush();
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"SendBytesUsbDirect 오류: {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool SendBytesLanDirect(string ip, int port, byte[] bytes)
+        {
+            if (string.IsNullOrEmpty(ip) || bytes == null || bytes.Length == 0) return false;
+            try
+            {
+                using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    socket.NoDelay = true;
+                    socket.SendTimeout = 3000;
+                    var ar = socket.BeginConnect(ip, port, null, null);
+                    if (!ar.AsyncWaitHandle.WaitOne(1500, false))
+                    {
+                        try { socket.Close(); } catch { }
+                        return false;
+                    }
+                    socket.EndConnect(ar);
+                    using (var stream = new NetworkStream(socket, false))
+                    {
+                        stream.Write(bytes, 0, bytes.Length);
+                        stream.Flush();
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"SendBytesLanDirect 오류: {ex.Message}");
+                return false;
+            }
         }
 
         private string SendAndReceiveUsbDirect(string usbPath, byte[] cmdBytes)

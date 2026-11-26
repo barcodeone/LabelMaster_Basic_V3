@@ -1,0 +1,58 @@
+<Window x:Class="BarcodePrint.WpfView.EmptyTabsActionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="열린 문서 없음" Height="215" Width="390"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#F8FAFC" FontFamily="Malgun Gothic" WindowStyle="SingleBorderWindow"
+        ShowInTaskbar="False">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="모든 문서 탭이 닫혔습니다." FontWeight="Bold" FontSize="14.5" Foreground="#1E293B" Margin="0,0,0,6"/>
+        <TextBlock Grid.Row="1" Text="새 라벨 문서를 만들거나 저장된 기존 문서를 불러올 수 있습니다." FontSize="12" Foreground="#64748B" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+        <Grid Grid.Row="2" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Click="NewDoc_Click" Background="#2563EB" Foreground="White" FontWeight="Bold" FontSize="12.5" Height="42" Cursor="Hand" BorderThickness="0">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="7" Padding="10,6">
+                            <TextBlock Text="➕ 새 문서 만들기" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <Button Grid.Column="2" Click="OpenDoc_Click" Background="#059669" Foreground="White" FontWeight="Bold" FontSize="12.5" Height="42" Cursor="Hand" BorderThickness="0">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="7" Padding="10,6">
+                            <TextBlock Text="📁 기존 문서 불러오기" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </Grid>
+
+        <Button Grid.Row="3" Content="닫기" Click="Cancel_Click" HorizontalAlignment="Right" Margin="0,12,0,0"
+                Background="#E2E8F0" Foreground="#334155" FontWeight="SemiBold" FontSize="12" Height="28" Width="68" Cursor="Hand" BorderThickness="0">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="5">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+    </Grid>
+</Window>

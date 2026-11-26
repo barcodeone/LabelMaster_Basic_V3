@@ -99,7 +99,7 @@
                 </StackPanel>
 
                 <Border Grid.Column="2" Background="#ECFDF5" BorderBrush="#A7F3D0" BorderThickness="1" CornerRadius="6" Padding="8,4" VerticalAlignment="Center">
-                    <TextBlock x:Name="TxtVersionBadge" Text="v1.1.7" FontSize="11.5" FontWeight="Bold" Foreground="#059669"/>
+                    <TextBlock x:Name="TxtVersionBadge" Text="v1.1.8" FontSize="11.5" FontWeight="Bold" Foreground="#059669"/>
                 </Border>
             </Grid>
         </Border>

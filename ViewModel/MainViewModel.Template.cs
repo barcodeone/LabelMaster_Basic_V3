@@ -127,6 +127,14 @@ namespace BarcodePrint.ViewModel
             OnPropertyChanged(nameof(IsSelectedElementDateTime));
             OnPropertyChanged(nameof(SelectedElementDateTimeFormat));
             OnPropertyChanged(nameof(SelectedElementAutoUpdateDate));
+            OnPropertyChanged(nameof(IsSelectedElementSerialCapable));
+            OnPropertyChanged(nameof(SelectedElementIsSerial));
+            OnPropertyChanged(nameof(SelectedElementSerialPrefix));
+            OnPropertyChanged(nameof(SelectedElementSerialSuffix));
+            OnPropertyChanged(nameof(SelectedElementSerialStartNumber));
+            OnPropertyChanged(nameof(SelectedElementSerialStep));
+            OnPropertyChanged(nameof(SelectedElementSerialDigits));
+            OnPropertyChanged(nameof(SelectedElementSerialPreview));
             OnPropertyChanged(nameof(SelectedElementIsKeep));
             OnPropertyChanged(nameof(SelectedElementIsResetAfterPrint));
         }
@@ -1347,6 +1355,131 @@ namespace BarcodePrint.ViewModel
             }
         }
 
+        public bool IsSelectedElementSerialCapable =>
+            SelectedElement != null &&
+            (SelectedElement.Type == ElementType.TEXT || SelectedElement.Type == ElementType.BARCODE || SelectedElement.Type == ElementType.QR_CODE);
+
+        public bool SelectedElementIsSerial
+        {
+            get => SelectedElement?.IsSerial ?? false;
+            set
+            {
+                if (SelectedElement != null && SelectedElement.IsSerial != value)
+                {
+                    SelectedElement.IsSerial = value;
+                    if (value)
+                    {
+                        SelectedElement.IsVariable = false;
+                        SelectedElement.Content = SelectedElement.FormatSerialValue();
+                    }
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedElementContent));
+                    OnPropertyChanged(nameof(SelectedElementEffectivePreviewText));
+                    OnPropertyChanged(nameof(SelectedElementSerialPreview));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public string SelectedElementSerialPrefix
+        {
+            get => SelectedElement?.SerialPrefix ?? "";
+            set
+            {
+                if (SelectedElement != null && (SelectedElement.SerialPrefix ?? "") != (value ?? ""))
+                {
+                    SelectedElement.SerialPrefix = value ?? "";
+                    if (SelectedElement.IsSerial) SelectedElement.Content = SelectedElement.FormatSerialValue();
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedElementContent));
+                    OnPropertyChanged(nameof(SelectedElementEffectivePreviewText));
+                    OnPropertyChanged(nameof(SelectedElementSerialPreview));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public string SelectedElementSerialSuffix
+        {
+            get => SelectedElement?.SerialSuffix ?? "";
+            set
+            {
+                if (SelectedElement != null && (SelectedElement.SerialSuffix ?? "") != (value ?? ""))
+                {
+                    SelectedElement.SerialSuffix = value ?? "";
+                    if (SelectedElement.IsSerial) SelectedElement.Content = SelectedElement.FormatSerialValue();
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedElementContent));
+                    OnPropertyChanged(nameof(SelectedElementEffectivePreviewText));
+                    OnPropertyChanged(nameof(SelectedElementSerialPreview));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public int SelectedElementSerialStartNumber
+        {
+            get => SelectedElement?.SerialStartNumber ?? 1;
+            set
+            {
+                int clamped = Math.Max(0, value);
+                if (SelectedElement != null && SelectedElement.SerialStartNumber != clamped)
+                {
+                    SelectedElement.SerialStartNumber = clamped;
+                    if (SelectedElement.IsSerial) SelectedElement.Content = SelectedElement.FormatSerialValue();
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedElementContent));
+                    OnPropertyChanged(nameof(SelectedElementEffectivePreviewText));
+                    OnPropertyChanged(nameof(SelectedElementSerialPreview));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public int SelectedElementSerialStep
+        {
+            get => SelectedElement?.SerialStep ?? 1;
+            set
+            {
+                int clamped = value == 0 ? 1 : value;
+                if (SelectedElement != null && SelectedElement.SerialStep != clamped)
+                {
+                    SelectedElement.SerialStep = clamped;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedElementSerialPreview));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public int SelectedElementSerialDigits
+        {
+            get => SelectedElement?.SerialDigits ?? 4;
+            set
+            {
+                int clamped = Math.Max(0, Math.Min(10, value));
+                if (SelectedElement != null && SelectedElement.SerialDigits != clamped)
+                {
+                    SelectedElement.SerialDigits = clamped;
+                    if (SelectedElement.IsSerial) SelectedElement.Content = SelectedElement.FormatSerialValue();
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedElementContent));
+                    OnPropertyChanged(nameof(SelectedElementEffectivePreviewText));
+                    OnPropertyChanged(nameof(SelectedElementSerialPreview));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public string SelectedElementSerialPreview
+        {
+            get
+            {
+                if (SelectedElement == null) return "";
+                return $"{SelectedElement.FormatSerialValue(0)} → {SelectedElement.FormatSerialValue(1)} → {SelectedElement.FormatSerialValue(2)}";
+            }
+        }
+
         public double SelectedElementFontSize
         {
             get => SelectedElement?.FontSize ?? 10.0;
@@ -1761,8 +1894,11 @@ namespace BarcodePrint.ViewModel
                 var existingTab = OpenTabs.FirstOrDefault(t => !string.IsNullOrEmpty(t.FilePath) && string.Equals(t.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
                 if (existingTab != null)
                 {
-                    SwitchToTab(existingTab);
-                    return;
+                    if (ReferenceEquals(existingTab, _activeTab))
+                    {
+                        _activeTab = null;
+                    }
+                    OpenTabs.Remove(existingTab);
                 }
             }
 
@@ -1861,13 +1997,17 @@ namespace BarcodePrint.ViewModel
                     CurrentPreviewIndex = 0;
                 }
             }
+            IsDocumentDirty = false;
+            if (_activeTab != null) _activeTab.IsDirty = false;
 
             string title = customTitle;
             if (string.IsNullOrWhiteSpace(title))
             {
-                string recentDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info", "RecentWorks");
+                string recentDir = AppDataPathHelper.RecentWorksDirectory;
+                string legacyRecentDir = System.IO.Path.Combine(AppDataPathHelper.LegacyInfoDirectory, "RecentWorks");
                 bool isInternalSnapshot = !string.IsNullOrEmpty(filePath) &&
                     (filePath.IndexOf(recentDir, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     filePath.IndexOf(legacyRecentDir, StringComparison.OrdinalIgnoreCase) >= 0 ||
                      filePath.EndsWith("autosave_template.lbm", StringComparison.OrdinalIgnoreCase));
 
                 if (!isInternalSnapshot && !string.IsNullOrEmpty(filePath))
@@ -2022,7 +2162,11 @@ namespace BarcodePrint.ViewModel
 
         public void AddNewElement(ElementType type, string subType = null)
         {
-            if (CurrentTemplate == null) InitializeDefaultTemplateFromCurrentSettings();
+            if (CurrentTemplate == null)
+            {
+                InitializeDefaultTemplateFromCurrentSettings();
+                EnsureInitialTab();
+            }
 
             double paperW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
             double paperH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
@@ -2042,7 +2186,17 @@ namespace BarcodePrint.ViewModel
             }
 
             var newElem = TemplateMigrationHelper.CreateElement(type, defaultX, defaultY);
-            if (type == ElementType.SHAPE && !string.IsNullOrEmpty(subType))
+            if (type == ElementType.TEXT && string.Equals(subType, "SERIAL", StringComparison.OrdinalIgnoreCase))
+            {
+                newElem.IsSerial = true;
+                newElem.IsVariable = false;
+                newElem.HeaderName = "순번";
+                newElem.SerialStartNumber = 1;
+                newElem.SerialStep = 1;
+                newElem.SerialDigits = 4;
+                newElem.Content = newElem.FormatSerialValue();
+            }
+            else if (type == ElementType.SHAPE && !string.IsNullOrEmpty(subType))
             {
                 newElem.ShapeType = subType;
             }
@@ -2263,6 +2417,7 @@ namespace BarcodePrint.ViewModel
             _currentTemplate.Elements = _pageElementsList[_currentPageIndex];
 
             SelectedElement = _currentTemplate.Elements.FirstOrDefault();
+            IsDocumentDirty = true;
             RefreshTemplatePagesUi();
             OnPropertyChanged(nameof(CurrentTemplate));
             OnPropertyChanged(nameof(TemplateElements));
@@ -2299,6 +2454,7 @@ namespace BarcodePrint.ViewModel
             SyncPagesToTemplate();
 
             SelectedElement = elem;
+            IsDocumentDirty = true;
             RefreshTemplatePagesUi();
             OnPropertyChanged(nameof(CurrentTemplate));
             OnPropertyChanged(nameof(TemplateElements));
@@ -2327,6 +2483,7 @@ namespace BarcodePrint.ViewModel
             SyncPagesToTemplate();
 
             SelectedElement = cloned.FirstOrDefault();
+            IsDocumentDirty = true;
             RefreshTemplatePagesUi();
             OnPropertyChanged(nameof(CurrentTemplate));
             OnPropertyChanged(nameof(TemplateElements));
@@ -2344,6 +2501,11 @@ namespace BarcodePrint.ViewModel
         {
             if (_currentTemplate == null || _pageElementsList.Count <= 1) return;
             if (pageIndex < 0 || pageIndex >= _pageElementsList.Count) return;
+
+            if (!_dialogService.ShowQuestion($"{pageIndex + 1}페이지({pageIndex + 1}P)를 삭제하시겠습니까?\n페이지 내 모든 요소가 함께 삭제됩니다.", "페이지 삭제 확인"))
+            {
+                return;
+            }
 
             if (_currentPageIndex >= 0 && _currentPageIndex < _pageElementsList.Count)
             {
@@ -2365,6 +2527,7 @@ namespace BarcodePrint.ViewModel
             SyncPagesToTemplate();
 
             SelectedElement = _currentTemplate.Elements.FirstOrDefault();
+            IsDocumentDirty = true;
             RefreshTemplatePagesUi();
             OnPropertyChanged(nameof(CurrentTemplate));
             OnPropertyChanged(nameof(TemplateElements));
@@ -2439,11 +2602,25 @@ namespace BarcodePrint.ViewModel
             _activeTab.SizeBadge = $"{EffectivePaperWidth}×{EffectivePaperHeight}";
         }
 
+        private bool _isDocumentDirty;
+        public bool IsDocumentDirty
+        {
+            get => _isDocumentDirty;
+            private set { _isDocumentDirty = value; OnPropertyChanged(); }
+        }
+
+        public void MarkDocumentDirty()
+        {
+            IsDocumentDirty = true;
+            if (_activeTab != null) _activeTab.IsDirty = true;
+        }
+
         private void SaveActiveTabState()
         {
             if (_activeTab == null) return;
 
             SyncPagesToTemplate();
+            _activeTab.IsDirty = IsDocumentDirty;
             _activeTab.Template = _currentTemplate;
             _activeTab.Pages = _pageElementsList.Select(p => p ?? new List<TemplateElement>()).ToList();
             _activeTab.CurrentPageIndex = _currentPageIndex;
@@ -2545,6 +2722,7 @@ namespace BarcodePrint.ViewModel
                     if (_currentTemplate != null) _pageElementsList.Add(_currentTemplate.Elements ?? new List<TemplateElement>());
                 }
                 RefreshTemplatePagesUi();
+                IsDocumentDirty = targetTab.IsDirty;
                 _currentTemplateFilePath = targetTab.FilePath ?? "";
                 _currentRecentTitle = targetTab.Title;
                 PaperWidth = targetTab.PaperWidth;
@@ -2631,12 +2809,84 @@ namespace BarcodePrint.ViewModel
             }
         }
 
+        public Action RequestNewLabelWizard { get; set; }
+
+        public bool ConfirmSaveTab(DocumentTabItem tab)
+        {
+            if (tab == null) return true;
+            bool isDirty = (tab == _activeTab) ? IsDocumentDirty : tab.IsDirty;
+            if (!isDirty) return true;
+
+            var result = _dialogService.ShowYesNoCancel(
+                $"'{tab.Title}' 문서에 저장되지 않은 변경 사항이 있습니다.\n변경 내용을 저장하시겠습니까?",
+                "문서 저장 확인");
+
+            if (result == System.Windows.MessageBoxResult.Cancel) return false;
+            if (result == System.Windows.MessageBoxResult.No) return true;
+
+            if (tab != _activeTab)
+            {
+                SwitchToTab(tab);
+            }
+            return ExecuteExportTemplate();
+        }
+
+        public bool ConfirmSaveAllOpenTabs()
+        {
+            if (OpenTabs == null || OpenTabs.Count == 0)
+            {
+                if (_currentTemplate != null && IsDocumentDirty)
+                {
+                    string title = !string.IsNullOrWhiteSpace(_currentRecentTitle) ? _currentRecentTitle : "현재 문서";
+                    var result = _dialogService.ShowYesNoCancel(
+                        $"'{title}' 문서에 저장되지 않은 변경 사항이 있습니다.\n변경 내용을 저장하시겠습니까?",
+                        "문서 저장 확인");
+                    if (result == System.Windows.MessageBoxResult.Cancel) return false;
+                    if (result == System.Windows.MessageBoxResult.Yes) return ExecuteExportTemplate();
+                }
+                return true;
+            }
+
+            foreach (var tab in OpenTabs.ToList())
+            {
+                if (!ConfirmSaveTab(tab)) return false;
+            }
+            return true;
+        }
+
         public void CloseTab(DocumentTabItem tab)
         {
             if (tab == null || !OpenTabs.Contains(tab)) return;
+            if (!ConfirmSaveTab(tab)) return;
+
             if (OpenTabs.Count <= 1)
             {
-                StatusMessage = "마지막 문서는 닫을 수 없습니다.";
+                OpenTabs.Remove(tab);
+                _activeTab = null;
+
+                ExecuteUnlinkExcel();
+                _currentTemplateFilePath = "";
+                _currentRecentTitle = "";
+                _currentTemplate = null;
+                IsDocumentDirty = false;
+                _pageElementsList.Clear();
+                _currentPageIndex = 0;
+
+                for (int c = 1; c <= 8; c++) ClearColumnData(c);
+                ActiveColumnCount = 0;
+                SelectedElement = null;
+                _undoStack.Clear();
+                _redoStack.Clear();
+                RefreshTemplatePagesUi();
+
+                OnPropertyChanged(nameof(HasSelectedElement));
+                OnPropertyChanged(nameof(HasNoSelectedElement));
+                OnPropertyChanged(nameof(SelectedElementTypeText));
+                ActiveColumnCountChanged?.Invoke(ActiveColumnCount);
+                RequestPreviewRedraw?.Invoke();
+                StatusMessage = "열린 템플릿 탭을 모두 닫았습니다.";
+
+                RequestNewLabelWizard?.Invoke();
                 return;
             }
 
@@ -2657,6 +2907,8 @@ namespace BarcodePrint.ViewModel
         public void RecordUndoSnapshot()
         {
             if (CurrentTemplate?.Elements == null) return;
+            IsDocumentDirty = true;
+            if (_activeTab != null) _activeTab.IsDirty = true;
             var snapshot = new List<TemplateElement>();
             foreach (var el in CurrentTemplate.Elements)
             {
@@ -3062,19 +3314,51 @@ namespace BarcodePrint.ViewModel
 
         public void DuplicateSelectedElement()
         {
-            if (SelectedElement == null || CurrentTemplate == null) return;
+            if (CurrentTemplate == null || CurrentTemplate.Elements == null) return;
+
+            var targets = _selectedElements.Count > 0
+                ? _selectedElements.ToList()
+                : (SelectedElement != null ? new List<TemplateElement> { SelectedElement } : new List<TemplateElement>());
+
+            if (targets.Count == 0) return;
 
             RecordUndoSnapshot();
-            var copy = SelectedElement.Clone();
-            copy.X = Math.Min(EffectivePaperWidth - 5.0, SelectedElement.X + 3.0);
-            copy.Y = Math.Min(EffectivePaperHeight - 5.0, SelectedElement.Y + 3.0);
-            copy.HeaderName = SelectedElement.HeaderName + " (복사)";
 
-            CurrentTemplate.Elements.Add(copy);
-            SelectedElement = copy;
+            var created = new List<TemplateElement>();
+            foreach (var src in targets)
+            {
+                var copy = src.Clone();
+                copy.X = Math.Min(EffectivePaperWidth - 5.0, src.X + 4.0);
+                copy.Y = Math.Min(EffectivePaperHeight - 5.0, src.Y + 4.0);
+                copy.HeaderName = (src.HeaderName ?? "항목") + " (복사)";
+                copy.IsSelected = false;
+
+                if (copy.IsVariable)
+                {
+                    int nextOrder = CurrentTemplate.Elements.Where(e => e.IsVariable).Select(e => e.InputOrder).DefaultIfEmpty(0).Max() + 1;
+                    copy.InputOrder = nextOrder;
+                }
+
+                CurrentTemplate.Elements.Add(copy);
+                created.Add(copy);
+            }
+
+            if (created.Count > 0)
+            {
+                SelectedElement = created[0];
+                for (int i = 1; i < created.Count; i++)
+                {
+                    ToggleElementSelection(created[i]);
+                }
+            }
+
+            SyncPagesToTemplate();
             OnPropertyChanged(nameof(TemplateElements));
-            StatusMessage = "선택한 요소가 복제되었습니다 (Ctrl+D).";
+            StatusMessage = created.Count > 1
+                ? $"{created.Count}개의 요소가 복제되었습니다 (Ctrl+D)."
+                : "선택한 요소가 복제되었습니다 (Ctrl+D).";
             UpdatePreview();
+            RequestPreviewRedraw?.Invoke();
         }
 
         public void MoveSelectedElement(double deltaX, double deltaY)
@@ -3465,6 +3749,11 @@ namespace BarcodePrint.ViewModel
                         return val;
                     }
                 }
+            }
+
+            if (elem.IsSerial)
+            {
+                return elem.FormatSerialValue();
             }
 
             // 2-1. 단건 직접 입력 모드에서 입력란(InputCol1~8)에 값이 있는 경우 우선 반영

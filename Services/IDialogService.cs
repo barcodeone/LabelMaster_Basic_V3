@@ -8,6 +8,7 @@ namespace BarcodePrint.Services
         void ShowWarning(string message, string title = "경고");
         void ShowError(string message, string title = "오류");
         bool ShowQuestion(string message, string title = "확인");
+        MessageBoxResult ShowYesNoCancel(string message, string title = "저장 확인");
         bool ShowOpenFileDialog(string filter, string defaultExt, out string filePath);
         bool ShowSaveFileDialog(string filter, string defaultExt, string defaultFileName, out string filePath);
     }

@@ -53,6 +53,7 @@ namespace BarcodePrint.WpfView
             catch { }
 
             LoadRecentInfo();
+            LoadSavedDocsInfo();
             LoadPresets();
             CheckCurrentPrinterStatus();
 
@@ -100,6 +101,7 @@ namespace BarcodePrint.WpfView
         private System.Windows.Threading.DispatcherTimer _dashboardStatusTimer;
         private DateTime _lastDeviceChangeHandled = DateTime.MinValue;
         private bool _isCheckingDashboardPrinter = false;
+        private bool _recheckDashboardPrinterRequested = false;
 
         protected override void OnSourceInitialized(EventArgs e)
         {
@@ -164,17 +166,21 @@ namespace BarcodePrint.WpfView
             return IntPtr.Zero;
         }
 
-        private void CheckCurrentPrinterStatus()
+        private void CheckCurrentPrinterStatus(bool force = false)
         {
-            _ = CheckCurrentPrinterStatusAsync(silent: false);
+            _ = CheckCurrentPrinterStatusAsync(silent: false, force: force);
         }
 
         /// <summary>
         /// 실제 PC에 물리적으로 연결되어 켜져 있는(온라인) 라벨 프린터만 비동기로 감지하여 UI를 업데이트합니다. (UI 블로킹 0ms)
         /// </summary>
-        private async System.Threading.Tasks.Task CheckCurrentPrinterStatusAsync(bool silent = false)
+        private async System.Threading.Tasks.Task CheckCurrentPrinterStatusAsync(bool silent = false, bool force = false)
         {
-            if (_isCheckingDashboardPrinter) return;
+            if (_isCheckingDashboardPrinter)
+            {
+                if (force) _recheckDashboardPrinterRequested = true;
+                return;
+            }
             _isCheckingDashboardPrinter = true;
             try
             {
@@ -185,13 +191,11 @@ namespace BarcodePrint.WpfView
                 {
                     if (!string.IsNullOrEmpty(savedPrinter))
                     {
-                        TxtPrinterStatus.Text = $"확인 중: {savedPrinter}";
                         TxtSidePrinterName.Text = savedPrinter;
                         TxtSidePrinterStatusText.Text = "연결 상태 확인 중...";
                     }
                     else
                     {
-                        TxtPrinterStatus.Text = "프린터 연결 확인 중...";
                         TxtSidePrinterStatusText.Text = "확인 중...";
                     }
                 }
@@ -200,15 +204,85 @@ namespace BarcodePrint.WpfView
                 var onlinePrinters = await System.Threading.Tasks.Task.Run(() =>
                     PrinterOnlineDetector.GetOnlinePrinters(labelPrintersOnly: true));
 
-                if (onlinePrinters != null && onlinePrinters.Count > 0)
+                if ((onlinePrinters != null && onlinePrinters.Count > 0) || !string.IsNullOrEmpty(savedPrinter))
                 {
-                    // 사용자가 이전에 선택했던 프린터가 온라인 목록에 있으면 우선 선택, 없으면 첫 번째 온라인 라벨 프린터 선택
-                    var target = onlinePrinters.FirstOrDefault(p => p.Name.Equals(savedPrinter, StringComparison.OrdinalIgnoreCase))
-                                 ?? onlinePrinters.First();
+                    Func<string, string> norm = s => (s ?? "")
+                        .Replace("[블루투스]", "")
+                        .Replace("[네트워크]", "")
+                        .Replace(" ", "")
+                        .Trim();
 
-                    string detectedPrinterName = target.Name;
-                    string detectedPortName = target.PortName;
-                    string detectedConnType = target.ConnectionType;
+                    var target = (onlinePrinters ?? new System.Collections.Generic.List<OnlinePrinterItem>())
+                        .FirstOrDefault(p => p.Name.Equals(savedPrinter, StringComparison.OrdinalIgnoreCase) ||
+                                             (!string.IsNullOrEmpty(savedPrinter) && norm(p.Name).Equals(norm(savedPrinter), StringComparison.OrdinalIgnoreCase)));
+
+                    string detectedPrinterName = "";
+                    string detectedPortName = "-";
+                    string detectedConnType = "-";
+                    bool isActuallyOnline = false;
+
+                    if (target != null)
+                    {
+                        detectedPrinterName = target.Name;
+                        detectedPortName = target.PortName;
+                        detectedConnType = target.ConnectionType;
+                        isActuallyOnline = true;
+                    }
+                    else if (!string.IsNullOrEmpty(savedPrinter))
+                    {
+                        // 사용자가 명시적으로 선택한 설치 프린터가 온라인 목록에 없을 때(케이블 분리/전원 꺼짐 등)
+                        // 다른 프린터로 덮어쓰지 않고 선택한 프린터명과 실제 오프라인 상태를 정확히 표시
+                        bool isInstalled = false;
+                        try
+                        {
+                            foreach (string ip in System.Drawing.Printing.PrinterSettings.InstalledPrinters)
+                            {
+                                if (ip.Equals(savedPrinter, StringComparison.OrdinalIgnoreCase) ||
+                                    norm(ip).Equals(norm(savedPrinter), StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isInstalled = true;
+                                    detectedPrinterName = ip;
+                                    break;
+                                }
+                            }
+                        }
+                        catch { }
+
+                        if (!isInstalled && (savedPrinter.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) || savedPrinter.Contains("(BT)")))
+                        {
+                            isInstalled = true;
+                            detectedPrinterName = savedPrinter;
+                        }
+
+                        if (isInstalled)
+                        {
+                            detectedConnType = (savedPrinter.StartsWith("[블루투스]", StringComparison.OrdinalIgnoreCase) || savedPrinter.Contains("(BT)") || string.Equals(settings.PrinterConnectionType, "BT", StringComparison.OrdinalIgnoreCase))
+                                ? "Bluetooth"
+                                : (settings.PrinterConnectionType ?? "-");
+                            detectedPortName = detectedConnType == "Bluetooth" ? (settings.BluetoothPortName ?? "-") : "-";
+                            isActuallyOnline = detectedConnType == "Bluetooth" &&
+                                await System.Threading.Tasks.Task.Run(() => PrinterOnlineDetector.CheckIsPrinterOnline(detectedPrinterName));
+                        }
+                        else if (onlinePrinters != null && onlinePrinters.Count > 0)
+                        {
+                            var fallback = onlinePrinters.First();
+                            detectedPrinterName = fallback.Name;
+                            detectedPortName = fallback.PortName;
+                            detectedConnType = fallback.ConnectionType;
+                            isActuallyOnline = true;
+                        }
+                    }
+                    else if (onlinePrinters != null && onlinePrinters.Count > 0)
+                    {
+                        var fallback = onlinePrinters.First();
+                        detectedPrinterName = fallback.Name;
+                        detectedPortName = fallback.PortName;
+                        detectedConnType = fallback.ConnectionType;
+                        isActuallyOnline = true;
+                    }
+
+                    if (!string.IsNullOrEmpty(detectedPrinterName))
+                    {
 
                     // 블루투스 프린터인 경우 COM 포트 번호 대신 실제 장치 이름 표시 보장
                     if (detectedConnType == "Bluetooth" &&
@@ -224,26 +298,44 @@ namespace BarcodePrint.WpfView
                     _detectedPrinterName = detectedPrinterName;
                     _detectedPortName = detectedPortName;
                     _detectedConnType = detectedConnType;
-                    _isPrinterOnline = true;
+                    _isPrinterOnline = isActuallyOnline;
 
-                    // 대시보드에서 감지된 온라인 프린터를 설정에 동기화하여 편집화면 진입 시에도 동일한 프린터가 즉시 선택되도록 보장
-                    if (!string.Equals(settings.LastSelectedPrinterName, _detectedPrinterName, StringComparison.OrdinalIgnoreCase))
+                    // 선택된 프린터가 비어 있을 때만 자동 감지된 프린터를 기본값으로 저장
+                    if (isActuallyOnline && string.IsNullOrEmpty(settings.LastSelectedPrinterName))
                     {
                         settings.LastSelectedPrinterName = _detectedPrinterName;
                         settings.Save();
                     }
 
-                    // 상단 헤더 뱃지 업데이트
-                    DotPrinterStatus.Fill = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // Green
-                    if (DotSidebarPrinter != null) DotSidebarPrinter.Fill = new SolidColorBrush(Color.FromRgb(16, 185, 129));
-                    TxtPrinterStatus.Text = $"연결됨: {_detectedPrinterName}";
-                    BorderPrinterBadge.ToolTip = $"온라인 프린터: {_detectedPrinterName}\n포트: {_detectedPortName} ({_detectedConnType})";
-
-                    // 사이드바 패널 업데이트
+                    // 상단 헤더 프린터 상태 박스 업데이트 (실제 온라인/오프라인 상태 정확히 반영)
+                    var statusColor = isActuallyOnline ? Color.FromRgb(16, 185, 129) : Color.FromRgb(239, 68, 68);
+                    if (DotSidebarPrinter != null) DotSidebarPrinter.Fill = new SolidColorBrush(statusColor);
+                    if (BorderTopPrinterStatus != null)
+                    {
+                        BorderTopPrinterStatus.ToolTip = isActuallyOnline
+                            ? $"온라인 프린터: {_detectedPrinterName}\n포트: {_detectedPortName} ({_detectedConnType})"
+                            : $"오프라인 프린터: {_detectedPrinterName}\n전원, 케이블 또는 블루투스 연결을 확인하세요.";
+                    }
                     TxtSidePrinterName.Text = _detectedPrinterName;
                     TxtSidePrinterPort.Text = $"포트: {_detectedPortName} ({_detectedConnType})";
-                    TxtSidePrinterStatusText.Text = "프린터 온라인";
-                    TxtSidePrinterStatusText.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129));
+                    TxtSidePrinterStatusText.Text = isActuallyOnline ? "프린터 온라인" : "프린터 오프라인";
+                    TxtSidePrinterStatusText.Foreground = new SolidColorBrush(statusColor);
+                    }
+                    else
+                    {
+                        _detectedPrinterName = string.Empty;
+                        _detectedPortName = "-";
+                        _detectedConnType = "-";
+                        _isPrinterOnline = false;
+
+                        if (DotSidebarPrinter != null) DotSidebarPrinter.Fill = new SolidColorBrush(Color.FromRgb(239, 68, 68));
+                        if (BorderTopPrinterStatus != null) BorderTopPrinterStatus.ToolTip = "연결된 라벨 프린터가 없습니다.";
+
+                        TxtSidePrinterName.Text = "연결된 라벨 프린터 없음";
+                        TxtSidePrinterPort.Text = "포트: -";
+                        TxtSidePrinterStatusText.Text = "프린터 미연결";
+                        TxtSidePrinterStatusText.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68));
+                    }
                 }
                 else
                 {
@@ -253,10 +345,8 @@ namespace BarcodePrint.WpfView
                     _detectedConnType = "-";
                     _isPrinterOnline = false;
 
-                    DotPrinterStatus.Fill = new SolidColorBrush(Color.FromRgb(239, 68, 68)); // Red
                     if (DotSidebarPrinter != null) DotSidebarPrinter.Fill = new SolidColorBrush(Color.FromRgb(239, 68, 68));
-                    TxtPrinterStatus.Text = "오프라인 (프린터 전원 꺼짐 / 미연결)";
-                    BorderPrinterBadge.ToolTip = "연결된 라벨 프린터가 없거나 전원이 꺼져 있습니다.\n클릭하여 프린터 설정에서 장치를 확인하거나 연결하세요.";
+                    if (BorderTopPrinterStatus != null) BorderTopPrinterStatus.ToolTip = "연결된 라벨 프린터가 없거나 전원이 꺼져 있습니다.";
 
                     TxtSidePrinterName.Text = "연결된 라벨 프린터 없음";
                     TxtSidePrinterPort.Text = "포트: -";
@@ -267,15 +357,20 @@ namespace BarcodePrint.WpfView
             catch (Exception ex)
             {
                 _isPrinterOnline = false;
-                DotPrinterStatus.Fill = new SolidColorBrush(Color.FromRgb(245, 158, 11)); // Amber
                 if (DotSidebarPrinter != null) DotSidebarPrinter.Fill = new SolidColorBrush(Color.FromRgb(245, 158, 11));
-                TxtPrinterStatus.Text = "프린터 상태 확인 불가";
-                BorderPrinterBadge.ToolTip = $"프린터 감지 오류: {ex.Message}";
+                if (BorderTopPrinterStatus != null) BorderTopPrinterStatus.ToolTip = $"프린터 감지 오류: {ex.Message}";
+                TxtSidePrinterStatusText.Text = "프린터 상태 확인 불가";
+                TxtSidePrinterStatusText.Foreground = new SolidColorBrush(Color.FromRgb(245, 158, 11));
                 Debug.WriteLine($"[StartWindow] CheckCurrentPrinterStatus Error: {ex.Message}");
             }
             finally
             {
                 _isCheckingDashboardPrinter = false;
+                if (_recheckDashboardPrinterRequested)
+                {
+                    _recheckDashboardPrinterRequested = false;
+                    _ = CheckCurrentPrinterStatusAsync(silent: false, force: false);
+                }
             }
         }
 
@@ -629,6 +724,7 @@ namespace BarcodePrint.WpfView
         public void RefreshDashboard()
         {
             LoadRecentInfo();
+            LoadSavedDocsInfo();
             CheckCurrentPrinterStatus();
         }
 
@@ -654,6 +750,68 @@ namespace BarcodePrint.WpfView
             {
                 // 마법사에서 프리셋을 변경한 후 취소했더라도 메인 프리셋 UI 동기화
                 LoadPresets();
+            }
+        }
+
+        private void LoadSavedDocsInfo()
+        {
+            try
+            {
+                var savedList = (AppSettings.Default.RecentSavedDocs ?? new System.Collections.Generic.List<RecentWorkItem>())
+                    .Where(x => x != null && !string.IsNullOrEmpty(x.TemplateFilePath) && File.Exists(x.TemplateFilePath))
+                    .Take(4)
+                    .ToList();
+
+                Button[] buttons = new[] { BtnSaved0, BtnSaved1, BtnSaved2, BtnSaved3 };
+                TextBlock[] titles = new[] { TxtSavedTitle0, TxtSavedTitle1, TxtSavedTitle2, TxtSavedTitle3 };
+                TextBlock[] sizes = new[] { TxtSavedSize0, TxtSavedSize1, TxtSavedSize2, TxtSavedSize3 };
+                TextBlock[] subs = new[] { TxtSavedSubtitle0, TxtSavedSubtitle1, TxtSavedSubtitle2, TxtSavedSubtitle3 };
+
+                if (savedList.Count == 0)
+                {
+                    if (CardSavedEmpty != null) CardSavedEmpty.Visibility = Visibility.Visible;
+                    foreach (var b in buttons) if (b != null) b.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                if (CardSavedEmpty != null) CardSavedEmpty.Visibility = Visibility.Collapsed;
+                for (int i = 0; i < 4; i++)
+                {
+                    if (buttons[i] == null) continue;
+                    if (i < savedList.Count)
+                    {
+                        var item = savedList[i];
+                        buttons[i].Visibility = Visibility.Visible;
+                        if (titles[i] != null) titles[i].Text = item.Title;
+                        if (sizes[i] != null) sizes[i].Text = $"{item.Width}×{item.Height} mm";
+                        if (subs[i] != null) subs[i].Text = $"저장일: {item.LastModified}";
+                        buttons[i].ToolTip = item.TemplateFilePath;
+                    }
+                    else
+                    {
+                        buttons[i].Visibility = Visibility.Collapsed;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"LoadSavedDocsInfo Error: {ex.Message}");
+            }
+        }
+
+        private void OnSavedDocClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && int.TryParse(btn.Tag?.ToString(), out int index))
+            {
+                var savedList = (AppSettings.Default.RecentSavedDocs ?? new System.Collections.Generic.List<RecentWorkItem>())
+                    .Where(x => x != null && !string.IsNullOrEmpty(x.TemplateFilePath) && File.Exists(x.TemplateFilePath))
+                    .Take(4)
+                    .ToList();
+
+                if (index >= 0 && index < savedList.Count)
+                {
+                    OpenRecentWorkItem(savedList[index]);
+                }
             }
         }
 
@@ -684,8 +842,8 @@ namespace BarcodePrint.WpfView
             // TemplateFilePath가 비어있거나 파일이 없는 경우(구버전 이력 호환), 스냅샷 및 자동백업 파일에서 탐색
             if (string.IsNullOrEmpty(templatePath) || !System.IO.File.Exists(templatePath))
             {
-                string infoDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
-                string recentDir = Path.Combine(infoDir, "RecentWorks");
+                string infoDir = AppDataPathHelper.WritableInfoDirectory;
+                string recentDir = AppDataPathHelper.RecentWorksDirectory;
                 if (Directory.Exists(recentDir))
                 {
                     string pType = item.PaperType ?? "GAP";
@@ -784,6 +942,7 @@ namespace BarcodePrint.WpfView
                     string paperType = vm.CurrentTemplate?.PaperType ?? "GAP";
                     int rot = vm.CurrentTemplate?.Rotation ?? vm.LabelRotationAngle;
                     settings.AddRecentWork(templateTitle, (int)vm.PaperWidth, (int)vm.PaperHeight, paperType, rot, dlg.FileName);
+                    settings.AddRecentSavedDoc(templateTitle, (int)vm.PaperWidth, (int)vm.PaperHeight, paperType, rot, dlg.FileName);
                 }
                 NavigateToEditor(mainWindow);
             }
@@ -876,7 +1035,7 @@ namespace BarcodePrint.WpfView
                         vm.SelectedConnectionType = "ALL";
                 }
 
-                // 2. 대시보드에서 감지된 프린터 선택 동기화 (접두어 무관 정규화 매칭 및 빈 상자 방지)
+                // 2. 대시보드에서 감지된 프린터 선택 즉시 반영 (동기 WMI 조회 없이 창 즉시 표시, 목록은 비동기 갱신)
                 if (!string.IsNullOrEmpty(_detectedPrinterName))
                 {
                     string cleanDet = _detectedPrinterName.Replace("[블루투스]", "").Replace("[네트워크]", "").Trim();
@@ -899,7 +1058,18 @@ namespace BarcodePrint.WpfView
                 };
                 win.ShowDialog();
                 vm.StopRealtimeStatusMonitoring();
-                CheckCurrentPrinterStatus();
+
+                string latestPrinter = !string.IsNullOrEmpty(AppSettings.Default.LastSelectedPrinterName)
+                    ? AppSettings.Default.LastSelectedPrinterName
+                    : vm.SelectedPrinterName;
+                if (!string.IsNullOrEmpty(latestPrinter))
+                {
+                    _detectedPrinterName = latestPrinter;
+                    if (TxtSidePrinterName != null) TxtSidePrinterName.Text = latestPrinter;
+                    if (TxtSidePrinterStatusText != null) TxtSidePrinterStatusText.Text = "연결 상태 확인 중...";
+                }
+
+                CheckCurrentPrinterStatus(force: true);
                 LoadRecentInfo();
             }
             catch (Exception ex)
@@ -962,28 +1132,27 @@ namespace BarcodePrint.WpfView
         /// </summary>
         private void OnDashboardSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            if (e.WidthChanged)
+            if (e.WidthChanged || e.HeightChanged)
             {
-                AdjustResponsiveLayout(e.NewSize.Width);
+                AdjustResponsiveLayout(e.NewSize.Width, e.NewSize.Height);
             }
         }
 
-        private void AdjustResponsiveLayout(double actualWidth)
+        private void AdjustResponsiveLayout(double actualWidth, double actualHeight = 0)
         {
             try
             {
                 if (actualWidth <= 0) return;
 
-                // ScrollViewer 좌우 마진(28 * 2 = 56px) 제외, MaxWidth 1550 제약 반영
-                double availableWidth = Math.Max(700, Math.Min(1550, actualWidth - 56));
+                // ScrollViewer 좌우 마진(24 * 2 = 48px) 제외, MaxWidth 1550 제약 반영
+                double availableWidth = Math.Max(700, Math.Min(1550, actualWidth - 48));
 
                 // 4분할 슬롯 1개당 가로 너비
                 double slotWidth = availableWidth / 4.0;
 
-                // [하단 배너 높이]: 창이 커지면 슬롯 너비에 비례하여 130px에서 최대 195px까지 시원하게 확장
-                // 기본 창(slotWidth ~ 235px) => 약 130px
-                // 전체화면(slotWidth ~ 387px) => 약 195px
-                double targetBannerHeight = Math.Max(130, Math.Min(195, slotWidth * 0.48 + 12));
+                // 하단 고정 배너 높이(115~145px)와 최근 작업 카드 높이(105~132px)를 뷰포트 크기에 맞춰 조절
+                double maxBannerByHeight = actualHeight > 0 ? Math.Max(110, actualHeight - 360) : 135;
+                double targetBannerHeight = Math.Min(maxBannerByHeight, Math.Max(115, Math.Min(145, slotWidth * 0.40 + 10)));
 
                 if (QuickToolsHtmlBorder != null)
                 {
@@ -994,13 +1163,18 @@ namespace BarcodePrint.WpfView
                     QuickToolsWebBrowser.Height = targetBannerHeight;
                 }
 
-                // [최근 작업 내역 카드 높이]: 140px에서 최대 165px까지 자연스럽게 비례 확장
-                double targetCardHeight = Math.Max(135, Math.Min(165, slotWidth * 0.42 + 35));
+                // [최근 작업 내역 카드 높이]: 108px ~ 136px
+                double targetCardHeight = Math.Max(108, Math.Min(136, slotWidth * 0.35 + 24));
                 if (GridRecentEmpty != null) GridRecentEmpty.Height = targetCardHeight;
                 if (GridRecent0 != null) GridRecent0.Height = targetCardHeight;
                 if (GridRecent1 != null) GridRecent1.Height = targetCardHeight;
                 if (GridRecent2 != null) GridRecent2.Height = targetCardHeight;
                 if (GridRecent3 != null) GridRecent3.Height = targetCardHeight;
+
+                if (SavedDocsSection != null && actualHeight > 0)
+                {
+                    SavedDocsSection.Visibility = actualHeight >= 590 ? Visibility.Visible : Visibility.Collapsed;
+                }
             }
             catch (Exception ex)
             {

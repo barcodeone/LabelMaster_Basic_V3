@@ -48,8 +48,8 @@ namespace BarcodePrint.Model
     /// </summary>
     public class AppSettings
     {
-        // 설정 파일 경로 (평문 JSON 사용: Info/app_settings.json)
-        private static readonly string SettingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info", "app_settings.json");
+        // 설정 파일 경로 (쓰기 가능한 사용자 데이터 경로: %LocalAppData%\LabelMaster\Info\app_settings.json)
+        private static string SettingsFilePath => Path.Combine(AppDataPathHelper.WritableInfoDirectory, "app_settings.json");
 
         private static AppSettings _default;
         public static AppSettings Default
@@ -137,6 +137,41 @@ namespace BarcodePrint.Model
         public string LastWorkedDate { get; set; } = "";
         public string LastWorkedTitle { get; set; } = "";
         public List<RecentWorkItem> RecentWorks { get; set; } = new List<RecentWorkItem>();
+        public List<RecentWorkItem> RecentSavedDocs { get; set; } = new List<RecentWorkItem>();
+
+        public void AddRecentSavedDoc(string title, int width, int height, string paperType = "GAP", int rotation = 0, string templatePath = "")
+        {
+            if (string.IsNullOrWhiteSpace(templatePath)) return;
+            if (RecentSavedDocs == null) RecentSavedDocs = new List<RecentWorkItem>();
+
+            string displayTitle = !string.IsNullOrWhiteSpace(title)
+                ? title
+                : System.IO.Path.GetFileNameWithoutExtension(templatePath);
+
+            RecentSavedDocs.RemoveAll(x =>
+                !string.IsNullOrEmpty(x.TemplateFilePath) &&
+                string.Equals(x.TemplateFilePath, templatePath, StringComparison.OrdinalIgnoreCase));
+
+            string dateStr = DateTime.Now.ToString("yyyy.MM.dd HH:mm");
+            RecentSavedDocs.Insert(0, new RecentWorkItem
+            {
+                Id = Guid.NewGuid().ToString(),
+                Title = displayTitle,
+                Width = Math.Max(1, width),
+                Height = Math.Max(1, height),
+                PaperType = paperType ?? "GAP",
+                Rotation = rotation,
+                LastModified = dateStr,
+                Description = $"{width}×{height} mm · {dateStr}",
+                TemplateFilePath = templatePath
+            });
+
+            if (RecentSavedDocs.Count > 4)
+            {
+                RecentSavedDocs = new List<RecentWorkItem>(RecentSavedDocs.GetRange(0, 4));
+            }
+            Save();
+        }
 
         public void AddRecentWork(string title, int width, int height, string paperType = "GAP", int rotation = 0, string templatePath = "")
         {
@@ -573,14 +608,11 @@ namespace BarcodePrint.Model
                 lock (_saveLock)
                 {
                     _pendingSaveInstance = null;
-                    string directory = Path.GetDirectoryName(SettingsFilePath);
-                    if (!Directory.Exists(directory))
-                    {
-                        Directory.CreateDirectory(directory);
-                    }
+                    _debounceSaveTimer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
 
+                    string targetPath = SettingsFilePath;
                     string json = JsonConvert.SerializeObject(this, Formatting.Indented);
-                    File.WriteAllText(SettingsFilePath, json, System.Text.Encoding.UTF8);
+                    AppDataPathHelper.WriteAllTextAtomic(targetPath, json);
                 }
 
                 System.Diagnostics.Debug.WriteLine($"통합 설정 저장 완료 (JSON): {SettingsFilePath}");
@@ -684,6 +716,7 @@ namespace BarcodePrint.Model
                             this.RecentWorks = (loadedSettings.RecentWorks != null && loadedSettings.RecentWorks.Count > 0)
                                 ? loadedSettings.RecentWorks
                                 : new List<RecentWorkItem>();
+                            this.RecentSavedDocs = loadedSettings.RecentSavedDocs ?? new List<RecentWorkItem>();
                             if (this.RecentWorks.Count == 0 && this.PaperWidth > 0 && this.PaperHeight > 0 && this.HasRecentWork)
                             {
                                 this.RecentWorks.Add(new RecentWorkItem
@@ -976,6 +1009,18 @@ namespace BarcodePrint.Model
                 {
                     this.PaperWidth = 80;
                     this.PaperHeight = 60;
+                }
+
+                // 기존 설치 폴더(BaseDirectory\Info\RecentWorks) 경로를 가리키는 이력이 있으면 새 사용자 데이터 경로로 보정
+                if (this.RecentWorks != null)
+                {
+                    foreach (var item in this.RecentWorks)
+                    {
+                        if (item != null && !string.IsNullOrEmpty(item.TemplateFilePath))
+                        {
+                            item.TemplateFilePath = AppDataPathHelper.NormalizeRecentWorkTemplatePath(item.TemplateFilePath);
+                        }
+                    }
                 }
 
                 if (wasBloated)

@@ -1762,6 +1762,61 @@ namespace BarcodePrint.ViewModel
                 }
 
                 int effectiveCopies = Math.Max(1, copies);
+                var serialElements = CurrentTemplate?.Elements?.Where(el => el != null && el.IsSerial).ToList();
+                bool hasElementSerial = serialElements != null && serialElements.Count > 0;
+
+                if (hasElementSerial)
+                {
+                    bool allOk = true;
+                    if (IsMultiLabelLayout)
+                    {
+                        int cols = Math.Max(1, LabelColumns);
+                        int rows = Math.Max(1, LabelRows);
+                        int slotsPerSheet = cols * rows;
+                        double slotW = EffectivePaperWidth > 0 ? EffectivePaperWidth : 80.0;
+                        double slotH = EffectivePaperHeight > 0 ? EffectivePaperHeight : 60.0;
+                        double totalW = GetTotalSheetWidthMm();
+                        double totalH = GetTotalSheetHeightMm();
+
+                        for (int offset = 0; offset < effectiveCopies; offset += slotsPerSheet)
+                        {
+                            int countInSheet = Math.Min(slotsPerSheet, effectiveCopies - offset);
+                            var slotBmps = new List<Bitmap>(countInSheet);
+                            try
+                            {
+                                for (int s = 0; s < countInSheet; s++)
+                                {
+                                    slotBmps.Add(GenerateLabelBitmapForPrint(col1, col2, col3, col4, col5, col6, col7, col8));
+                                    AdvanceSerialElements(serialElements);
+                                }
+                                using (var sheetBmp = ComposeMultiLabelSheetBitmap(slotBmps, slotW, slotH, totalW, totalH))
+                                {
+                                    allOk &= SendSheetBitmapToTsplPrinter(sheetBmp, totalW, totalH, 1);
+                                }
+                            }
+                            finally
+                            {
+                                foreach (var b in slotBmps) b?.Dispose();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        double wMm = PaperWidth > 0 ? PaperWidth : 80;
+                        double hMm = PaperHeight > 0 ? PaperHeight : 60;
+                        for (int i = 0; i < effectiveCopies; i++)
+                        {
+                            using (var labelBmp = GenerateLabelBitmapForPrint(col1, col2, col3, col4, col5, col6, col7, col8))
+                            {
+                                allOk &= SendSheetBitmapToTsplPrinter(labelBmp, wMm, hMm, 1);
+                            }
+                            AdvanceSerialElements(serialElements);
+                        }
+                    }
+
+                    NotifySerialElementsUpdated();
+                    return allOk;
+                }
 
                 using (var labelBmp = GenerateLabelBitmapForPrint(col1, col2, col3, col4, col5, col6, col7, col8))
                 {
@@ -1807,6 +1862,26 @@ namespace BarcodePrint.ViewModel
                 StatusMessage = $"인쇄 생성 실패: {ex.Message}";
                 return false;
             }
+        }
+
+        private void AdvanceSerialElements(List<TemplateElement> serialElements)
+        {
+            if (serialElements == null) return;
+            foreach (var el in serialElements)
+            {
+                int step = el.SerialStep != 0 ? el.SerialStep : 1;
+                el.SerialStartNumber = Math.Max(0, el.SerialStartNumber + step);
+                el.Content = el.FormatSerialValue();
+            }
+        }
+
+        private void NotifySerialElementsUpdated()
+        {
+            OnPropertyChanged(nameof(SelectedElementSerialStartNumber));
+            OnPropertyChanged(nameof(SelectedElementSerialPreview));
+            OnPropertyChanged(nameof(SelectedElementContent));
+            OnPropertyChanged(nameof(SelectedElementEffectivePreviewText));
+            UpdatePreview();
         }
 
         private Bitmap ComposeMultiLabelSheetBitmap(List<Bitmap> slotBitmaps, double slotWMm, double slotHMm, double sheetWMm, double sheetHMm)
@@ -2025,12 +2100,6 @@ namespace BarcodePrint.ViewModel
 
         public void ExecutePrintAndRecord()
         {
-            if (IsAllInputsEmpty())
-            {
-                _dialogService.ShowMessage("인쇄할 데이터를 입력해 주세요.", "알림", MessageBoxImage.Information);
-                return;
-            }
-
             int count = Math.Max(1, Math.Min(999, CopyCount));
             bool printSuccess = false;
 
@@ -2201,17 +2270,6 @@ namespace BarcodePrint.ViewModel
             string c7 = !string.IsNullOrEmpty(InputCol7) ? InputCol7 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 7)?.Content ?? "");
             string c8 = !string.IsNullOrEmpty(InputCol8) ? InputCol8 : (CurrentTemplate?.Elements?.FirstOrDefault(el => el.IsVariable && el.InputOrder == 8)?.Content ?? "");
 
-            bool hasData = !string.IsNullOrWhiteSpace(c1) || !string.IsNullOrWhiteSpace(c2) || 
-                            !string.IsNullOrWhiteSpace(c3) || !string.IsNullOrWhiteSpace(c4) || 
-                            !string.IsNullOrWhiteSpace(c5) || !string.IsNullOrWhiteSpace(c6) || 
-                            !string.IsNullOrWhiteSpace(c7) || !string.IsNullOrWhiteSpace(c8);
-
-            if (!hasData && (CurrentTemplate == null || CurrentTemplate.Elements == null || CurrentTemplate.Elements.Count == 0))
-            {
-                _dialogService.ShowMessage("인쇄할 데이터를 입력해 주세요.", "알림", MessageBoxImage.Information);
-                return;
-            }
-
             bool printSuccess = SendToTsplPrinter(c1, c2, c3, c4, c5, c6, c7, c8, copies);
 
             StatusMessage = printSuccess ? $"단건 인쇄 완료: {copies}매" : $"인쇄 실패: {SelectedPrinterName}";
@@ -2219,8 +2277,60 @@ namespace BarcodePrint.ViewModel
             FocusFirstInputRequested?.Invoke();
         }
 
-        public void ExecuteTestPrint()
+        public void ExecuteTestPrint(int? overrideWidthMm = null, int? overrideHeightMm = null)
         {
+            if (overrideWidthMm.HasValue && overrideHeightMm.HasValue)
+            {
+                if (AvailablePrinters == null || AvailablePrinters.Count == 0 || string.IsNullOrEmpty(SelectedPrinterName))
+                {
+                    _dialogService.ShowWarning("선택된 프린터가 없습니다. 프린터를 선택해 주세요.", "인쇄 알림");
+                    return;
+                }
+
+                int wMm = Math.Max(1, overrideWidthMm.Value);
+                int hMm = Math.Max(1, overrideHeightMm.Value);
+
+                bool hasTemplateContent = CurrentTemplate != null &&
+                    ((CurrentTemplate.Elements != null && CurrentTemplate.Elements.Count > 0) || ActiveColumnCount > 0);
+
+                bool printOk;
+                if (hasTemplateContent)
+                {
+                    string tc1 = !string.IsNullOrWhiteSpace(InputCol1) ? InputCol1 : (Column1Header + " (TEST)");
+                    string tc2 = !string.IsNullOrWhiteSpace(InputCol2) ? InputCol2 : (Column2Header + " (TEST)");
+                    string tc3 = !string.IsNullOrWhiteSpace(InputCol3) ? InputCol3 : (Column3Header + " (TEST)");
+                    string tc4 = !string.IsNullOrWhiteSpace(InputCol4) ? InputCol4 : (Column4Header + " (TEST)");
+                    string tc5 = !string.IsNullOrWhiteSpace(InputCol5) ? InputCol5 : (Column5Header + " (TEST)");
+                    string tc6 = !string.IsNullOrWhiteSpace(InputCol6) ? InputCol6 : (Column6Header + " (TEST)");
+                    string tc7 = !string.IsNullOrWhiteSpace(InputCol7) ? InputCol7 : (Column7Header + " (TEST)");
+                    string tc8 = !string.IsNullOrWhiteSpace(InputCol8) ? InputCol8 : (Column8Header + " (TEST)");
+
+                    if (IsColumn1Barcode && (string.IsNullOrWhiteSpace(InputCol1) || InputCol1.Contains("TEST"))) tc1 = "1234567890";
+                    if (IsColumn2Barcode && (string.IsNullOrWhiteSpace(InputCol2) || InputCol2.Contains("TEST"))) tc2 = "1234567890";
+                    if (IsColumn3Barcode && (string.IsNullOrWhiteSpace(InputCol3) || InputCol3.Contains("TEST"))) tc3 = "1234567890";
+                    if (IsColumn4Barcode && (string.IsNullOrWhiteSpace(InputCol4) || InputCol4.Contains("TEST"))) tc4 = "1234567890";
+                    if (IsColumn5Barcode && (string.IsNullOrWhiteSpace(InputCol5) || InputCol5.Contains("TEST"))) tc5 = "1234567890";
+                    if (IsColumn6Barcode && (string.IsNullOrWhiteSpace(InputCol6) || InputCol6.Contains("TEST"))) tc6 = "1234567890";
+                    if (IsColumn7Barcode && (string.IsNullOrWhiteSpace(InputCol7) || InputCol7.Contains("TEST"))) tc7 = "1234567890";
+                    if (IsColumn8Barcode && (string.IsNullOrWhiteSpace(InputCol8) || InputCol8.Contains("TEST"))) tc8 = "1234567890";
+
+                    using (var labelBmp = GenerateLabelBitmapForPrint(tc1, tc2, tc3, tc4, tc5, tc6, tc7, tc8))
+                    {
+                        printOk = SendSheetBitmapToTsplPrinter(labelBmp, wMm, hMm, 1);
+                    }
+                }
+                else
+                {
+                    using (var testBmp = GenerateTestPrintBitmap(wMm, hMm))
+                    {
+                        printOk = SendSheetBitmapToTsplPrinter(testBmp, wMm, hMm, 1);
+                    }
+                }
+
+                StatusMessage = printOk ? $"테스트 라벨 1장 인쇄 완료 ({wMm}x{hMm}mm)" : $"테스트 인쇄 실패: {SelectedPrinterName}";
+                return;
+            }
+
             string c1 = !string.IsNullOrWhiteSpace(InputCol1) ? InputCol1 : (Column1Header + " (TEST)");
             string c2 = !string.IsNullOrWhiteSpace(InputCol2) ? InputCol2 : (Column2Header + " (TEST)");
             string c3 = !string.IsNullOrWhiteSpace(InputCol3) ? InputCol3 : (Column3Header + " (TEST)");
@@ -2241,6 +2351,44 @@ namespace BarcodePrint.ViewModel
 
             bool printSuccess = SendToTsplPrinter(c1, c2, c3, c4, c5, c6, c7, c8, 1);
             StatusMessage = printSuccess ? "테스트 라벨 1장 인쇄 완료" : $"테스트 인쇄 실패: {SelectedPrinterName}";
+        }
+
+        private Bitmap GenerateTestPrintBitmap(int widthMm, int heightMm)
+        {
+            double printerDpi = PRINT_INFO_CLASS.PrinterInfo.printer_DPI > 0 ? (double)PRINT_INFO_CLASS.PrinterInfo.printer_DPI : 203.0;
+            double dotsPerMm = printerDpi / 25.4;
+            int pxW = Math.Max(32, (int)Math.Round(widthMm * dotsPerMm));
+            int pxH = Math.Max(32, (int)Math.Round(heightMm * dotsPerMm));
+
+            var bmp = new Bitmap(pxW, pxH, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.Clear(System.Drawing.Color.White);
+                int margin = Math.Max(4, (int)Math.Round(2.0 * dotsPerMm));
+                using (var pen = new System.Drawing.Pen(System.Drawing.Color.Black, Math.Max(2f, (float)(0.4 * dotsPerMm))))
+                {
+                    if (pxW > margin * 2 && pxH > margin * 2)
+                    {
+                        g.DrawRectangle(pen, margin, margin, pxW - margin * 2, pxH - margin * 2);
+                    }
+                }
+
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
+                float titleFontPx = Math.Max(14f, Math.Min(pxH * 0.16f, pxW * 0.085f));
+                float subFontPx = Math.Max(11f, Math.Min(pxH * 0.085f, pxW * 0.042f));
+                using (var titleFont = new System.Drawing.Font("Malgun Gothic", titleFontPx, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel))
+                using (var subFont = new System.Drawing.Font("Malgun Gothic", subFontPx, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel))
+                using (var sf = new System.Drawing.StringFormat { Alignment = System.Drawing.StringAlignment.Center, LineAlignment = System.Drawing.StringAlignment.Center, Trimming = System.Drawing.StringTrimming.EllipsisCharacter })
+                {
+                    string title = "LabelMaster TEST";
+                    string detail = $"{widthMm} x {heightMm} mm | S:{PrintSpeed} D:{PrintDarkness} | {PaperType}";
+                    float innerLeft = margin + 4;
+                    float innerWidth = Math.Max(16f, pxW - (margin + 4) * 2);
+                    g.DrawString(title, titleFont, System.Drawing.Brushes.Black, new RectangleF(innerLeft, pxH * 0.16f, innerWidth, pxH * 0.36f), sf);
+                    g.DrawString(detail, subFont, System.Drawing.Brushes.Black, new RectangleF(innerLeft, pxH * 0.52f, innerWidth, pxH * 0.32f), sf);
+                }
+            }
+            return bmp;
         }
 
         public void ExecuteRecordOnly()

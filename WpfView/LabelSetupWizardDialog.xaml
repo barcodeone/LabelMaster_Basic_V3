@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="새 라벨 만들기 마법사 - LabelMaster"
-        Width="720" Height="680" MinWidth="680" MinHeight="620"
+        Width="640" Height="560" MinWidth="600" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         FontFamily="Malgun Gothic"
         Background="#F8FAFC"

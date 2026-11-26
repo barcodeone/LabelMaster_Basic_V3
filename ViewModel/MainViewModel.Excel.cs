@@ -202,7 +202,7 @@ namespace BarcodePrint.ViewModel
                 var recordList = Records.ToList();
 
                 // 1. Info 폴더 생성 및 JSON 파일 저장
-                string infoDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
+                string infoDir = AppDataPathHelper.WritableInfoDirectory;
                 if (!Directory.Exists(infoDir))
                 {
                     Directory.CreateDirectory(infoDir);
@@ -210,7 +210,7 @@ namespace BarcodePrint.ViewModel
 
                 string jsonPath = Path.Combine(infoDir, "print_history.json");
                 string json = JsonConvert.SerializeObject(recordList, Formatting.Indented);
-                File.WriteAllText(jsonPath, json, Encoding.UTF8);
+                AppDataPathHelper.WriteAllTextAtomic(jsonPath, json);
             }
             catch (Exception ex)
             {
@@ -222,8 +222,9 @@ namespace BarcodePrint.ViewModel
         {
             try
             {
-                string infoDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
+                string infoDir = AppDataPathHelper.WritableInfoDirectory;
                 string jsonPath = Path.Combine(infoDir, "print_history.json");
+                string legacyJsonPath = Path.Combine(AppDataPathHelper.LegacyInfoDirectory, "print_history.json");
                 string rootJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "print_history.json");
                 
                 List<PrintRecordModel> loadedList = null;
@@ -231,6 +232,11 @@ namespace BarcodePrint.ViewModel
                 if (File.Exists(jsonPath))
                 {
                     string json = File.ReadAllText(jsonPath, Encoding.UTF8);
+                    loadedList = JsonConvert.DeserializeObject<List<PrintRecordModel>>(json);
+                }
+                else if (File.Exists(legacyJsonPath))
+                {
+                    string json = File.ReadAllText(legacyJsonPath, Encoding.UTF8);
                     loadedList = JsonConvert.DeserializeObject<List<PrintRecordModel>>(json);
                 }
                 else if (File.Exists(rootJsonPath))

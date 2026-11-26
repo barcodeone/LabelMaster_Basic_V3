@@ -2022,6 +2022,12 @@ namespace BarcodePrint.ViewModel
                             OnPropertyChanged(nameof(SelectedPrinterName));
                         }
 
+                        if (!_isInitializing && !_isFilteringPrinters && _settings != null && _settings.LastSelectedPrinterName != value)
+                        {
+                            _settings.LastSelectedPrinterName = value;
+                            _settings.Save();
+                        }
+
                         SyncSelectedPrinterConnectionDetails(value);
                     }
                 }
@@ -2396,7 +2402,7 @@ namespace BarcodePrint.ViewModel
                 SyncViewModelToCurrentTemplate();
                 if (_currentTemplate == null) return "";
 
-                string infoDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Info");
+                string infoDir = AppDataPathHelper.WritableInfoDirectory;
                 if (!Directory.Exists(infoDir)) Directory.CreateDirectory(infoDir);
 
                 // 1. 기본 자동 백업 파일 저장
@@ -2404,8 +2410,7 @@ namespace BarcodePrint.ViewModel
                 _templateService.ExportTemplateModel(_currentTemplate, autoSavePath, out _);
 
                 // 2. 최근 작업 내역 전용 개별 스냅샷 파일 저장
-                string recentDir = Path.Combine(infoDir, "RecentWorks");
-                if (!Directory.Exists(recentDir)) Directory.CreateDirectory(recentDir);
+                string recentDir = AppDataPathHelper.RecentWorksDirectory;
 
                 int w = (int)PaperWidth;
                 int h = (int)PaperHeight;
@@ -2424,39 +2429,41 @@ namespace BarcodePrint.ViewModel
                 }
 
                 string targetPath = _currentTemplateFilePath;
+                bool isExternalFile = IsExternalTemplateFilePath(targetPath);
                 bool isInternalRecentSnapshot = !string.IsNullOrEmpty(targetPath) &&
                     targetPath.IndexOf(recentDir, StringComparison.OrdinalIgnoreCase) >= 0;
 
-                // 내부 RecentWorks 스냅샷인데 규격/방향이 바뀌었다면 기존 규격 스냅샷을 덮어쓰지 않고 새 규격 파일로 분리 저장
+                // 외부 사용자 파일(.lbm)은 자동 스냅샷/백업으로 덮어쓰지 않고, 항상 RecentWorks 스냅샷 파일에만 저장
+                string snapshotPath;
                 if (isInternalRecentSnapshot)
                 {
                     string expectedSuffix = $"_{w}x{h}_{paperType}_{rot}.lbm";
-                    if (!targetPath.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase))
+                    if (targetPath.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase))
                     {
-                        targetPath = "";
+                        snapshotPath = targetPath;
                     }
-                }
-
-                if (!string.IsNullOrEmpty(targetPath))
-                {
-                    if (!_templateService.ExportTemplateModel(_currentTemplate, targetPath, out _))
+                    else
                     {
                         string safeTitle = MakeSafeRecentFileName(!string.IsNullOrEmpty(_currentRecentTitle) ? _currentRecentTitle : $"라벨_{w}x{h}");
-                        targetPath = Path.Combine(recentDir, $"{safeTitle}_{w}x{h}_{paperType}_{rot}.lbm");
-                        _templateService.ExportTemplateModel(_currentTemplate, targetPath, out _);
-                        _currentTemplateFilePath = targetPath;
+                        snapshotPath = Path.Combine(recentDir, $"{safeTitle}_{w}x{h}_{paperType}_{rot}.lbm");
                     }
                 }
                 else
                 {
                     string safeTitle = MakeSafeRecentFileName(!string.IsNullOrEmpty(_currentRecentTitle) ? _currentRecentTitle : $"라벨_{w}x{h}");
-                    targetPath = Path.Combine(recentDir, $"{safeTitle}_{w}x{h}_{paperType}_{rot}.lbm");
-                    _templateService.ExportTemplateModel(_currentTemplate, targetPath, out _);
-                    _currentTemplateFilePath = targetPath;
+                    snapshotPath = Path.Combine(recentDir, $"{safeTitle}_{w}x{h}_{paperType}_{rot}.lbm");
+                }
+
+                _templateService.ExportTemplateModel(_currentTemplate, snapshotPath, out _);
+
+                if (!isExternalFile)
+                {
+                    _currentTemplateFilePath = snapshotPath;
+                    SyncActiveTabTitle(_currentRecentTitle, snapshotPath);
+                    return snapshotPath;
                 }
 
                 SyncActiveTabTitle(_currentRecentTitle, targetPath);
-
                 return targetPath;
             }
             catch (Exception ex)
@@ -2466,7 +2473,7 @@ namespace BarcodePrint.ViewModel
             }
         }
 
-        public void SaveSettingsSilently()
+        public void SaveSettingsSilently(bool immediate = false)
         {
             try
             {
@@ -2488,6 +2495,11 @@ namespace BarcodePrint.ViewModel
                     _settings.Save();
                 }
 
+                if (immediate)
+                {
+                    _settings.SaveImmediate();
+                }
+
                 SaveHistoryRecords();
             }
             catch (Exception ex)
@@ -2500,6 +2512,12 @@ namespace BarcodePrint.ViewModel
         {
             try
             {
+                if (!string.IsNullOrEmpty(TargetPrinterName))
+                {
+                    SelectedPrinterName = TargetPrinterName;
+                    _settings.LastSelectedPrinterName = TargetPrinterName;
+                }
+
                 string savedTemplatePath = SaveCurrentTemplateSnapshot();
 
                 int w = (int)PaperWidth;
@@ -2518,7 +2536,11 @@ namespace BarcodePrint.ViewModel
                     _settings.Save();
                 }
                 StatusMessage = "모든 설정 파일이 성공적으로 저장되었습니다.";
-                _dialogService.ShowMessage("설정 내용이 저장되었습니다.", "저장 완료", MessageBoxImage.Information);
+                string activePrinter = !string.IsNullOrEmpty(TargetPrinterName) ? TargetPrinterName : SelectedPrinterName;
+                _dialogService.ShowMessage(
+                    $"설정 내용이 저장되었습니다.\n\n• 인쇄 사용 프린터: {(string.IsNullOrEmpty(activePrinter) ? "(미선택)" : activePrinter)}",
+                    "저장 완료",
+                    MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -2526,30 +2548,67 @@ namespace BarcodePrint.ViewModel
             }
         }
 
-        public void ExecuteExportTemplate()
+        private bool IsExternalTemplateFilePath(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) return false;
+
+            string recentDir = AppDataPathHelper.RecentWorksDirectory;
+            string legacyRecentDir = Path.Combine(AppDataPathHelper.LegacyInfoDirectory, "RecentWorks");
+            return filePath.IndexOf(recentDir, StringComparison.OrdinalIgnoreCase) < 0 &&
+                   filePath.IndexOf(legacyRecentDir, StringComparison.OrdinalIgnoreCase) < 0 &&
+                   !filePath.EndsWith("autosave_template.lbm", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool SaveTemplateToPath(string filePath)
+        {
+            if (_templateService.ExportTemplateModel(CurrentTemplate, filePath, out string err))
+            {
+                string title = Path.GetFileNameWithoutExtension(filePath);
+                _currentTemplateFilePath = filePath;
+                _currentRecentTitle = title;
+                IsDocumentDirty = false;
+                if (_activeTab != null) _activeTab.IsDirty = false;
+                SyncActiveTabTitle(title, filePath);
+                _settings.AddRecentWork(title, (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, filePath);
+                _settings.AddRecentSavedDoc(title, (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, filePath);
+
+                StatusMessage = $"템플릿 저장 완료: {Path.GetFileName(filePath)}";
+                _dialogService.ShowMessage($"라벨 템플릿 파일이 저장되었습니다.\n\n경로: {filePath}", "템플릿 저장 완료", MessageBoxImage.Information);
+                return true;
+            }
+            else
+            {
+                StatusMessage = $"템플릿 저장 실패: {err}";
+                _dialogService.ShowError($"템플릿 저장 실패: {err}", "오류");
+                return false;
+            }
+        }
+
+        public bool ExecuteExportTemplate()
         {
             SyncViewModelToCurrentTemplate();
 
-            string defaultName = $"라벨_템플릿_{PaperWidth}x{PaperHeight}_{DateTime.Now:yyyyMMdd}.lbm";
+            if (IsExternalTemplateFilePath(_currentTemplateFilePath) && File.Exists(_currentTemplateFilePath))
+            {
+                return SaveTemplateToPath(_currentTemplateFilePath);
+            }
+
+            return ExecuteSaveAsTemplate();
+        }
+
+        public bool ExecuteSaveAsTemplate()
+        {
+            SyncViewModelToCurrentTemplate();
+
+            string defaultName = IsExternalTemplateFilePath(_currentTemplateFilePath)
+                ? Path.GetFileName(_currentTemplateFilePath)
+                : $"라벨_템플릿_{PaperWidth}x{PaperHeight}_{DateTime.Now:yyyyMMdd}.lbm";
+
             if (_dialogService.ShowSaveFileDialog("LabelMaster 템플릿 (*.lbm)|*.lbm|JSON 서식 (*.json)|*.json|모든 파일 (*.*)|*.*", ".lbm", defaultName, out string filePath))
             {
-                if (_templateService.ExportTemplateModel(CurrentTemplate, filePath, out string err))
-                {
-                    string title = Path.GetFileNameWithoutExtension(filePath);
-                    _currentTemplateFilePath = filePath;
-                    _currentRecentTitle = title;
-                    SyncActiveTabTitle(title, filePath);
-                    _settings.AddRecentWork(title, (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, filePath);
-
-                    StatusMessage = $"템플릿 저장 완료: {Path.GetFileName(filePath)}";
-                    _dialogService.ShowMessage($"라벨 템플릿 파일이 저장되었습니다.\n\n경로: {filePath}", "템플릿 저장 완료", MessageBoxImage.Information);
-                }
-                else
-                {
-                    StatusMessage = $"템플릿 저장 실패: {err}";
-                    _dialogService.ShowError($"템플릿 저장 실패: {err}", "오류");
-                }
+                return SaveTemplateToPath(filePath);
             }
+            return false;
         }
 
         public void ExecuteImportTemplate()
@@ -2564,6 +2623,10 @@ namespace BarcodePrint.ViewModel
                 if (loaded != null)
                 {
                     ApplyLoadedTemplate(loaded, filePath);
+                    if (IsExternalTemplateFilePath(filePath))
+                    {
+                        _settings.AddRecentSavedDoc(Path.GetFileNameWithoutExtension(filePath), (int)PaperWidth, (int)PaperHeight, PaperType, LabelRotationAngle, filePath);
+                    }
                     _dialogService.ShowMessage($"라벨 템플릿을 성공적으로 불러왔습니다.\n\n파일명: {Path.GetFileName(filePath)}", "템플릿 불러오기 완료", MessageBoxImage.Information);
                 }
                 else

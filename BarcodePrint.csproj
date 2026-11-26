@@ -253,6 +253,7 @@
   <ItemGroup>
     <Compile Include="Model\AddressData.cs" />
     <Compile Include="Model\AddressSettings.cs" />
+    <Compile Include="Model\AppDataPathHelper.cs" />
     <Compile Include="Model\AppSettings.cs" />
     <Compile Include="Model\PresetLabelItem.cs" />
     <Compile Include="Model\PdfRenderHelper.cs" />
@@ -343,6 +344,20 @@
     </Page>
     <Compile Include="WpfView\HeaderEditDialog.xaml.cs">
       <DependentUpon>HeaderEditDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="WpfView\TestPrintSizeDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\TestPrintSizeDialog.xaml.cs">
+      <DependentUpon>TestPrintSizeDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="WpfView\EmptyTabsActionDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="WpfView\EmptyTabsActionDialog.xaml.cs">
+      <DependentUpon>EmptyTabsActionDialog.xaml</DependentUpon>
     </Compile>
     <Page Include="WpfView\ColumnFormatDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
